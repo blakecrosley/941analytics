@@ -285,23 +285,27 @@ def create_dashboard_router(
                 "normalized": c["views"] / max_views if max_views > 0 else 0
             })
 
-        # Build region data for drill-down (states for US, etc.)
+        # Build region data for drill-down (states for US, etc.) - include lat/lon from MaxMind
         region_data = []
         for r in data.regions:
             region_data.append({
                 "country": r["country"],
                 "region": r["region"],
-                "views": r["views"]
+                "views": r["views"],
+                "lat": r.get("lat"),
+                "lon": r.get("lon")
             })
 
-        # Build city data for further drill-down
+        # Build city data for further drill-down - include lat/lon from MaxMind
         city_data = []
         for city in data.cities:
             city_data.append({
                 "country": city["country"],
                 "region": city["region"],
                 "city": city["city"],
-                "views": city["views"]
+                "views": city["views"],
+                "lat": city.get("lat"),
+                "lon": city.get("lon")
             })
 
         # Simple HTML dashboard
@@ -657,9 +661,9 @@ def create_dashboard_router(
             z-index: 100;
             box-shadow: 0 0 25px rgba(89, 178, 204, 0.4);
         }}
-        /* City markers (different color from country markers) */
+        /* City markers (same cyan as all markers) */
         .city-marker {{
-            background: #f39c12;
+            background: #59b2cc;
         }}
     </style>
 </head>
@@ -1133,10 +1137,16 @@ def create_dashboard_router(
             usRegions.forEach(item => {{
                 // Normalize state name to code (Cloudflare returns "California", we need "CA")
                 const stateCode = normalizeStateCode(item.region);
-                const coords = stateCode ? US_STATE_COORDS[stateCode] : null;
-                if (!coords) return;
 
-                const [lat, lon] = coords;
+                // Use actual lat/lon from MaxMind data if available, fallback to hardcoded
+                let lat = item.lat;
+                let lon = item.lon;
+                if (!lat || !lon) {{
+                    const coords = stateCode ? US_STATE_COORDS[stateCode] : null;
+                    if (!coords) return;
+                    [lat, lon] = coords;
+                }}
+
                 const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1);
 
                 // Size based on views (log scale) - small for zoomed view
@@ -1144,10 +1154,10 @@ def create_dashboard_router(
                 const logMax = Math.log10(maxViews + 1);
                 const size = 0.4 + (logViews / logMax) * 0.6;  // 0.4-1.0
 
-                // Marker sphere - red/coral for states
+                // Marker sphere - cyan (same as country markers)
                 const mesh = new THREE.Mesh(
                     new THREE.SphereGeometry(size, 12, 12),
-                    new THREE.MeshBasicMaterial({{ color: '#e74c3c', transparent: true, opacity: 0.95 }})
+                    new THREE.MeshBasicMaterial({{ color: CONFIG.pointColor, transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ state: stateCode, stateName: item.region, views: item.views, isState: true }};
@@ -1155,7 +1165,7 @@ def create_dashboard_router(
 
                 // Glow sprite - subtle
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#e74c3c', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: CONFIG.pointColor, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
                 sprite.scale.set(size * 3, size * 3, 1);
@@ -1187,27 +1197,33 @@ def create_dashboard_router(
             const glowTexture = createGlowTexture();
 
             countryCities.slice(0, 15).forEach(item => {{
-                // Try to find city coordinates
-                const cityKey = `${{item.city}}|${{item.region || ''}}|${{countryCode}}`;
-                let coords = CITY_COORDS[cityKey];
+                // Use actual lat/lon from MaxMind data if available
+                let lat = item.lat;
+                let lon = item.lon;
 
-                // Try without region
-                if (!coords) {{
-                    coords = CITY_COORDS[`${{item.city}}||${{countryCode}}`];
-                }}
+                // Fallback to hardcoded coords if no MaxMind data
+                if (!lat || !lon) {{
+                    const cityKey = `${{item.city}}|${{item.region || ''}}|${{countryCode}}`;
+                    let coords = CITY_COORDS[cityKey];
 
-                // Fall back to country coords with offset
-                if (!coords) {{
-                    const countryCoords = COUNTRY_COORDS[countryCode];
-                    if (countryCoords) {{
-                        const offset = Math.random() * 8 - 4;
-                        coords = [countryCoords[0] + offset, countryCoords[1] + offset];
+                    // Try without region
+                    if (!coords) {{
+                        coords = CITY_COORDS[`${{item.city}}||${{countryCode}}`];
                     }}
+
+                    // Fall back to country coords with offset
+                    if (!coords) {{
+                        const countryCoords = COUNTRY_COORDS[countryCode];
+                        if (countryCoords) {{
+                            const offset = Math.random() * 8 - 4;
+                            coords = [countryCoords[0] + offset, countryCoords[1] + offset];
+                        }}
+                    }}
+
+                    if (!coords) return;
+                    [lat, lon] = coords;
                 }}
 
-                if (!coords) return;
-
-                const [lat, lon] = coords;
                 const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1);
 
                 // Size based on views (log scale) - small for zoomed view
@@ -1215,10 +1231,10 @@ def create_dashboard_router(
                 const logMax = Math.log10(maxViews + 1);
                 const size = 0.3 + (logViews / logMax) * 0.5;  // 0.3-0.8
 
-                // Marker sphere - orange/amber for cities
+                // Marker sphere - cyan (consistent with all markers)
                 const mesh = new THREE.Mesh(
                     new THREE.SphereGeometry(size, 12, 12),
-                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.95 }})
+                    new THREE.MeshBasicMaterial({{ color: CONFIG.pointColor, transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ city: item.city, region: item.region, views: item.views, isCity: true }};
@@ -1226,7 +1242,7 @@ def create_dashboard_router(
 
                 // Glow sprite - subtle
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: CONFIG.pointColor, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
                 sprite.scale.set(size * 3, size * 3, 1);
@@ -1319,22 +1335,19 @@ def create_dashboard_router(
             const glowTexture = createGlowTexture();
 
             stateCities.slice(0, 20).forEach(item => {{
-                // Try to find city coordinates
-                const cityKey = `${{item.city}}|${{stateCode}}|US`;
-                let coords = CITY_COORDS[cityKey];
+                // Use actual lat/lon from MaxMind data - this is the real geolocation
+                let lat = item.lat;
+                let lon = item.lon;
 
-                // Fall back to state coords with offset
-                if (!coords) {{
+                // Only fallback if MaxMind data is missing
+                if (!lat || !lon) {{
                     const stateCoords = US_STATE_COORDS[stateCode];
-                    if (stateCoords) {{
-                        const offset = (Math.random() - 0.5) * 4;
-                        coords = [stateCoords[0] + offset, stateCoords[1] + offset];
-                    }}
+                    if (!stateCoords) return;
+                    // Small offset from state center
+                    lat = stateCoords[0] + (Math.random() - 0.5) * 2;
+                    lon = stateCoords[1] + (Math.random() - 0.5) * 2;
                 }}
 
-                if (!coords) return;
-
-                const [lat, lon] = coords;
                 const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1);
 
                 // Size based on views - small for zoomed view
@@ -1342,10 +1355,10 @@ def create_dashboard_router(
                 const logMax = Math.log10(maxViews + 1);
                 const size = 0.3 + (logViews / logMax) * 0.5;  // 0.3-0.8
 
-                // Marker sphere - orange/amber for cities
+                // Marker sphere - cyan (consistent with all markers)
                 const mesh = new THREE.Mesh(
                     new THREE.SphereGeometry(size, 12, 12),
-                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.95 }})
+                    new THREE.MeshBasicMaterial({{ color: CONFIG.pointColor, transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ city: item.city, region: stateCode, views: item.views, isCity: true }};
@@ -1353,7 +1366,7 @@ def create_dashboard_router(
 
                 // Glow sprite - subtle
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: CONFIG.pointColor, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
                 sprite.scale.set(size * 3, size * 3, 1);
@@ -1389,7 +1402,7 @@ def create_dashboard_router(
                 // Show states for US country view
                 if (data.isUS && data.regions && data.regions.length > 0) {{
                     html += `<div style="margin-top: 0.75rem; font-size: 0.75rem; color: var(--muted);">
-                        <div style="color: #ff6b6b; margin-bottom: 0.25rem;">Click a state:</div>`;
+                        <div style="color: var(--accent); margin-bottom: 0.25rem;">Click a state:</div>`;
                     data.regions.slice(0, 8).forEach(r => {{
                         const stateName = US_STATE_NAMES[r.region] || r.region;
                         html += `<div>${{stateName}}: ${{r.views}}</div>`;
@@ -1403,7 +1416,7 @@ def create_dashboard_router(
                 else if (data.cities && data.cities.length > 0) {{
                     html += `<div style="margin-top: 0.75rem; font-size: 0.75rem; color: var(--muted);">`;
                     if (currentView === 'state') {{
-                        html += `<div style="color: #f39c12; margin-bottom: 0.25rem;">Top cities:</div>`;
+                        html += `<div style="color: var(--accent); margin-bottom: 0.25rem;">Top cities:</div>`;
                     }}
                     data.cities.slice(0, 8).forEach(c => {{
                         html += `<div>${{c.city}}: ${{c.views}}</div>`;
@@ -1615,7 +1628,7 @@ def create_dashboard_router(
                     if (stateIntersects.length > 0 && tooltip) {{
                         const data = stateIntersects[0].object.userData;
                         const name = data.stateName || US_STATE_NAMES[data.state] || data.state;
-                        tooltip.innerHTML = `<strong style="color:#ff6b6b">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click for cities</small>`;
+                        tooltip.innerHTML = `<strong style="color:var(--accent)">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click for cities</small>`;
                         tooltip.style.display = 'block';
                         tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
                         tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
@@ -1631,7 +1644,7 @@ def create_dashboard_router(
                         const data = cityIntersects[0].object.userData;
                         const cityName = data.city || 'Unknown';
                         const regionName = data.region ? ` (${{US_STATE_NAMES[data.region] || data.region}})` : '';
-                        tooltip.innerHTML = `<strong style="color:#f39c12">${{cityName}}</strong>${{regionName}}<br>${{data.views.toLocaleString()}} views`;
+                        tooltip.innerHTML = `<strong style="color:var(--accent)">${{cityName}}</strong>${{regionName}}<br>${{data.views.toLocaleString()}} views`;
                         tooltip.style.display = 'block';
                         tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
                         tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
@@ -1781,7 +1794,7 @@ def create_dashboard_router(
                     if (stateIntersects.length > 0 && modalTooltip) {{
                         const data = stateIntersects[0].object.userData;
                         const name = data.stateName || US_STATE_NAMES[data.state] || data.state;
-                        modalTooltip.innerHTML = `<strong style="color:#ff6b6b">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click for cities</small>`;
+                        modalTooltip.innerHTML = `<strong style="color:var(--accent)">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click for cities</small>`;
                         modalTooltip.style.display = 'block';
                         modalTooltip.style.left = (e.clientX + 15) + 'px';
                         modalTooltip.style.top = (e.clientY + 15) + 'px';
@@ -1797,7 +1810,7 @@ def create_dashboard_router(
                         const data = cityIntersects[0].object.userData;
                         const cityName = data.city || 'Unknown';
                         const regionName = data.region ? ` (${{US_STATE_NAMES[data.region] || data.region}})` : '';
-                        modalTooltip.innerHTML = `<strong style="color:#f39c12">${{cityName}}</strong>${{regionName}}<br>${{data.views.toLocaleString()}} views`;
+                        modalTooltip.innerHTML = `<strong style="color:var(--accent)">${{cityName}}</strong>${{regionName}}<br>${{data.views.toLocaleString()}} views`;
                         modalTooltip.style.display = 'block';
                         modalTooltip.style.left = (e.clientX + 15) + 'px';
                         modalTooltip.style.top = (e.clientY + 15) + 'px';

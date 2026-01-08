@@ -204,13 +204,15 @@ class AnalyticsClient:
             [self.site_name, start_str],
         )
 
-        # Regions (states)
+        # Regions (states) - include average lat/lon
         regions = await self._query(
             f"""
             SELECT
                 country,
                 region,
-                COUNT(*) as views
+                COUNT(*) as views,
+                AVG(latitude) as lat,
+                AVG(longitude) as lon
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND region != '' AND region IS NOT NULL {bot_filter}
             GROUP BY country, region
@@ -220,14 +222,16 @@ class AnalyticsClient:
             [self.site_name, start_str],
         )
 
-        # Cities
+        # Cities - include average lat/lon from Cloudflare/MaxMind geolocation
         cities = await self._query(
             f"""
             SELECT
                 country,
                 region,
                 city,
-                COUNT(*) as views
+                COUNT(*) as views,
+                AVG(latitude) as lat,
+                AVG(longitude) as lon
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND city != '' AND city IS NOT NULL {bot_filter}
             GROUP BY country, region, city
