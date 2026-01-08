@@ -167,7 +167,10 @@ def create_dashboard_router(
         return HTMLResponse(content=_render_login_page(error))
 
     @router.post("/login")
-    async def login_submit(response: Response, passkey_input: str = Form(..., alias="passkey")):
+    async def login_submit(
+        request: Request,
+        passkey_input: str = Form(..., alias="passkey")
+    ):
         """Handle login form submission."""
         if not passkey:
             return RedirectResponse(url="./", status_code=302)
@@ -175,12 +178,14 @@ def create_dashboard_router(
         if passkey_input == passkey:
             # Valid passkey - set auth cookie and redirect
             redirect = RedirectResponse(url="./", status_code=302)
+            # Only set Secure flag on HTTPS (production)
+            is_secure = request.url.scheme == "https"
             redirect.set_cookie(
                 key=AUTH_COOKIE_NAME,
                 value=expected_hash,
                 max_age=AUTH_COOKIE_MAX_AGE,
                 httponly=True,
-                secure=True,
+                secure=is_secure,
                 samesite="lax"
             )
             return redirect
