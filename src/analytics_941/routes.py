@@ -865,11 +865,6 @@ def create_dashboard_router(
         const regionData = {str(region_data).replace("'", '"')};
         const cityData = {str(city_data).replace("'", '"')};
 
-        console.log('[INIT] globeData:', globeData);
-        console.log('[INIT] regionData:', regionData);
-        console.log('[INIT] cityData:', cityData);
-        console.log('[INIT] US regions:', regionData.filter(r => r.country === 'US'));
-
         // Country centroids (lat, lon)
         const COUNTRY_COORDS = {{
             'US': [39.8, -98.5], 'CN': [35.0, 105.0], 'CA': [56.0, -106.0], 'SG': [1.35, 103.8],
@@ -997,8 +992,7 @@ def create_dashboard_router(
 
         // Fullscreen mode state
         let isFullscreen = false;
-        let fullscreenScene, fullscreenCamera, fullscreenRenderer, fullscreenControls, fullscreenGlobeGroup;
-        let fullscreenMarkers = [];
+        let originalContainer = null;  // Store original container for restoring
 
         let isAnimating = false;
         let autoRotate = true;
@@ -1110,15 +1104,10 @@ def create_dashboard_router(
         }}
 
         function hideCountryMarker(countryCode) {{
-            console.log('[HIDE] hideCountryMarker called for:', countryCode);
-            console.log('[HIDE] countryMarkerMap keys:', Object.keys(countryMarkerMap));
             const marker = countryMarkerMap[countryCode];
             if (marker) {{
-                console.log('[HIDE] Found marker, hiding mesh and sprite');
                 if (marker.mesh) marker.mesh.visible = false;
                 if (marker.sprite) marker.sprite.visible = false;
-            }} else {{
-                console.log('[HIDE] No marker found for country:', countryCode);
             }}
         }}
 
@@ -1130,17 +1119,12 @@ def create_dashboard_router(
         }}
 
         function addStateMarkers(countryCode) {{
-            console.log('[STATE] addStateMarkers called for:', countryCode);
             clearStateMarkers();
             if (countryCode !== 'US') return;
 
             // Get US region data
             const usRegions = regionData.filter(r => r.country === 'US');
-            console.log('[STATE] Found US regions:', usRegions.length, usRegions);
-            if (usRegions.length === 0) {{
-                console.log('[STATE] No US region data found');
-                return;
-            }}
+            if (usRegions.length === 0) return;
 
             const maxViews = Math.max(...usRegions.map(r => r.views), 1);
             const glowTexture = createGlowTexture();
@@ -1148,13 +1132,8 @@ def create_dashboard_router(
             usRegions.forEach(item => {{
                 // Normalize state name to code (Cloudflare returns "California", we need "CA")
                 const stateCode = normalizeStateCode(item.region);
-                console.log('[STATE] Processing region:', item.region, '-> code:', stateCode);
-
                 const coords = stateCode ? US_STATE_COORDS[stateCode] : null;
-                if (!coords) {{
-                    console.log('[STATE] No coords for state:', item.region, '(code:', stateCode, ')');
-                    return;
-                }}
+                if (!coords) return;
 
                 const [lat, lon] = coords;
                 const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 5);  // Higher above globe
@@ -1183,9 +1162,7 @@ def create_dashboard_router(
                 globeGroup.add(sprite);
 
                 stateMarkers.push({{ mesh, sprite }});
-                console.log('[STATE] Created marker for', item.region, 'at', lat, lon, 'size', size);
             }});
-            console.log('[STATE] Total state markers created:', stateMarkers.length);
         }}
 
         let cityMarkers = [];  // Track city markers for cleanup
@@ -1262,34 +1239,24 @@ def create_dashboard_router(
         let selectedState = null;  // Track selected state for back navigation
 
         function drillToCountry(code, views) {{
-            console.log('[DRILL] drillToCountry called:', code, views);
             const coords = COUNTRY_COORDS[code];
-            if (!coords) {{
-                console.log('[DRILL] No coords for country:', code);
-                return;
-            }}
+            if (!coords) return;
 
             currentView = 'country';
             selectedCountry = {{ code, views, name: COUNTRY_NAMES[code] || code }};
             selectedState = null;
 
             // Hide the country marker we're drilling into
-            console.log('[DRILL] Hiding country marker...');
             hideCountryMarker(code);
 
             // For US, show states in detail panel and state markers
             if (code === 'US') {{
-                console.log('[DRILL] US detected, setting up state drill-down');
-                // Get US states breakdown for detail panel
                 const usStates = regionData.filter(r => r.country === 'US');
-                console.log('[DRILL] Found US states:', usStates.length, usStates);
                 selectedCountry.regions = usStates;
                 selectedCountry.isUS = true;
 
                 animateCameraTo(coords[0], coords[1], 80);
-                console.log('[DRILL] Starting timer to add state markers in', CONFIG.animationDuration / 2, 'ms');
                 setTimeout(() => {{
-                    console.log('[DRILL] Timer fired, calling addStateMarkers');
                     addStateMarkers('US');
                 }}, CONFIG.animationDuration / 2);
             }} else {{
@@ -1309,10 +1276,7 @@ def create_dashboard_router(
         function drillToState(stateCode, views, stateName) {{
             // stateCode should already be normalized (e.g., "CA")
             const coords = US_STATE_COORDS[stateCode];
-            if (!coords) {{
-                console.log('[DRILL-STATE] No coords for state:', stateCode);
-                return;
-            }}
+            if (!coords) return;
 
             currentView = 'state';
             const displayName = stateName || US_STATE_NAMES[stateCode] || stateCode;
@@ -1323,7 +1287,6 @@ def create_dashboard_router(
                 const cityStateCode = normalizeStateCode(c.region);
                 return cityStateCode === stateCode || c.region === stateCode;
             }});
-            console.log('[DRILL-STATE] Found cities for', stateCode, ':', stateCities.length);
 
             selectedState = {{
                 code: stateCode,
@@ -1475,11 +1438,7 @@ def create_dashboard_router(
         }}
 
         function handleGlobeClick(event, markers) {{
-            console.log('[CLICK] handleGlobeClick called, currentView:', currentView, 'isAnimating:', isAnimating);
-            if (isAnimating) {{
-                console.log('[CLICK] Ignoring click, animation in progress');
-                return;
-            }}
+            if (isAnimating) return;
 
             const rect = renderer.domElement.getBoundingClientRect();
             const mouse = new THREE.Vector2(
@@ -1492,14 +1451,10 @@ def create_dashboard_router(
 
             // Check state markers first (if we're in US view)
             if (currentView === 'country' && selectedCountry && selectedCountry.code === 'US') {{
-                console.log('[CLICK] In US view, checking state markers. Count:', stateMarkers.length);
                 const stateMeshes = stateMarkers.map(m => m.mesh).filter(m => m.visible);
-                console.log('[CLICK] Visible state meshes:', stateMeshes.length);
                 const stateHits = raycaster.intersectObjects(stateMeshes);
-                console.log('[CLICK] State hits:', stateHits.length);
                 if (stateHits.length > 0) {{
                     const data = stateHits[0].object.userData;
-                    console.log('[CLICK] State hit data:', data);
                     if (data.isState && data.state && data.views) {{
                         drillToState(data.state, data.views, data.stateName);
                         return;
@@ -1509,12 +1464,9 @@ def create_dashboard_router(
 
             // Check country markers (filter out invisible ones)
             const visibleMarkers = markers.filter(m => m.visible);
-            console.log('[CLICK] Checking country markers. Total:', markers.length, 'Visible:', visibleMarkers.length);
             const hits = raycaster.intersectObjects(visibleMarkers);
-            console.log('[CLICK] Country hits:', hits.length);
             if (hits.length > 0) {{
                 const data = hits[0].object.userData;
-                console.log('[CLICK] Country hit data:', data);
                 if (data.country && data.views) {{
                     drillToCountry(data.country, data.views);
                 }}
@@ -1638,9 +1590,7 @@ def create_dashboard_router(
 
                 // Track country markers for hide/show during drill-down
                 countryMarkerMap[item.country] = {{ mesh, sprite }};
-                console.log('[INIT] Created country marker for:', item.country);
             }});
-            console.log('[INIT] countryMarkerMap populated with keys:', Object.keys(countryMarkerMap));
 
             // Raycaster for tooltips and clicks
             const raycaster = new THREE.Raycaster();
@@ -1723,84 +1673,150 @@ def create_dashboard_router(
                 }}
             }});
 
-            // Fullscreen modal handlers
+            // Fullscreen modal handlers - moves the actual globe instead of cloning
             const fullscreenBtn = document.getElementById('fullscreen-btn');
             const modal = document.getElementById('globe-modal');
             const modalCloseBtn = document.getElementById('modal-close-btn');
             const modalBackBtn = document.getElementById('modal-back-btn');
+            const modalContainer = document.getElementById('modal-globe-container');
+            const modalDetailPanel = document.getElementById('modal-detail-panel');
+            const modalTooltip = document.getElementById('modal-tooltip');
 
             function openFullscreenModal() {{
-                if (!modal) return;
+                if (!modal || !modalContainer) return;
+
+                isFullscreen = true;
+                originalContainer = container;
                 modal.classList.add('active');
 
-                // Initialize fullscreen globe if not already done
-                if (!fullscreenRenderer) {{
-                    initFullscreenGlobe();
-                }} else {{
-                    // Just start the animation loop
-                    animateFullscreen();
-                }}
+                // Move the canvas to fullscreen container
+                modalContainer.appendChild(renderer.domElement);
+
+                // Update renderer size
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+
+                // Update controls constraints for larger view
+                controls.minDistance = 130;
+                controls.maxDistance = 500;
+
+                // Sync detail panel
+                syncDetailPanel();
             }}
 
             function closeFullscreenModal() {{
-                if (!modal) return;
+                if (!modal || !originalContainer) return;
+
+                isFullscreen = false;
                 modal.classList.remove('active');
+
+                // Move canvas back to original container
+                originalContainer.appendChild(renderer.domElement);
+
+                // Update renderer size
+                renderer.setSize(originalContainer.clientWidth, originalContainer.clientHeight);
+                camera.aspect = originalContainer.clientWidth / originalContainer.clientHeight;
+                camera.updateProjectionMatrix();
+
+                // Restore controls constraints
+                controls.minDistance = 150;
+                controls.maxDistance = 400;
+
+                // Hide modal panels
+                if (modalDetailPanel) modalDetailPanel.style.display = 'none';
+                if (modalTooltip) modalTooltip.style.display = 'none';
             }}
 
-            function initFullscreenGlobe() {{
-                const modalContainer = document.getElementById('modal-globe-container');
-                if (!modalContainer) return;
+            function syncDetailPanel() {{
+                // Sync the detail panel content to modal
+                const panel = document.getElementById('detail-panel');
+                if (panel && modalDetailPanel) {{
+                    modalDetailPanel.innerHTML = panel.innerHTML;
+                    modalDetailPanel.style.display = panel.style.display;
+                }}
 
-                // Create fullscreen scene
-                fullscreenScene = new THREE.Scene();
-                fullscreenScene.background = new THREE.Color(CONFIG.backgroundColor);
+                // Update modal back button visibility
+                if (modalBackBtn) {{
+                    modalBackBtn.style.display = currentView !== 'world' ? 'block' : 'none';
+                }}
+            }}
 
-                // Camera
-                fullscreenCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
-                fullscreenCamera.position.z = 280;
+            // Override updateDetailPanel to sync both panels
+            const originalUpdateDetailPanel = updateDetailPanel;
+            updateDetailPanel = function(data) {{
+                originalUpdateDetailPanel(data);
+                if (isFullscreen) {{
+                    syncDetailPanel();
+                }}
+            }};
 
-                // Renderer
-                fullscreenRenderer = new THREE.WebGLRenderer({{ antialias: true }});
-                fullscreenRenderer.setSize(window.innerWidth, window.innerHeight);
-                fullscreenRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                modalContainer.appendChild(fullscreenRenderer.domElement);
+            // Handle window resize for fullscreen
+            window.addEventListener('resize', () => {{
+                if (isFullscreen && modal.classList.contains('active')) {{
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                }}
+            }});
 
-                // Controls
-                fullscreenControls = new OrbitControls(fullscreenCamera, fullscreenRenderer.domElement);
-                fullscreenControls.enableDamping = true;
-                fullscreenControls.dampingFactor = 0.05;
-                fullscreenControls.minDistance = 130;
-                fullscreenControls.maxDistance = 500;
-                fullscreenControls.enablePan = false;
-                fullscreenControls.autoRotate = true;
-                fullscreenControls.autoRotateSpeed = 0.2;
+            // Update mousemove for fullscreen tooltip
+            renderer.domElement.addEventListener('mousemove', (e) => {{
+                if (!isFullscreen) return;
 
-                // Starfield
-                fullscreenScene.add(createStarfield());
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-                // Clone the globe content
-                fullscreenGlobeGroup = globeGroup.clone();
-                fullscreenScene.add(fullscreenGlobeGroup);
+                raycaster.setFromCamera(mouse, camera);
 
-                // Handle window resize
-                window.addEventListener('resize', () => {{
-                    if (fullscreenRenderer && modal.classList.contains('active')) {{
-                        fullscreenCamera.aspect = window.innerWidth / window.innerHeight;
-                        fullscreenCamera.updateProjectionMatrix();
-                        fullscreenRenderer.setSize(window.innerWidth, window.innerHeight);
+                // Check state markers first when in US view
+                if (currentView === 'country' && selectedCountry && selectedCountry.code === 'US' && stateMarkers.length > 0) {{
+                    const stateIntersects = raycaster.intersectObjects(stateMarkers.map(m => m.mesh));
+                    if (stateIntersects.length > 0 && modalTooltip) {{
+                        const data = stateIntersects[0].object.userData;
+                        const name = data.stateName || US_STATE_NAMES[data.state] || data.state;
+                        modalTooltip.innerHTML = `<strong style="color:#ff6b6b">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click for cities</small>`;
+                        modalTooltip.style.display = 'block';
+                        modalTooltip.style.left = (e.clientX + 15) + 'px';
+                        modalTooltip.style.top = (e.clientY + 15) + 'px';
+                        renderer.domElement.style.cursor = 'pointer';
+                        return;
                     }}
-                }});
+                }}
 
-                // Start animation
-                animateFullscreen();
-            }}
+                // Check city markers
+                if (cityMarkers.length > 0 && (currentView === 'state' || (currentView === 'country' && selectedCountry && selectedCountry.code !== 'US'))) {{
+                    const cityIntersects = raycaster.intersectObjects(cityMarkers.map(m => m.mesh));
+                    if (cityIntersects.length > 0 && modalTooltip) {{
+                        const data = cityIntersects[0].object.userData;
+                        const cityName = data.city || 'Unknown';
+                        const regionName = data.region ? ` (${{US_STATE_NAMES[data.region] || data.region}})` : '';
+                        modalTooltip.innerHTML = `<strong style="color:#f39c12">${{cityName}}</strong>${{regionName}}<br>${{data.views.toLocaleString()}} views`;
+                        modalTooltip.style.display = 'block';
+                        modalTooltip.style.left = (e.clientX + 15) + 'px';
+                        modalTooltip.style.top = (e.clientY + 15) + 'px';
+                        renderer.domElement.style.cursor = 'pointer';
+                        return;
+                    }}
+                }}
 
-            function animateFullscreen() {{
-                if (!modal.classList.contains('active')) return;
-                requestAnimationFrame(animateFullscreen);
-                fullscreenControls.update();
-                fullscreenRenderer.render(fullscreenScene, fullscreenCamera);
-            }}
+                // Check country markers
+                const intersects = raycaster.intersectObjects(markers.filter(m => m.visible));
+                if (intersects.length > 0 && modalTooltip) {{
+                    const data = intersects[0].object.userData;
+                    const name = COUNTRY_NAMES[data.country] || data.country;
+                    const hint = data.country === 'US' ? 'Click for states' : 'Click to zoom';
+                    modalTooltip.innerHTML = `<strong style="color:var(--accent)">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">${{hint}}</small>`;
+                    modalTooltip.style.display = 'block';
+                    modalTooltip.style.left = (e.clientX + 15) + 'px';
+                    modalTooltip.style.top = (e.clientY + 15) + 'px';
+                    renderer.domElement.style.cursor = 'pointer';
+                }} else if (modalTooltip) {{
+                    modalTooltip.style.display = 'none';
+                    renderer.domElement.style.cursor = 'grab';
+                }}
+            }});
 
             if (fullscreenBtn) {{
                 fullscreenBtn.addEventListener('click', openFullscreenModal);
@@ -1811,11 +1827,7 @@ def create_dashboard_router(
             }}
 
             if (modalBackBtn) {{
-                modalBackBtn.addEventListener('click', () => {{
-                    if (currentView !== 'world') {{
-                        animateCameraToWorld();
-                    }}
-                }});
+                modalBackBtn.addEventListener('click', goBack);
             }}
 
             // Handle resize
