@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS page_views (
     page_title TEXT DEFAULT '',
     referrer TEXT DEFAULT '',
     country TEXT DEFAULT '',
+    region TEXT DEFAULT '',
+    city TEXT DEFAULT '',
+    latitude REAL DEFAULT NULL,
+    longitude REAL DEFAULT NULL,
     device_type TEXT DEFAULT '',
     visitor_hash TEXT DEFAULT ''
 );
