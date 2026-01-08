@@ -1136,28 +1136,28 @@ def create_dashboard_router(
                 if (!coords) return;
 
                 const [lat, lon] = coords;
-                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 5);  // Higher above globe
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 2);
 
-                // Size based on views (log scale) - make them MUCH bigger
+                // Size based on views (log scale) - reasonable for zoomed view
                 const logViews = Math.log10(item.views + 1);
                 const logMax = Math.log10(maxViews + 1);
-                const size = 3 + (logViews / logMax) * 5;  // Much bigger: 3-8
+                const size = 1.5 + (logViews / logMax) * 2;  // 1.5-3.5
 
                 // Marker sphere - red for states
                 const mesh = new THREE.Mesh(
                     new THREE.SphereGeometry(size, 16, 16),
-                    new THREE.MeshBasicMaterial({{ color: '#ff6b6b', transparent: true, opacity: 0.95 }})
+                    new THREE.MeshBasicMaterial({{ color: '#ff6b6b', transparent: true, opacity: 0.9 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ state: stateCode, stateName: item.region, views: item.views, isState: true }};
                 globeGroup.add(mesh);
 
-                // Glow sprite - brighter glow
+                // Glow sprite
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#ff6b6b', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: '#ff6b6b', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
-                sprite.scale.set(size * 6, size * 6, 1);
+                sprite.scale.set(size * 4, size * 4, 1);
                 sprite.position.copy(position);
                 globeGroup.add(sprite);
 
@@ -1300,14 +1300,18 @@ def create_dashboard_router(
             addStateCityMarkers(stateCode);
 
             updateDetailPanel(selectedState);
-            animateCameraTo(coords[0], coords[1], 40);
+            animateCameraTo(coords[0], coords[1], 60);  // Not too close
         }}
 
         function addStateCityMarkers(stateCode) {{
             clearCityMarkers();
 
-            // Get cities for this state
-            const stateCities = cityData.filter(c => c.country === 'US' && c.region === stateCode);
+            // Get cities for this state - normalize region names
+            const stateCities = cityData.filter(c => {{
+                if (c.country !== 'US') return false;
+                const cityStateCode = normalizeStateCode(c.region);
+                return cityStateCode === stateCode;
+            }});
             if (stateCities.length === 0) return;
 
             const maxViews = Math.max(...stateCities.map(c => c.views), 1);
@@ -1330,12 +1334,12 @@ def create_dashboard_router(
                 if (!coords) return;
 
                 const [lat, lon] = coords;
-                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1.5);
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 2);
 
-                // Size based on views
+                // Size based on views - visible at state zoom level
                 const logViews = Math.log10(item.views + 1);
                 const logMax = Math.log10(maxViews + 1);
-                const size = 0.5 + (logViews / logMax) * 1.5;
+                const size = 1 + (logViews / logMax) * 2;  // 1-3
 
                 // Marker sphere - orange for cities
                 const mesh = new THREE.Mesh(
