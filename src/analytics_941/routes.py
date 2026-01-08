@@ -47,6 +47,41 @@ def create_dashboard_router(
     # Pre-compute the expected hash if passkey is set
     expected_hash = _hash_passkey(passkey, site_name) if passkey else None
 
+    def _render_views_chart(views_by_day: list[dict]) -> str:
+        """Render a simple bar chart for views over time."""
+        if not views_by_day:
+            return '<div style="color: var(--muted); text-align: center; padding: 2rem;">No data for this period</div>'
+
+        max_views = max((d.get("views", 0) for d in views_by_day), default=1)
+        if max_views == 0:
+            max_views = 1
+
+        bars = []
+        for day in views_by_day:
+            views = day.get("views", 0)
+            height_pct = (views / max_views) * 100 if max_views else 0
+            date_str = day.get("date", "")
+            # Show abbreviated date in tooltip
+            bars.append(
+                f'<div class="chart-bar" style="height: {max(height_pct, 2)}%;">'
+                f'<div class="chart-tooltip">{date_str}<br><strong>{views:,}</strong> views</div>'
+                f'</div>'
+            )
+
+        # Date labels (first, middle, last)
+        first_date = views_by_day[0].get("date", "") if views_by_day else ""
+        last_date = views_by_day[-1].get("date", "") if views_by_day else ""
+
+        return f'''
+            <div style="display: flex; align-items: flex-end; height: 180px; gap: 2px;">
+                {"".join(bars)}
+            </div>
+            <div class="chart-labels">
+                <span>{first_date}</span>
+                <span>{last_date}</span>
+            </div>
+        '''
+
     def _render_login_page(error: str = "") -> str:
         """Render the login page HTML."""
         return f"""
@@ -390,6 +425,66 @@ def create_dashboard_router(
         }}
         th {{ color: var(--muted); font-weight: 500; font-size: 0.875rem; }}
         td {{ font-size: 0.875rem; }}
+        /* Chart styles */
+        .chart-section {{ padding: 1.5rem; }}
+        .chart-container {{ height: 200px; display: flex; align-items: flex-end; gap: 2px; padding-top: 1rem; }}
+        .chart-bar {{
+            flex: 1;
+            min-width: 8px;
+            background: linear-gradient(to top, rgba(89, 178, 204, 0.6), rgba(89, 178, 204, 0.9));
+            border-radius: 2px 2px 0 0;
+            position: relative;
+            transition: all 0.2s;
+        }}
+        .chart-bar:hover {{
+            background: linear-gradient(to top, rgba(89, 178, 204, 0.8), var(--accent));
+        }}
+        .chart-bar:hover .chart-tooltip {{
+            display: block;
+        }}
+        .chart-tooltip {{
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            white-space: nowrap;
+            z-index: 10;
+            margin-bottom: 4px;
+        }}
+        .chart-labels {{
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+            color: var(--muted);
+        }}
+        .loading-dot {{
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }}
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 0.4; transform: scale(0.8); }}
+            50% {{ opacity: 1; transform: scale(1); }}
+        }}
+        #realtime-card .value {{ color: var(--accent); }}
+        .two-column-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }}
+        @media (max-width: 600px) {{
+            .two-column-grid {{ grid-template-columns: 1fr; }}
+        }}
         #globe-container {{
             width: 100%;
             height: 350px;
@@ -480,6 +575,21 @@ def create_dashboard_router(
                 <h3>Bot Traffic</h3>
                 <div class="value" style="color: var(--muted);">{data.bot_views:,}</div>
             </div>
+            <div class="stat-card" id="realtime-card">
+                <h3>Live Visitors</h3>
+                <div class="value" id="realtime-count" hx-get="api/realtime" hx-trigger="load, every 30s" hx-swap="innerHTML">
+                    <span class="loading-dot"></span>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--muted);">last 5 min</div>
+            </div>
+        </div>
+
+        <!-- Views Over Time Chart -->
+        <div class="section chart-section" style="margin-bottom: 1.5rem;">
+            <h2>Views Over Time</h2>
+            <div class="chart-container" id="views-chart">
+                {_render_views_chart(data.views_by_day)}
+            </div>
         </div>
 
         <div class="main-grid">
@@ -552,6 +662,50 @@ def create_dashboard_router(
                             {''.join(f'<tr><td>{os}</td><td>{v:,}</td></tr>' for os, v in data.operating_systems.items()) or '<tr><td colspan="2">No OS data</td></tr>'}
                         </tbody>
                     </table>
+                </div>
+
+                <div class="two-column-grid">
+                    <div class="section">
+                        <h2>Bot Breakdown</h2>
+                        <table>
+                            <thead><tr><th>Category</th><th>Views</th></tr></thead>
+                            <tbody>
+                                {''.join(f'<tr><td>{cat.replace("_", " ").title()}</td><td>{v:,}</td></tr>' for cat, v in sorted(data.bot_breakdown.items(), key=lambda x: x[1], reverse=True)) or '<tr><td colspan="2">No bot traffic</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section">
+                        <h2>UTM Sources</h2>
+                        <table>
+                            <thead><tr><th>Source</th><th>Views</th></tr></thead>
+                            <tbody>
+                                {''.join(f'<tr><td>{s.get("source", "-")}</td><td>{s["views"]:,}</td></tr>' for s in data.utm_sources[:10]) or '<tr><td colspan="2">No UTM data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="two-column-grid">
+                    <div class="section">
+                        <h2>Top Regions</h2>
+                        <table>
+                            <thead><tr><th>Region</th><th>Country</th><th>Views</th></tr></thead>
+                            <tbody>
+                                {''.join(f'<tr><td>{r.get("region", "-")}</td><td style="color:var(--muted)">{r.get("country", "-")}</td><td>{r["views"]:,}</td></tr>' for r in data.regions[:10]) or '<tr><td colspan="3">No region data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="section">
+                        <h2>Top Cities</h2>
+                        <table>
+                            <thead><tr><th>City</th><th>Region</th><th>Views</th></tr></thead>
+                            <tbody>
+                                {''.join(f'<tr><td>{c.get("city", "-")}</td><td style="color:var(--muted)">{c.get("region", "-")}</td><td>{c["views"]:,}</td></tr>' for c in data.cities[:10]) or '<tr><td colspan="3">No city data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -1155,13 +1309,16 @@ def create_dashboard_router(
         data = await client.get_dashboard_data(period)
         return data.model_dump()
 
-    @router.get("/api/realtime")
+    @router.get("/api/realtime", response_class=HTMLResponse)
     async def api_realtime(analytics_auth: Optional[str] = Cookie(None)):
-        """Get realtime visitor count (last 5 minutes)."""
+        """Get realtime visitor count (last 5 minutes) - returns HTML for HTMX."""
         if passkey and not _verify_auth(analytics_auth, expected_hash):
-            return {"error": "unauthorized"}, 401
+            return HTMLResponse(content="<span>-</span>", status_code=401)
 
         count = await client.get_realtime_count()
-        return {"visitors": count}
+        # Return styled count with pulse indicator if visitors are present
+        if count > 0:
+            return HTMLResponse(content=f'<span style="display: flex; align-items: center; gap: 8px;">{count:,} <span class="loading-dot"></span></span>')
+        return HTMLResponse(content=f'<span>{count:,}</span>')
 
     return router
