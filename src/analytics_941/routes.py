@@ -1050,6 +1050,9 @@ def create_dashboard_router(
             clearStateMarkers();
             clearCityMarkers();
 
+            // Show all country markers again
+            showAllCountryMarkers();
+
             const targetPos = new THREE.Vector3(0, 0, 280);
             const startPos = camera.position.clone();
             const startTime = performance.now();
@@ -1076,6 +1079,7 @@ def create_dashboard_router(
         }}
 
         let stateMarkers = [];  // Track state markers for cleanup
+        let countryMarkerMap = {{}};  // Track country markers by code for hide/show
 
         function clearStateMarkers() {{
             stateMarkers.forEach(m => {{
@@ -1085,49 +1089,72 @@ def create_dashboard_router(
             stateMarkers = [];
         }}
 
+        function hideCountryMarker(countryCode) {{
+            const marker = countryMarkerMap[countryCode];
+            if (marker) {{
+                if (marker.mesh) marker.mesh.visible = false;
+                if (marker.sprite) marker.sprite.visible = false;
+            }}
+        }}
+
+        function showAllCountryMarkers() {{
+            Object.values(countryMarkerMap).forEach(marker => {{
+                if (marker.mesh) marker.mesh.visible = true;
+                if (marker.sprite) marker.sprite.visible = true;
+            }});
+        }}
+
         function addStateMarkers(countryCode) {{
             clearStateMarkers();
             if (countryCode !== 'US') return;
 
             // Get US region data
             const usRegions = regionData.filter(r => r.country === 'US');
-            if (usRegions.length === 0) return;
+            if (usRegions.length === 0) {{
+                console.log('No US region data found');
+                return;
+            }}
+            console.log('Adding state markers for', usRegions.length, 'states');
 
             const maxViews = Math.max(...usRegions.map(r => r.views), 1);
             const glowTexture = createGlowTexture();
 
             usRegions.forEach(item => {{
                 const coords = US_STATE_COORDS[item.region];
-                if (!coords) return;
+                if (!coords) {{
+                    console.log('No coords for state:', item.region);
+                    return;
+                }}
 
                 const [lat, lon] = coords;
-                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1.5);
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 2);
 
-                // Size based on views (log scale)
+                // Size based on views (log scale) - make them bigger
                 const logViews = Math.log10(item.views + 1);
                 const logMax = Math.log10(maxViews + 1);
-                const size = 0.8 + (logViews / logMax) * 2;
+                const size = 1.5 + (logViews / logMax) * 3;
 
-                // Marker sphere
+                // Marker sphere - red for states
                 const mesh = new THREE.Mesh(
                     new THREE.SphereGeometry(size, 16, 16),
-                    new THREE.MeshBasicMaterial({{ color: '#ff6b6b', transparent: true, opacity: 0.9 }})
+                    new THREE.MeshBasicMaterial({{ color: '#ff6b6b', transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ state: item.region, views: item.views, isState: true }};
                 globeGroup.add(mesh);
 
-                // Glow sprite
+                // Glow sprite - brighter glow
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#ff6b6b', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: '#ff6b6b', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
-                sprite.scale.set(size * 5, size * 5, 1);
+                sprite.scale.set(size * 6, size * 6, 1);
                 sprite.position.copy(position);
                 globeGroup.add(sprite);
 
                 stateMarkers.push({{ mesh, sprite }});
             }});
+            console.log('Created', stateMarkers.length, 'state markers');
         }}
 
         let cityMarkers = [];  // Track city markers for cleanup
@@ -1210,6 +1237,9 @@ def create_dashboard_router(
             currentView = 'country';
             selectedCountry = {{ code, views, name: COUNTRY_NAMES[code] || code }};
             selectedState = null;
+
+            // Hide the country marker we're drilling into
+            hideCountryMarker(code);
 
             // For US, show states in detail panel and state markers
             if (code === 'US') {{
@@ -1543,6 +1573,9 @@ def create_dashboard_router(
                 sprite.scale.set(size * 6, size * 6, 1);
                 sprite.position.copy(position);
                 globeGroup.add(sprite);
+
+                // Track country markers for hide/show during drill-down
+                countryMarkerMap[item.country] = {{ mesh, sprite }};
             }});
 
             // Raycaster for tooltips and clicks
