@@ -9,10 +9,13 @@ binding = "DB"
 database_name = "941-analytics"
 database_id = "243ae7ac-3f21-4287-a665-4ee624dd0d49"
 
-# KV namespace for rate limiting
-[[kv_namespaces]]
-binding = "RATE_LIMIT_KV"
-id = "" # Will be set after creating namespace
+# KV namespace for rate limiting (optional - create via dashboard)
+# To enable rate limiting:
+# 1. Create KV namespace in Cloudflare dashboard
+# 2. Uncomment and add ID:
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_KV"
+# id = "your-kv-namespace-id"
 
 # Scheduled triggers for daily aggregation
 [triggers]

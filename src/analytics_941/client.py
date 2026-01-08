@@ -1,10 +1,11 @@
 """HTTP client for querying Cloudflare D1 analytics database."""
 
+import json
 from datetime import date, datetime, timedelta
 from typing import Optional
 import httpx
 
-from .models import DashboardData
+from .models import DashboardData, DailyStats
 
 
 class AnalyticsClient:
@@ -397,3 +398,199 @@ class AnalyticsClient:
             "by_day": by_day,
             "landing_pages": landing_pages,
         }
+
+    # =========================================================================
+    # AGGREGATED DATA QUERIES (Fast historical queries from daily_stats)
+    # =========================================================================
+
+    async def get_daily_stats(
+        self, start_date: date, end_date: date
+    ) -> list[DailyStats]:
+        """
+        Get aggregated daily stats from the daily_stats table.
+
+        This is much faster than querying raw page_views for historical data.
+        Note: daily_stats is populated by the nightly aggregation job.
+        """
+        results = await self._query(
+            """
+            SELECT * FROM daily_stats
+            WHERE site = ? AND date >= ? AND date <= ?
+            ORDER BY date ASC
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()],
+        )
+
+        stats = []
+        for row in results:
+            stats.append(DailyStats(
+                date=date.fromisoformat(row["date"]),
+                site=row["site"],
+                total_views=row["total_views"],
+                unique_visitors=row["unique_visitors"],
+                bot_views=row["bot_views"],
+                top_pages=json.loads(row["top_pages"]) if row["top_pages"] else [],
+                top_referrers=json.loads(row["top_referrers"]) if row["top_referrers"] else [],
+                countries=json.loads(row["countries"]) if row["countries"] else {},
+                devices=json.loads(row["devices"]) if row["devices"] else {},
+                browsers=json.loads(row["browsers"]) if row["browsers"] else {},
+                operating_systems=json.loads(row["operating_systems"]) if row["operating_systems"] else {},
+                referrer_types=json.loads(row["referrer_types"]) if row["referrer_types"] else {},
+                utm_sources=json.loads(row["utm_sources"]) if row["utm_sources"] else {},
+                utm_campaigns=json.loads(row["utm_campaigns"]) if row["utm_campaigns"] else {},
+                bot_breakdown=json.loads(row["bot_breakdown"]) if row["bot_breakdown"] else {},
+            ))
+
+        return stats
+
+    async def get_dashboard_data_fast(
+        self, period: str = "7d", include_bots: bool = False
+    ) -> DashboardData:
+        """
+        Get dashboard data using aggregated daily_stats for historical data.
+
+        This is faster than get_dashboard_data() for 7d/30d periods because it
+        reads from pre-aggregated daily_stats instead of scanning all page_views.
+
+        For "today", it falls back to raw page_views for real-time data.
+
+        Args:
+            period: Time period - 'today', '7d', or '30d'
+            include_bots: If False (default), human traffic only.
+        """
+        today = date.today()
+
+        if period == "today":
+            # For today, use real-time raw data
+            return await self.get_dashboard_data(period, include_bots)
+
+        # Calculate date range
+        if period == "7d":
+            start_date = today - timedelta(days=7)
+        elif period == "30d":
+            start_date = today - timedelta(days=30)
+        else:
+            start_date = today - timedelta(days=7)
+
+        # Get aggregated historical data (excludes today)
+        yesterday = today - timedelta(days=1)
+        daily_stats = await self.get_daily_stats(start_date, yesterday)
+
+        # Get today's real-time data
+        today_data = await self.get_dashboard_data("today", include_bots)
+
+        # Combine historical aggregates with today
+        total_views = sum(s.total_views for s in daily_stats) + today_data.total_views
+        # Note: unique_visitors across days cannot be simply summed (visitors may repeat)
+        # For now, we sum as an approximation; true unique would need raw data
+        unique_visitors = sum(s.unique_visitors for s in daily_stats) + today_data.unique_visitors
+        bot_views = sum(s.bot_views for s in daily_stats) + today_data.bot_views
+
+        # Build views_by_day from daily_stats + today
+        views_by_day = [
+            {"day": s.date.isoformat(), "views": s.total_views, "visitors": s.unique_visitors}
+            for s in daily_stats
+        ]
+        if today_data.views_by_day:
+            views_by_day.extend(today_data.views_by_day)
+
+        # Merge top pages (combine counts)
+        pages_count: dict[str, int] = {}
+        for s in daily_stats:
+            for page in s.top_pages:
+                url = page.get("url", "")
+                pages_count[url] = pages_count.get(url, 0) + page.get("views", 0)
+        for page in today_data.top_pages:
+            url = page.get("url", "")
+            pages_count[url] = pages_count.get(url, 0) + page.get("views", 0)
+        top_pages = [{"url": k, "views": v} for k, v in sorted(pages_count.items(), key=lambda x: -x[1])[:10]]
+
+        # Merge top referrers
+        referrer_count: dict[str, dict] = {}
+        for s in daily_stats:
+            for ref in s.top_referrers:
+                domain = ref.get("domain", "")
+                if domain not in referrer_count:
+                    referrer_count[domain] = {"domain": domain, "type": ref.get("type", ""), "views": 0}
+                referrer_count[domain]["views"] += ref.get("views", 0)
+        for ref in today_data.top_referrers:
+            domain = ref.get("domain", "")
+            if domain not in referrer_count:
+                referrer_count[domain] = {"domain": domain, "type": ref.get("type", ""), "views": 0}
+            referrer_count[domain]["views"] += ref.get("views", 0)
+        top_referrers = sorted(referrer_count.values(), key=lambda x: -x["views"])[:10]
+
+        # Merge dict-based aggregates
+        def merge_dicts(dicts: list[dict[str, int]]) -> dict[str, int]:
+            result: dict[str, int] = {}
+            for d in dicts:
+                for k, v in d.items():
+                    result[k] = result.get(k, 0) + v
+            return result
+
+        referrer_types = merge_dicts([s.referrer_types for s in daily_stats] + [today_data.referrer_types])
+        devices = merge_dicts([s.devices for s in daily_stats] + [today_data.devices])
+        browsers = merge_dicts([s.browsers for s in daily_stats] + [today_data.browsers])
+        operating_systems = merge_dicts([s.operating_systems for s in daily_stats] + [today_data.operating_systems])
+        bot_breakdown = merge_dicts([s.bot_breakdown for s in daily_stats] + [today_data.bot_breakdown])
+
+        # Merge UTM data
+        utm_source_count: dict[str, int] = {}
+        for s in daily_stats:
+            for k, v in s.utm_sources.items():
+                utm_source_count[k] = utm_source_count.get(k, 0) + v
+        for item in today_data.utm_sources:
+            k = item.get("source", "")
+            utm_source_count[k] = utm_source_count.get(k, 0) + item.get("views", 0)
+        utm_sources = [{"source": k, "medium": "", "views": v} for k, v in sorted(utm_source_count.items(), key=lambda x: -x[1])[:10]]
+
+        utm_campaign_count: dict[str, int] = {}
+        for s in daily_stats:
+            for k, v in s.utm_campaigns.items():
+                utm_campaign_count[k] = utm_campaign_count.get(k, 0) + v
+        for item in today_data.utm_campaigns:
+            k = item.get("campaign", "")
+            utm_campaign_count[k] = utm_campaign_count.get(k, 0) + item.get("views", 0)
+        utm_campaigns = [{"campaign": k, "source": "", "views": v} for k, v in sorted(utm_campaign_count.items(), key=lambda x: -x[1])[:10]]
+
+        # Merge countries (convert from dict to list format)
+        country_count: dict[str, int] = {}
+        for s in daily_stats:
+            for k, v in s.countries.items():
+                country_count[k] = country_count.get(k, 0) + v
+        for item in today_data.countries:
+            k = item.get("country", "")
+            country_count[k] = country_count.get(k, 0) + item.get("views", 0)
+        countries = [{"country": k, "views": v} for k, v in sorted(country_count.items(), key=lambda x: -x[1])[:10]]
+
+        return DashboardData(
+            site=self.site_name,
+            period=period,
+            total_views=total_views,
+            unique_visitors=unique_visitors,
+            bot_views=bot_views,
+            views_by_day=views_by_day,
+            top_pages=top_pages,
+            top_referrers=top_referrers,
+            referrer_types=referrer_types,
+            utm_sources=utm_sources,
+            utm_campaigns=utm_campaigns,
+            countries=countries,
+            regions=today_data.regions,  # Regions not in daily_stats
+            cities=today_data.cities,  # Cities not in daily_stats
+            devices=devices,
+            browsers=browsers,
+            operating_systems=operating_systems,
+            bot_breakdown=bot_breakdown,
+        )
+
+    async def has_aggregated_data(self, start_date: date) -> bool:
+        """Check if we have aggregated data for the date range."""
+        result = await self._query(
+            """
+            SELECT COUNT(*) as count FROM daily_stats
+            WHERE site = ? AND date >= ?
+            """,
+            [self.site_name, start_date.isoformat()],
+        )
+        return result[0]["count"] > 0 if result else False
