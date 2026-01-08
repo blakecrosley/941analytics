@@ -1120,6 +1120,7 @@ def create_dashboard_router(
 
         function addStateMarkers(countryCode) {{
             clearStateMarkers();
+            clearCityMarkers();  // Also clear any city markers from previous drill-down
             if (countryCode !== 'US') return;
 
             // Get US region data
@@ -1136,28 +1137,28 @@ def create_dashboard_router(
                 if (!coords) return;
 
                 const [lat, lon] = coords;
-                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 2);
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1);
 
-                // Size based on views (log scale) - reasonable for zoomed view
+                // Size based on views (log scale) - small for zoomed view
                 const logViews = Math.log10(item.views + 1);
                 const logMax = Math.log10(maxViews + 1);
-                const size = 1.5 + (logViews / logMax) * 2;  // 1.5-3.5
+                const size = 0.4 + (logViews / logMax) * 0.6;  // 0.4-1.0
 
-                // Marker sphere - red for states
+                // Marker sphere - red/coral for states
                 const mesh = new THREE.Mesh(
-                    new THREE.SphereGeometry(size, 16, 16),
-                    new THREE.MeshBasicMaterial({{ color: '#ff6b6b', transparent: true, opacity: 0.9 }})
+                    new THREE.SphereGeometry(size, 12, 12),
+                    new THREE.MeshBasicMaterial({{ color: '#e74c3c', transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ state: stateCode, stateName: item.region, views: item.views, isState: true }};
                 globeGroup.add(mesh);
 
-                // Glow sprite
+                // Glow sprite - subtle
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#ff6b6b', transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: '#e74c3c', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
-                sprite.scale.set(size * 4, size * 4, 1);
+                sprite.scale.set(size * 3, size * 3, 1);
                 sprite.position.copy(position);
                 globeGroup.add(sprite);
 
@@ -1207,28 +1208,28 @@ def create_dashboard_router(
                 if (!coords) return;
 
                 const [lat, lon] = coords;
-                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1.5);
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1);
 
-                // Size based on views (log scale)
+                // Size based on views (log scale) - small for zoomed view
                 const logViews = Math.log10(item.views + 1);
                 const logMax = Math.log10(maxViews + 1);
-                const size = 0.6 + (logViews / logMax) * 1.8;
+                const size = 0.3 + (logViews / logMax) * 0.5;  // 0.3-0.8
 
-                // Marker sphere - orange for cities
+                // Marker sphere - orange/amber for cities
                 const mesh = new THREE.Mesh(
-                    new THREE.SphereGeometry(size, 16, 16),
-                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.9 }})
+                    new THREE.SphereGeometry(size, 12, 12),
+                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ city: item.city, region: item.region, views: item.views, isCity: true }};
                 globeGroup.add(mesh);
 
-                // Glow sprite
+                // Glow sprite - subtle
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
-                sprite.scale.set(size * 4, size * 4, 1);
+                sprite.scale.set(size * 3, size * 3, 1);
                 sprite.position.copy(position);
                 globeGroup.add(sprite);
 
@@ -1334,28 +1335,28 @@ def create_dashboard_router(
                 if (!coords) return;
 
                 const [lat, lon] = coords;
-                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 2);
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1);
 
-                // Size based on views - visible at state zoom level
+                // Size based on views - small for zoomed view
                 const logViews = Math.log10(item.views + 1);
                 const logMax = Math.log10(maxViews + 1);
-                const size = 1 + (logViews / logMax) * 2;  // 1-3
+                const size = 0.3 + (logViews / logMax) * 0.5;  // 0.3-0.8
 
-                // Marker sphere - orange for cities
+                // Marker sphere - orange/amber for cities
                 const mesh = new THREE.Mesh(
-                    new THREE.SphereGeometry(size, 16, 16),
-                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.9 }})
+                    new THREE.SphereGeometry(size, 12, 12),
+                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
                 mesh.userData = {{ city: item.city, region: stateCode, views: item.views, isCity: true }};
                 globeGroup.add(mesh);
 
-                // Glow sprite
+                // Glow sprite - subtle
                 const spriteMat = new THREE.SpriteMaterial({{
-                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending
                 }});
                 const sprite = new THREE.Sprite(spriteMat);
-                sprite.scale.set(size * 4, size * 4, 1);
+                sprite.scale.set(size * 3, size * 3, 1);
                 sprite.position.copy(position);
                 globeGroup.add(sprite);
 
