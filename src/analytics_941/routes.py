@@ -242,7 +242,15 @@ def create_dashboard_router(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics - {site_name}</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/topojson-client@3"></script>
+    <script type="importmap">
+    {{
+        "imports": {{
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }}
+    }}
+    </script>
     <style>
         :root {{
             --bg: #0a0d12;
@@ -367,6 +375,18 @@ def create_dashboard_router(
             color: var(--muted);
             z-index: 10;
         }}
+        #globe-tooltip {{
+            display: none;
+            position: absolute;
+            background: var(--surface);
+            border: 1px solid var(--green);
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            z-index: 100;
+            box-shadow: 0 0 20px rgba(0, 242, 0, 0.3);
+        }}
     </style>
 </head>
 <body>
@@ -430,6 +450,7 @@ def create_dashboard_router(
                 <div class="section" style="padding: 0; overflow: hidden;">
                     <div id="globe-container">
                         <span class="globe-title">Visitors by Country</span>
+                        <div id="globe-tooltip"></div>
                     </div>
                     <div style="padding: 1.5rem; padding-top: 0;">
                         <table>
@@ -444,144 +465,245 @@ def create_dashboard_router(
         </div>
     </div>
 
-    <script>
-        // Globe visualization
+    <script type="module">
+        import * as THREE from 'three';
+        import {{ OrbitControls }} from 'three/addons/controls/OrbitControls.js';
+
+        // Visitor data from server
         const globeData = {str(globe_data).replace("'", '"')};
 
-        // Country centroids (lat, lng)
-        const countryCentroids = {{
-            'US': [39.8, -98.5], 'CN': [35.0, 105.0], 'IN': [20.0, 77.0],
-            'BR': [-14.2, -51.9], 'RU': [61.5, 105.3], 'JP': [36.2, 138.3],
-            'DE': [51.2, 10.5], 'GB': [55.4, -3.4], 'FR': [46.2, 2.2],
-            'IT': [41.9, 12.6], 'CA': [56.1, -106.3], 'AU': [-25.3, 133.8],
-            'KR': [35.9, 127.8], 'ES': [40.5, -3.7], 'MX': [23.6, -102.6],
-            'ID': [-0.8, 113.9], 'NL': [52.1, 5.3], 'SA': [23.9, 45.1],
-            'TR': [39.0, 35.2], 'CH': [46.8, 8.2], 'PL': [51.9, 19.1],
-            'SE': [60.1, 18.6], 'BE': [50.5, 4.5], 'TH': [15.9, 100.5],
-            'AT': [47.5, 14.6], 'NO': [60.5, 8.5], 'AE': [23.4, 53.8],
-            'SG': [1.4, 103.8], 'MY': [4.2, 101.9], 'PH': [12.9, 121.8],
-            'DK': [56.3, 9.5], 'FI': [61.9, 25.7], 'IE': [53.1, -8.0],
-            'IL': [31.0, 34.9], 'HK': [22.4, 114.1], 'NZ': [-40.9, 174.9],
-            'CZ': [49.8, 15.5], 'PT': [39.4, -8.2], 'RO': [45.9, 25.0],
-            'VN': [14.1, 108.3], 'ZA': [-30.6, 22.9], 'GR': [39.1, 21.8],
-            'CL': [-35.7, -71.5], 'AR': [-38.4, -63.6], 'CO': [4.6, -74.3],
-            'HU': [47.2, 19.5], 'UA': [48.4, 31.2], 'EG': [26.8, 30.8],
-            'PK': [30.4, 69.3], 'NG': [9.1, 8.7], 'BD': [23.7, 90.4],
-            'KE': [-0.0, 37.9], 'PE': [-9.2, -75.0], 'TW': [23.7, 121.0]
+        // Country centroids (lat, lon)
+        const COUNTRY_COORDS = {{
+            'US': [39.8, -98.5], 'CN': [35.0, 105.0], 'CA': [56.0, -106.0], 'SG': [1.35, 103.8],
+            'PT': [39.5, -8.0], 'DE': [51.0, 10.5], 'VN': [16.0, 108.0], 'PK': [30.0, 70.0],
+            'GB': [54.0, -2.0], 'FR': [46.0, 2.0], 'JP': [36.0, 138.0], 'IN': [22.0, 78.0],
+            'BR': [-10.0, -55.0], 'AU': [-25.0, 135.0], 'KR': [36.0, 128.0], 'NL': [52.0, 5.0],
+            'IT': [42.0, 12.0], 'ES': [40.0, -4.0], 'CH': [47.0, 8.0], 'SE': [62.0, 15.0],
+            'NO': [62.0, 10.0], 'DK': [56.0, 10.0], 'FI': [64.0, 26.0], 'IE': [53.0, -8.0],
+            'RU': [60.0, 100.0], 'MX': [23.0, -102.0], 'AR': [-34.0, -64.0], 'CL': [-33.0, -71.0],
+            'CO': [4.0, -72.0], 'PE': [-10.0, -76.0], 'EG': [27.0, 30.0], 'NG': [10.0, 8.0],
+            'ZA': [-29.0, 24.0], 'SA': [24.0, 45.0], 'AE': [24.0, 54.0], 'IL': [31.0, 35.0],
+            'TR': [39.0, 35.0], 'PL': [52.0, 20.0], 'UA': [49.0, 32.0], 'CZ': [50.0, 15.0],
+            'HK': [22.3, 114.2], 'TW': [24.0, 121.0], 'MY': [4.0, 109.0], 'TH': [15.0, 101.0],
+            'ID': [-2.0, 118.0], 'PH': [13.0, 122.0], 'NZ': [-42.0, 174.0], 'AT': [47.5, 14.5],
+            'BE': [50.8, 4.5], 'GR': [39.0, 22.0], 'HU': [47.0, 20.0], 'RO': [46.0, 25.0],
+            'BD': [24.0, 90.0], 'KE': [-1.0, 38.0]
         }};
 
-        function initGlobe() {{
+        const CONFIG = {{
+            globeRadius: 100,
+            backgroundColor: '#0a0d12',
+            oceanColor: '#0a0a0a',
+            borderColor: '#00F200',
+            pointColor: '#00F200',
+            atmosphereColor: '#00F200',
+            countriesUrl: 'https://unpkg.com/world-atlas@2.0.2/countries-110m.json'
+        }};
+
+        let scene, camera, renderer, controls, globeGroup;
+        let tooltip;
+
+        function latLonToVector3(lat, lon, radius = CONFIG.globeRadius) {{
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+            return new THREE.Vector3(
+                -(radius * Math.sin(phi) * Math.cos(theta)),
+                radius * Math.cos(phi),
+                radius * Math.sin(phi) * Math.sin(theta)
+            );
+        }}
+
+        function createGlowTexture() {{
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0, 'rgba(0, 242, 0, 1)');
+            gradient.addColorStop(0.3, 'rgba(0, 242, 0, 0.5)');
+            gradient.addColorStop(1, 'rgba(0, 242, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }}
+
+        function createStarfield() {{
+            const geometry = new THREE.BufferGeometry();
+            const positions = [];
+            for (let i = 0; i < 2000; i++) {{
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const r = 400 + Math.random() * 200;
+                positions.push(
+                    r * Math.sin(phi) * Math.cos(theta),
+                    r * Math.sin(phi) * Math.sin(theta),
+                    r * Math.cos(phi)
+                );
+            }}
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            return new THREE.Points(geometry, new THREE.PointsMaterial({{
+                color: 0x00F200, size: 0.5, transparent: true, opacity: 0.6
+            }}));
+        }}
+
+        async function initGlobe() {{
             const container = document.getElementById('globe-container');
             if (!container) return;
 
-            const width = container.clientWidth;
-            const height = container.clientHeight;
+            // Create tooltip
+            tooltip = document.getElementById('globe-tooltip');
 
-            // Scene setup
-            const scene = new THREE.Scene();
-            const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-            camera.position.z = 2.5;
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(CONFIG.backgroundColor);
 
-            const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true }});
-            renderer.setSize(width, height);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            // Camera
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 1000);
+            camera.position.z = 280;
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({{ antialias: true }});
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             container.appendChild(renderer.domElement);
 
-            // Earth sphere
-            const geometry = new THREE.SphereGeometry(1, 64, 64);
-            const material = new THREE.MeshBasicMaterial({{
-                color: 0x12161d,
-                transparent: true,
-                opacity: 0.9
-            }});
-            const earth = new THREE.Mesh(geometry, material);
-            scene.add(earth);
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 150;
+            controls.maxDistance = 400;
+            controls.enablePan = false;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.3;
 
-            // Wireframe overlay
-            const wireGeometry = new THREE.SphereGeometry(1.002, 32, 32);
-            const wireMaterial = new THREE.MeshBasicMaterial({{
-                color: 0x1e2530,
-                wireframe: true,
-                transparent: true,
-                opacity: 0.3
-            }});
-            const wireframe = new THREE.Mesh(wireGeometry, wireMaterial);
-            scene.add(wireframe);
+            // Starfield
+            scene.add(createStarfield());
 
-            // Atmosphere glow
-            const glowGeometry = new THREE.SphereGeometry(1.1, 32, 32);
-            const glowMaterial = new THREE.MeshBasicMaterial({{
-                color: 0x59b2cc,
-                transparent: true,
-                opacity: 0.05,
-                side: THREE.BackSide
-            }});
-            const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-            scene.add(glow);
+            // Globe group (everything rotates together)
+            globeGroup = new THREE.Group();
 
-            // Add visitor markers
-            globeData.forEach(item => {{
-                const coords = countryCentroids[item.country];
-                if (!coords) return;
+            // Ocean sphere
+            const oceanGeo = new THREE.SphereGeometry(CONFIG.globeRadius - 0.5, 64, 64);
+            globeGroup.add(new THREE.Mesh(oceanGeo, new THREE.MeshBasicMaterial({{
+                color: CONFIG.oceanColor, transparent: true, opacity: 0.95
+            }})));
 
-                const lat = coords[0] * Math.PI / 180;
-                const lng = -coords[1] * Math.PI / 180;
+            // Atmosphere
+            const atmosphereGeo = new THREE.SphereGeometry(CONFIG.globeRadius + 2, 64, 64);
+            globeGroup.add(new THREE.Mesh(atmosphereGeo, new THREE.MeshBasicMaterial({{
+                color: CONFIG.atmosphereColor, transparent: true, opacity: 0.08, side: THREE.BackSide
+            }})));
 
-                const radius = 1.02;
-                const x = radius * Math.cos(lat) * Math.cos(lng);
-                const y = radius * Math.sin(lat);
-                const z = radius * Math.cos(lat) * Math.sin(lng);
+            scene.add(globeGroup);
 
-                const size = 0.02 + (item.normalized * 0.06);
-                const markerGeometry = new THREE.SphereGeometry(size, 16, 16);
-                const markerMaterial = new THREE.MeshBasicMaterial({{
-                    color: 0x59b2cc,
-                    transparent: true,
-                    opacity: 0.8
+            // Load country borders
+            try {{
+                const response = await fetch(CONFIG.countriesUrl);
+                const topology = await response.json();
+                const countries = topojson.feature(topology, topology.objects.countries);
+
+                const borderMaterial = new THREE.LineBasicMaterial({{
+                    color: CONFIG.borderColor, transparent: true, opacity: 0.3
                 }});
-                const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-                marker.position.set(x, y, z);
-                scene.add(marker);
 
-                // Glow around marker
-                const glowSize = size * 2;
-                const markerGlowGeometry = new THREE.SphereGeometry(glowSize, 16, 16);
-                const markerGlowMaterial = new THREE.MeshBasicMaterial({{
-                    color: 0x59b2cc,
-                    transparent: true,
-                    opacity: 0.2
-                }});
-                const markerGlow = new THREE.Mesh(markerGlowGeometry, markerGlowMaterial);
-                markerGlow.position.set(x, y, z);
-                scene.add(markerGlow);
-            }});
+                countries.features.forEach(feature => {{
+                    const coords = feature.geometry.coordinates;
+                    const type = feature.geometry.type;
 
-            // Animation
-            let rotationSpeed = 0.001;
-            function animate() {{
-                requestAnimationFrame(animate);
-                earth.rotation.y += rotationSpeed;
-                wireframe.rotation.y += rotationSpeed;
-                scene.children.forEach(child => {{
-                    if (child !== earth && child !== wireframe && child !== glow) {{
-                        // Rotate markers with earth
+                    const processRing = (ring) => {{
+                        const points = ring.map(([lon, lat]) => latLonToVector3(lat, lon, CONFIG.globeRadius + 0.2));
+                        if (points.length > 1) {{
+                            globeGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), borderMaterial));
+                        }}
+                    }};
+
+                    if (type === 'Polygon') {{
+                        coords.forEach(ring => processRing(ring));
+                    }} else if (type === 'MultiPolygon') {{
+                        coords.forEach(polygon => polygon.forEach(ring => processRing(ring)));
                     }}
                 }});
+            }} catch (e) {{
+                console.warn('Failed to load country borders:', e);
+            }}
+
+            // Add visitor markers
+            const glowTexture = createGlowTexture();
+            const maxViews = Math.max(...globeData.map(d => d.views), 1);
+
+            globeData.forEach(item => {{
+                const coords = COUNTRY_COORDS[item.country];
+                if (!coords) return;
+
+                const [lat, lon] = coords;
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1);
+
+                // Size based on views (log scale)
+                const logViews = Math.log10(item.views + 1);
+                const logMax = Math.log10(maxViews + 1);
+                const size = 1 + (logViews / logMax) * 3;
+
+                // Marker sphere
+                const mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(size, 16, 16),
+                    new THREE.MeshBasicMaterial({{ color: CONFIG.pointColor, transparent: true, opacity: 0.9 }})
+                );
+                mesh.position.copy(position);
+                mesh.userData = {{ country: item.country, views: item.views }};
+                globeGroup.add(mesh);
+
+                // Glow sprite
+                const sprite = new THREE.Sprite(new THREE.SpriteMaterial({{
+                    map: glowTexture, color: CONFIG.pointColor, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending
+                }}));
+                sprite.scale.set(size * 6, size * 6, 1);
+                sprite.position.copy(position);
+                globeGroup.add(sprite);
+            }});
+
+            // Raycaster for tooltips
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            const markers = globeGroup.children.filter(c => c.userData && c.userData.country);
+
+            renderer.domElement.addEventListener('mousemove', (e) => {{
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(markers);
+
+                if (intersects.length > 0 && tooltip) {{
+                    const data = intersects[0].object.userData;
+                    tooltip.innerHTML = `<strong style="color:#00F200">${{data.country}}</strong><br>${{data.views.toLocaleString()}} views`;
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                    tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
+                }} else if (tooltip) {{
+                    tooltip.style.display = 'none';
+                }}
+            }});
+
+            // Handle resize
+            const resizeObserver = new ResizeObserver(() => {{
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            }});
+            resizeObserver.observe(container);
+
+            // Animation loop
+            function animate() {{
+                requestAnimationFrame(animate);
+                controls.update();
                 renderer.render(scene, camera);
             }}
             animate();
-
-            // Handle resize
-            window.addEventListener('resize', () => {{
-                const newWidth = container.clientWidth;
-                const newHeight = container.clientHeight;
-                camera.aspect = newWidth / newHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(newWidth, newHeight);
-            }});
         }}
 
-        // Initialize globe when DOM is ready
+        // Initialize when DOM is ready
         if (document.readyState === 'loading') {{
             document.addEventListener('DOMContentLoaded', initGlobe);
         }} else {{
