@@ -9,6 +9,9 @@ Privacy-first analytics for 941 Apps projects. No cookies, no fingerprinting, no
 - **Cloudflare-powered**: Edge collection via Workers, SQLite storage via D1
 - **FastAPI integration**: Drop-in dashboard routes
 - **Multi-site support**: One Worker serves all your projects
+- **SPA navigation**: Tracks pushState/replaceState for HTMX and SPAs
+- **UTM attribution**: Captures campaign parameters automatically
+- **Interactive globe**: 3D visualization with country → state → city drill-down
 
 ## What We Track
 
@@ -17,8 +20,10 @@ Privacy-first analytics for 941 Apps projects. No cookies, no fingerprinting, no
 | Page URL | Request | Path only, no query params |
 | Page title | JavaScript | Document title |
 | Referrer | Header | Domain only |
-| Country | Cloudflare | From CF-IPCountry header |
+| Country/Region/City | Cloudflare | MaxMind geolocation, no IP stored |
 | Device type | Viewport | mobile/tablet/desktop |
+| Browser/OS | User-Agent | Parsed on server, UA not stored |
+| UTM parameters | Query string | Campaign attribution |
 | Visitor hash | Computed | Rotates daily, can't identify individuals |
 
 **NOT collected**: IP addresses, cookies, user-agent strings, device IDs, personal data.
@@ -86,12 +91,17 @@ In your Jinja2 base template:
 
 Access at `/admin/analytics` (after adding auth):
 
-- Today's stats: views, unique visitors
-- Traffic over time (7d, 30d views)
-- Top pages
-- Top referrers
-- Countries
-- Device breakdown
+- **Stats cards**: Total views, unique visitors, bot traffic, live visitors
+- **Traffic chart**: Views over time (today, 7d, 30d)
+- **3D Globe**: Interactive world map with drill-down (country → state → city)
+- **Top pages**: Most visited URLs
+- **Traffic sources**: Referrer breakdown by type (direct, organic, social, etc.)
+- **Top referrers**: Individual referring domains
+- **UTM campaigns**: Campaign and source attribution
+- **Devices**: Mobile/tablet/desktop split
+- **Browsers & OS**: Browser and operating system breakdown
+- **Geography**: Top regions and cities
+- **Bot breakdown**: Categorized bot traffic (search engines, AI crawlers, etc.)
 
 ## API Endpoints
 

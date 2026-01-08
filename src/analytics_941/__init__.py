@@ -22,7 +22,7 @@ from .client import AnalyticsClient
 from .routes import create_dashboard_router
 from .models import PageView, DailyStats
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["setup_analytics", "AnalyticsClient", "PageView", "DailyStats"]
 
 
@@ -52,20 +52,58 @@ class Analytics:
         )
 
     def tracking_script(self) -> str:
-        """Generate the tracking script HTML for templates."""
+        """Generate the tracking script HTML for templates.
+
+        Features:
+        - Initial pageload tracking
+        - SPA navigation support (pushState, replaceState, popstate)
+        - UTM parameter extraction for attribution
+        - Debounced to prevent duplicate tracks
+        - ~700 bytes minified
+        """
         return f'''<script>
 (function(){{
-  var d=document,w=window,e=encodeURIComponent;
+  var d=document,w=window,h=history,l=location,e=encodeURIComponent;
   var url="{self.worker_url}/collect";
-  var data={{
-    site:"{self.site_name}",
-    url:d.location.pathname,
-    title:d.title,
-    ref:d.referrer?new URL(d.referrer).hostname:"",
-    w:w.innerWidth
-  }};
-  var params=Object.keys(data).map(function(k){{return k+"="+e(data[k])}}).join("&");
-  var img=new Image();img.src=url+"?"+params;
+  var site="{self.site_name}";
+  var lastPath="",timer;
+
+  function getUtm(){{
+    var p=new URLSearchParams(l.search);
+    var u={{}};
+    ["source","medium","campaign","term","content"].forEach(function(k){{
+      var v=p.get("utm_"+k);if(v)u[k]=v;
+    }});
+    return u;
+  }}
+
+  function track(){{
+    clearTimeout(timer);
+    timer=setTimeout(function(){{
+      var path=l.pathname;
+      if(path===lastPath)return;
+      lastPath=path;
+      var data={{
+        site:site,
+        url:path,
+        title:d.title,
+        ref:d.referrer?new URL(d.referrer).hostname:"",
+        w:w.innerWidth
+      }};
+      var utm=getUtm();
+      Object.keys(utm).forEach(function(k){{data["utm_"+k]=utm[k]}});
+      var params=Object.keys(data).map(function(k){{return k+"="+e(data[k])}}).join("&");
+      new Image().src=url+"?"+params;
+    }},50);
+  }}
+
+  track();
+
+  var push=h.pushState;
+  h.pushState=function(){{push.apply(h,arguments);track()}};
+  var replace=h.replaceState;
+  h.replaceState=function(){{replace.apply(h,arguments);track()}};
+  w.addEventListener("popstate",track);
 }})();
 </script>'''
 
