@@ -865,6 +865,11 @@ def create_dashboard_router(
         const regionData = {str(region_data).replace("'", '"')};
         const cityData = {str(city_data).replace("'", '"')};
 
+        console.log('[INIT] globeData:', globeData);
+        console.log('[INIT] regionData:', regionData);
+        console.log('[INIT] cityData:', cityData);
+        console.log('[INIT] US regions:', regionData.filter(r => r.country === 'US'));
+
         // Country centroids (lat, lon)
         const COUNTRY_COORDS = {{
             'US': [39.8, -98.5], 'CN': [35.0, 105.0], 'CA': [56.0, -106.0], 'SG': [1.35, 103.8],
@@ -1090,10 +1095,15 @@ def create_dashboard_router(
         }}
 
         function hideCountryMarker(countryCode) {{
+            console.log('[HIDE] hideCountryMarker called for:', countryCode);
+            console.log('[HIDE] countryMarkerMap keys:', Object.keys(countryMarkerMap));
             const marker = countryMarkerMap[countryCode];
             if (marker) {{
+                console.log('[HIDE] Found marker, hiding mesh and sprite');
                 if (marker.mesh) marker.mesh.visible = false;
                 if (marker.sprite) marker.sprite.visible = false;
+            }} else {{
+                console.log('[HIDE] No marker found for country:', countryCode);
             }}
         }}
 
@@ -1105,16 +1115,17 @@ def create_dashboard_router(
         }}
 
         function addStateMarkers(countryCode) {{
+            console.log('[STATE] addStateMarkers called for:', countryCode);
             clearStateMarkers();
             if (countryCode !== 'US') return;
 
             // Get US region data
             const usRegions = regionData.filter(r => r.country === 'US');
+            console.log('[STATE] Found US regions:', usRegions.length, usRegions);
             if (usRegions.length === 0) {{
-                console.log('No US region data found');
+                console.log('[STATE] No US region data found');
                 return;
             }}
-            console.log('Adding state markers for', usRegions.length, 'states');
 
             const maxViews = Math.max(...usRegions.map(r => r.views), 1);
             const glowTexture = createGlowTexture();
@@ -1122,17 +1133,17 @@ def create_dashboard_router(
             usRegions.forEach(item => {{
                 const coords = US_STATE_COORDS[item.region];
                 if (!coords) {{
-                    console.log('No coords for state:', item.region);
+                    console.log('[STATE] No coords for state:', item.region);
                     return;
                 }}
 
                 const [lat, lon] = coords;
-                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 2);
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 5);  // Higher above globe
 
-                // Size based on views (log scale) - make them bigger
+                // Size based on views (log scale) - make them MUCH bigger
                 const logViews = Math.log10(item.views + 1);
                 const logMax = Math.log10(maxViews + 1);
-                const size = 1.5 + (logViews / logMax) * 3;
+                const size = 3 + (logViews / logMax) * 5;  // Much bigger: 3-8
 
                 // Marker sphere - red for states
                 const mesh = new THREE.Mesh(
@@ -1153,8 +1164,9 @@ def create_dashboard_router(
                 globeGroup.add(sprite);
 
                 stateMarkers.push({{ mesh, sprite }});
+                console.log('[STATE] Created marker for', item.region, 'at', lat, lon, 'size', size);
             }});
-            console.log('Created', stateMarkers.length, 'state markers');
+            console.log('[STATE] Total state markers created:', stateMarkers.length);
         }}
 
         let cityMarkers = [];  // Track city markers for cleanup
@@ -1231,25 +1243,34 @@ def create_dashboard_router(
         let selectedState = null;  // Track selected state for back navigation
 
         function drillToCountry(code, views) {{
+            console.log('[DRILL] drillToCountry called:', code, views);
             const coords = COUNTRY_COORDS[code];
-            if (!coords) return;
+            if (!coords) {{
+                console.log('[DRILL] No coords for country:', code);
+                return;
+            }}
 
             currentView = 'country';
             selectedCountry = {{ code, views, name: COUNTRY_NAMES[code] || code }};
             selectedState = null;
 
             // Hide the country marker we're drilling into
+            console.log('[DRILL] Hiding country marker...');
             hideCountryMarker(code);
 
             // For US, show states in detail panel and state markers
             if (code === 'US') {{
+                console.log('[DRILL] US detected, setting up state drill-down');
                 // Get US states breakdown for detail panel
                 const usStates = regionData.filter(r => r.country === 'US');
+                console.log('[DRILL] Found US states:', usStates.length, usStates);
                 selectedCountry.regions = usStates;
                 selectedCountry.isUS = true;
 
                 animateCameraTo(coords[0], coords[1], 80);
+                console.log('[DRILL] Starting timer to add state markers in', CONFIG.animationDuration / 2, 'ms');
                 setTimeout(() => {{
+                    console.log('[DRILL] Timer fired, calling addStateMarkers');
                     addStateMarkers('US');
                 }}, CONFIG.animationDuration / 2);
             }} else {{
@@ -1426,7 +1447,11 @@ def create_dashboard_router(
         }}
 
         function handleGlobeClick(event, markers) {{
-            if (isAnimating) return;
+            console.log('[CLICK] handleGlobeClick called, currentView:', currentView, 'isAnimating:', isAnimating);
+            if (isAnimating) {{
+                console.log('[CLICK] Ignoring click, animation in progress');
+                return;
+            }}
 
             const rect = renderer.domElement.getBoundingClientRect();
             const mouse = new THREE.Vector2(
@@ -1439,9 +1464,14 @@ def create_dashboard_router(
 
             // Check state markers first (if we're in US view)
             if (currentView === 'country' && selectedCountry && selectedCountry.code === 'US') {{
-                const stateHits = raycaster.intersectObjects(stateMarkers.map(m => m.mesh));
+                console.log('[CLICK] In US view, checking state markers. Count:', stateMarkers.length);
+                const stateMeshes = stateMarkers.map(m => m.mesh).filter(m => m.visible);
+                console.log('[CLICK] Visible state meshes:', stateMeshes.length);
+                const stateHits = raycaster.intersectObjects(stateMeshes);
+                console.log('[CLICK] State hits:', stateHits.length);
                 if (stateHits.length > 0) {{
                     const data = stateHits[0].object.userData;
+                    console.log('[CLICK] State hit data:', data);
                     if (data.isState && data.state && data.views) {{
                         drillToState(data.state, data.views);
                         return;
@@ -1449,10 +1479,14 @@ def create_dashboard_router(
                 }}
             }}
 
-            // Check country markers
-            const hits = raycaster.intersectObjects(markers);
+            // Check country markers (filter out invisible ones)
+            const visibleMarkers = markers.filter(m => m.visible);
+            console.log('[CLICK] Checking country markers. Total:', markers.length, 'Visible:', visibleMarkers.length);
+            const hits = raycaster.intersectObjects(visibleMarkers);
+            console.log('[CLICK] Country hits:', hits.length);
             if (hits.length > 0) {{
                 const data = hits[0].object.userData;
+                console.log('[CLICK] Country hit data:', data);
                 if (data.country && data.views) {{
                     drillToCountry(data.country, data.views);
                 }}
@@ -1576,7 +1610,9 @@ def create_dashboard_router(
 
                 // Track country markers for hide/show during drill-down
                 countryMarkerMap[item.country] = {{ mesh, sprite }};
+                console.log('[INIT] Created country marker for:', item.country);
             }});
+            console.log('[INIT] countryMarkerMap populated with keys:', Object.keys(countryMarkerMap));
 
             // Raycaster for tooltips and clicks
             const raycaster = new THREE.Raycaster();
