@@ -9,6 +9,17 @@ binding = "DB"
 database_name = "941-analytics"
 database_id = "243ae7ac-3f21-4287-a665-4ee624dd0d49"
 
+# KV namespace for rate limiting
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "" # Will be set after creating namespace
+
+# Scheduled triggers for daily aggregation
+[triggers]
+crons = ["0 2 * * *"]  # Run at 2 AM UTC daily
+
 [vars]
+# Allowed origins (comma-separated domains)
+ALLOWED_ORIGINS = "941return.com,941getbananas.com,resumegeni.com,acecitizenship.app"
 # Set via wrangler secret put ANALYTICS_SECRET
 # ANALYTICS_SECRET = ""
