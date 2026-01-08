@@ -259,7 +259,6 @@ def create_dashboard_router(
             --text: #e8edf3;
             --muted: #9ba3ad;
             --accent: #59b2cc;
-            --green: #00F200;
         }}
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
@@ -379,13 +378,45 @@ def create_dashboard_router(
             display: none;
             position: absolute;
             background: var(--surface);
-            border: 1px solid var(--green);
+            border: 1px solid var(--accent);
             border-radius: 4px;
             padding: 8px 12px;
             font-size: 0.75rem;
             pointer-events: none;
             z-index: 100;
-            box-shadow: 0 0 20px rgba(0, 242, 0, 0.3);
+            box-shadow: 0 0 20px rgba(89, 178, 204, 0.3);
+        }}
+        #back-btn {{
+            display: none;
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: var(--surface);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s;
+        }}
+        #back-btn:hover {{
+            background: var(--accent);
+            color: var(--bg);
+        }}
+        #detail-panel {{
+            display: none;
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            background: rgba(18, 22, 29, 0.9);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            z-index: 10;
+            text-align: center;
+            min-width: 120px;
         }}
     </style>
 </head>
@@ -450,6 +481,8 @@ def create_dashboard_router(
                 <div class="section" style="padding: 0; overflow: hidden;">
                     <div id="globe-container">
                         <span class="globe-title">Visitors by Country</span>
+                        <button id="back-btn">← Back to World</button>
+                        <div id="detail-panel"></div>
                         <div id="globe-tooltip"></div>
                     </div>
                     <div style="padding: 1.5rem; padding-top: 0;">
@@ -494,11 +527,35 @@ def create_dashboard_router(
             globeRadius: 100,
             backgroundColor: '#0a0d12',
             oceanColor: '#0a0a0a',
-            borderColor: '#00F200',
-            pointColor: '#00F200',
-            atmosphereColor: '#00F200',
+            borderColor: '#59b2cc',
+            pointColor: '#59b2cc',
+            atmosphereColor: '#59b2cc',
+            animationDuration: 800,
             countriesUrl: 'https://unpkg.com/world-atlas@2.0.2/countries-110m.json'
         }};
+
+        // Country names lookup
+        const COUNTRY_NAMES = {{
+            'US': 'United States', 'CN': 'China', 'CA': 'Canada', 'SG': 'Singapore',
+            'PT': 'Portugal', 'DE': 'Germany', 'VN': 'Vietnam', 'PK': 'Pakistan',
+            'GB': 'United Kingdom', 'FR': 'France', 'JP': 'Japan', 'IN': 'India',
+            'BR': 'Brazil', 'AU': 'Australia', 'KR': 'South Korea', 'NL': 'Netherlands',
+            'IT': 'Italy', 'ES': 'Spain', 'CH': 'Switzerland', 'SE': 'Sweden',
+            'NO': 'Norway', 'DK': 'Denmark', 'FI': 'Finland', 'IE': 'Ireland',
+            'RU': 'Russia', 'MX': 'Mexico', 'AR': 'Argentina', 'CL': 'Chile',
+            'CO': 'Colombia', 'PE': 'Peru', 'EG': 'Egypt', 'NG': 'Nigeria',
+            'ZA': 'South Africa', 'SA': 'Saudi Arabia', 'AE': 'UAE', 'IL': 'Israel',
+            'TR': 'Turkey', 'PL': 'Poland', 'UA': 'Ukraine', 'CZ': 'Czech Republic',
+            'HK': 'Hong Kong', 'TW': 'Taiwan', 'MY': 'Malaysia', 'TH': 'Thailand',
+            'ID': 'Indonesia', 'PH': 'Philippines', 'NZ': 'New Zealand', 'AT': 'Austria',
+            'BE': 'Belgium', 'GR': 'Greece', 'HU': 'Hungary', 'RO': 'Romania',
+            'BD': 'Bangladesh', 'KE': 'Kenya'
+        }};
+
+        let isAnimating = false;
+        let autoRotate = true;
+        let currentView = 'world';
+        let selectedCountry = null;
 
         let scene, camera, renderer, controls, globeGroup;
         let tooltip;
@@ -519,12 +576,100 @@ def create_dashboard_router(
             canvas.height = 64;
             const ctx = canvas.getContext('2d');
             const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-            gradient.addColorStop(0, 'rgba(0, 242, 0, 1)');
-            gradient.addColorStop(0.3, 'rgba(0, 242, 0, 0.5)');
-            gradient.addColorStop(1, 'rgba(0, 242, 0, 0)');
+            gradient.addColorStop(0, 'rgba(89, 178, 204, 1)');
+            gradient.addColorStop(0.3, 'rgba(89, 178, 204, 0.5)');
+            gradient.addColorStop(1, 'rgba(89, 178, 204, 0)');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, 64, 64);
             return new THREE.CanvasTexture(canvas);
+        }}
+
+        function easeInOutCubic(t) {{
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }}
+
+        function animateCameraTo(lat, lon, distance = 180) {{
+            if (isAnimating) return;
+            isAnimating = true;
+            autoRotate = false;
+
+            const targetPos = latLonToVector3(lat, lon, distance + CONFIG.globeRadius);
+            const startPos = camera.position.clone();
+            const startTime = performance.now();
+
+            function animate() {{
+                const elapsed = performance.now() - startTime;
+                const t = Math.min(elapsed / CONFIG.animationDuration, 1);
+                const eased = easeInOutCubic(t);
+
+                camera.position.lerpVectors(startPos, targetPos, eased);
+                camera.lookAt(0, 0, 0);
+
+                if (t < 1) {{
+                    requestAnimationFrame(animate);
+                }} else {{
+                    isAnimating = false;
+                }}
+            }}
+            animate();
+        }}
+
+        function animateCameraToWorld() {{
+            if (isAnimating) return;
+            isAnimating = true;
+
+            const targetPos = new THREE.Vector3(0, 0, 280);
+            const startPos = camera.position.clone();
+            const startTime = performance.now();
+
+            function animate() {{
+                const elapsed = performance.now() - startTime;
+                const t = Math.min(elapsed / CONFIG.animationDuration, 1);
+                const eased = easeInOutCubic(t);
+
+                camera.position.lerpVectors(startPos, targetPos, eased);
+                camera.lookAt(0, 0, 0);
+
+                if (t < 1) {{
+                    requestAnimationFrame(animate);
+                }} else {{
+                    isAnimating = false;
+                    autoRotate = true;
+                    currentView = 'world';
+                    selectedCountry = null;
+                    updateDetailPanel(null);
+                }}
+            }}
+            animate();
+        }}
+
+        function drillToCountry(code, views) {{
+            const coords = COUNTRY_COORDS[code];
+            if (!coords) return;
+
+            currentView = 'country';
+            selectedCountry = {{ code, views, name: COUNTRY_NAMES[code] || code }};
+            animateCameraTo(coords[0], coords[1], 120);
+            updateDetailPanel(selectedCountry);
+        }}
+
+        function updateDetailPanel(country) {{
+            const panel = document.getElementById('detail-panel');
+            const backBtn = document.getElementById('back-btn');
+            if (!panel || !backBtn) return;
+
+            if (country) {{
+                panel.innerHTML = `
+                    <h3 style="color: var(--accent); margin-bottom: 0.5rem;">${{country.name}}</h3>
+                    <div style="font-size: 2rem; font-weight: 600;">${{country.views.toLocaleString()}}</div>
+                    <div style="color: var(--muted); font-size: 0.875rem;">page views</div>
+                `;
+                panel.style.display = 'block';
+                backBtn.style.display = 'block';
+            }} else {{
+                panel.style.display = 'none';
+                backBtn.style.display = 'none';
+            }}
         }}
 
         function createStarfield() {{
@@ -542,8 +687,29 @@ def create_dashboard_router(
             }}
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
             return new THREE.Points(geometry, new THREE.PointsMaterial({{
-                color: 0x00F200, size: 0.5, transparent: true, opacity: 0.6
+                color: 0x59b2cc, size: 0.5, transparent: true, opacity: 0.6
             }}));
+        }}
+
+        function handleGlobeClick(event, markers) {{
+            if (isAnimating) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2(
+                ((event.clientX - rect.left) / rect.width) * 2 - 1,
+                -((event.clientY - rect.top) / rect.height) * 2 + 1
+            );
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(markers);
+
+            if (hits.length > 0) {{
+                const data = hits[0].object.userData;
+                if (data.country && data.views) {{
+                    drillToCountry(data.country, data.views);
+                }}
+            }}
         }}
 
         async function initGlobe() {{
@@ -662,7 +828,7 @@ def create_dashboard_router(
                 globeGroup.add(sprite);
             }});
 
-            // Raycaster for tooltips
+            // Raycaster for tooltips and clicks
             const raycaster = new THREE.Raycaster();
             const mouse = new THREE.Vector2();
             const markers = globeGroup.children.filter(c => c.userData && c.userData.country);
@@ -677,12 +843,35 @@ def create_dashboard_router(
 
                 if (intersects.length > 0 && tooltip) {{
                     const data = intersects[0].object.userData;
-                    tooltip.innerHTML = `<strong style="color:#00F200">${{data.country}}</strong><br>${{data.views.toLocaleString()}} views`;
+                    const name = COUNTRY_NAMES[data.country] || data.country;
+                    tooltip.innerHTML = `<strong style="color:var(--accent)">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click to zoom</small>`;
                     tooltip.style.display = 'block';
                     tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
                     tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
+                    renderer.domElement.style.cursor = 'pointer';
                 }} else if (tooltip) {{
                     tooltip.style.display = 'none';
+                    renderer.domElement.style.cursor = 'grab';
+                }}
+            }});
+
+            // Click to drill down
+            renderer.domElement.addEventListener('click', (e) => handleGlobeClick(e, markers));
+
+            // Back button
+            const backBtn = document.getElementById('back-btn');
+            if (backBtn) {{
+                backBtn.addEventListener('click', () => {{
+                    if (currentView !== 'world') {{
+                        animateCameraToWorld();
+                    }}
+                }});
+            }}
+
+            // Escape key to go back
+            document.addEventListener('keydown', (e) => {{
+                if (e.key === 'Escape' && currentView !== 'world') {{
+                    animateCameraToWorld();
                 }}
             }});
 
