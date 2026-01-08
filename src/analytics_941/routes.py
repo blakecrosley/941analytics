@@ -215,7 +215,22 @@ def create_dashboard_router(
         if passkey and not _verify_auth(analytics_auth, expected_hash):
             return RedirectResponse(url="./login", status_code=302)
 
-        data = await client.get_dashboard_data(period)
+        try:
+            data = await client.get_dashboard_data(period)
+        except Exception as e:
+            # Show error page instead of 500
+            error_html = f"""
+<!DOCTYPE html>
+<html>
+<head><title>Analytics Error</title></head>
+<body style="font-family: system-ui; padding: 2rem; background: #0a0d12; color: #e8edf3;">
+<h1>Dashboard Error</h1>
+<p>Failed to load analytics data:</p>
+<pre style="background: #1a1f29; padding: 1rem; border-radius: 6px; overflow: auto;">{str(e)}</pre>
+<p><a href="./login" style="color: #59b2cc;">Back to login</a></p>
+</body>
+</html>"""
+            return HTMLResponse(content=error_html, status_code=500)
 
         # Build country rows with globe data
         country_rows = []
