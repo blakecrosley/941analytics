@@ -1201,25 +1201,33 @@ def create_dashboard_router(
             }});
         }}
 
+        let selectedState = null;  // Track selected state for back navigation
+
         function drillToCountry(code, views) {{
             const coords = COUNTRY_COORDS[code];
             if (!coords) return;
 
             currentView = 'country';
             selectedCountry = {{ code, views, name: COUNTRY_NAMES[code] || code }};
+            selectedState = null;
 
-            // Get cities for this country for the detail panel
-            const countryCities = cityData.filter(c => c.country === code);
-            selectedCountry.cities = countryCities;
-
-            // For US, zoom in closer and show state markers
+            // For US, show states in detail panel and state markers
             if (code === 'US') {{
+                // Get US states breakdown for detail panel
+                const usStates = regionData.filter(r => r.country === 'US');
+                selectedCountry.regions = usStates;
+                selectedCountry.isUS = true;
+
                 animateCameraTo(coords[0], coords[1], 80);
                 setTimeout(() => {{
                     addStateMarkers('US');
                 }}, CONFIG.animationDuration / 2);
             }} else {{
-                // For other countries, show city markers
+                // For other countries, get cities and show city markers
+                const countryCities = cityData.filter(c => c.country === code);
+                selectedCountry.cities = countryCities;
+                selectedCountry.isUS = false;
+
                 animateCameraTo(coords[0], coords[1], 100);
                 setTimeout(() => {{
                     addCityMarkers(code);
@@ -1238,13 +1246,85 @@ def create_dashboard_router(
             // Get cities for this state
             const stateCities = cityData.filter(c => c.country === 'US' && c.region === stateCode);
 
-            updateDetailPanel({{
+            selectedState = {{
                 code: stateCode,
                 name: stateName,
                 views: views,
                 cities: stateCities
-            }});
+            }};
+
+            // Clear state markers, add city markers for this state
+            clearStateMarkers();
+            addStateCityMarkers(stateCode);
+
+            updateDetailPanel(selectedState);
             animateCameraTo(coords[0], coords[1], 40);
+        }}
+
+        function addStateCityMarkers(stateCode) {{
+            clearCityMarkers();
+
+            // Get cities for this state
+            const stateCities = cityData.filter(c => c.country === 'US' && c.region === stateCode);
+            if (stateCities.length === 0) return;
+
+            const maxViews = Math.max(...stateCities.map(c => c.views), 1);
+            const glowTexture = createGlowTexture();
+
+            stateCities.slice(0, 20).forEach(item => {{
+                // Try to find city coordinates
+                const cityKey = `${{item.city}}|${{stateCode}}|US`;
+                let coords = CITY_COORDS[cityKey];
+
+                // Fall back to state coords with offset
+                if (!coords) {{
+                    const stateCoords = US_STATE_COORDS[stateCode];
+                    if (stateCoords) {{
+                        const offset = (Math.random() - 0.5) * 4;
+                        coords = [stateCoords[0] + offset, stateCoords[1] + offset];
+                    }}
+                }}
+
+                if (!coords) return;
+
+                const [lat, lon] = coords;
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1.5);
+
+                // Size based on views
+                const logViews = Math.log10(item.views + 1);
+                const logMax = Math.log10(maxViews + 1);
+                const size = 0.5 + (logViews / logMax) * 1.5;
+
+                // Marker sphere - orange for cities
+                const mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(size, 16, 16),
+                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.9 }})
+                );
+                mesh.position.copy(position);
+                mesh.userData = {{ city: item.city, region: stateCode, views: item.views, isCity: true }};
+                globeGroup.add(mesh);
+
+                // Glow sprite
+                const spriteMat = new THREE.SpriteMaterial({{
+                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                }});
+                const sprite = new THREE.Sprite(spriteMat);
+                sprite.scale.set(size * 4, size * 4, 1);
+                sprite.position.copy(position);
+                globeGroup.add(sprite);
+
+                cityMarkers.push({{ mesh, sprite }});
+            }});
+        }}
+
+        function goBack() {{
+            if (currentView === 'state') {{
+                // State → US country view
+                drillToCountry('US', selectedCountry?.views || 0);
+            }} else if (currentView === 'country') {{
+                // Country → World view
+                animateCameraToWorld();
+            }}
         }}
 
         function updateDetailPanel(data) {{
@@ -1259,12 +1339,31 @@ def create_dashboard_router(
                     <div style="color: var(--muted); font-size: 0.875rem;">page views</div>
                 `;
 
-                // Show cities if available (state view)
-                if (data.cities && data.cities.length > 0) {{
+                // Show states for US country view
+                if (data.isUS && data.regions && data.regions.length > 0) {{
+                    html += `<div style="margin-top: 0.75rem; font-size: 0.75rem; color: var(--muted);">
+                        <div style="color: #ff6b6b; margin-bottom: 0.25rem;">Click a state:</div>`;
+                    data.regions.slice(0, 8).forEach(r => {{
+                        const stateName = US_STATE_NAMES[r.region] || r.region;
+                        html += `<div>${{stateName}}: ${{r.views}}</div>`;
+                    }});
+                    if (data.regions.length > 8) {{
+                        html += `<div style="opacity: 0.6;">+ ${{data.regions.length - 8}} more</div>`;
+                    }}
+                    html += `</div>`;
+                }}
+                // Show cities for state view or international country view
+                else if (data.cities && data.cities.length > 0) {{
                     html += `<div style="margin-top: 0.75rem; font-size: 0.75rem; color: var(--muted);">`;
-                    data.cities.slice(0, 5).forEach(c => {{
+                    if (currentView === 'state') {{
+                        html += `<div style="color: #f39c12; margin-bottom: 0.25rem;">Top cities:</div>`;
+                    }}
+                    data.cities.slice(0, 8).forEach(c => {{
                         html += `<div>${{c.city}}: ${{c.views}}</div>`;
                     }});
+                    if (data.cities.length > 8) {{
+                        html += `<div style="opacity: 0.6;">+ ${{data.cities.length - 8}} more</div>`;
+                    }}
                     html += `</div>`;
                 }}
 
@@ -1473,14 +1572,14 @@ def create_dashboard_router(
                     }}
                 }}
 
-                // Check city markers when viewing a non-US country
-                if (currentView === 'country' && selectedCountry && selectedCountry.code !== 'US' && cityMarkers.length > 0) {{
+                // Check city markers when viewing a non-US country OR when in state view
+                if (cityMarkers.length > 0 && (currentView === 'state' || (currentView === 'country' && selectedCountry && selectedCountry.code !== 'US'))) {{
                     const cityIntersects = raycaster.intersectObjects(cityMarkers.map(m => m.mesh));
                     if (cityIntersects.length > 0 && tooltip) {{
                         const data = cityIntersects[0].object.userData;
                         const cityName = data.city || 'Unknown';
-                        const regionName = data.region ? ` (${{data.region}})` : '';
-                        tooltip.innerHTML = `<strong style="color:#f39c12">${{cityName}}${{regionName}}</strong><br>${{data.views.toLocaleString()}} views`;
+                        const regionName = data.region ? ` (${{US_STATE_NAMES[data.region] || data.region}})` : '';
+                        tooltip.innerHTML = `<strong style="color:#f39c12">${{cityName}}</strong>${{regionName}}<br>${{data.views.toLocaleString()}} views`;
                         tooltip.style.display = 'block';
                         tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
                         tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
@@ -1509,14 +1608,10 @@ def create_dashboard_router(
             // Click to drill down
             renderer.domElement.addEventListener('click', (e) => handleGlobeClick(e, markers));
 
-            // Back button
+            // Back button - uses hierarchical navigation
             const backBtn = document.getElementById('back-btn');
             if (backBtn) {{
-                backBtn.addEventListener('click', () => {{
-                    if (currentView !== 'world') {{
-                        animateCameraToWorld();
-                    }}
-                }});
+                backBtn.addEventListener('click', goBack);
             }}
 
             // Escape key to go back or close modal
@@ -1526,7 +1621,7 @@ def create_dashboard_router(
                     if (modal && modal.classList.contains('active')) {{
                         closeFullscreenModal();
                     }} else if (currentView !== 'world') {{
-                        animateCameraToWorld();
+                        goBack();
                     }}
                 }}
             }});
