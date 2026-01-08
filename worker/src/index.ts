@@ -5,7 +5,8 @@
  * - No cookies
  * - No fingerprinting
  * - Daily-rotating visitor hash (can't track across days)
- * - Country from Cloudflare (no IP stored)
+ * - Geo data from Cloudflare (country, region/state, city, lat/lon)
+ * - No IP addresses stored
  */
 
 interface Env {
@@ -99,23 +100,28 @@ export default {
         return new Response("Missing required fields", { status: 400 });
       }
 
-      // Get country from Cloudflare
-      const country = request.cf?.country as string || "";
+      // Get geo data from Cloudflare
+      const cf = request.cf as Record<string, unknown> || {};
+      const country = (cf.country as string) || "";
+      const region = (cf.region as string) || "";  // State/province code (e.g., "CA")
+      const city = (cf.city as string) || "";
+      const latitude = cf.latitude as number || null;
+      const longitude = cf.longitude as number || null;
 
-      // Generate daily visitor hash
+      // Generate daily visitor hash (include region for better uniqueness)
       const visitorHash = await generateVisitorHash(
         data.site,
-        country,
+        `${country}:${region}`,
         env.ANALYTICS_SECRET
       );
 
       // Determine device type
       const deviceType = getDeviceType(data.w);
 
-      // Insert into D1
+      // Insert into D1 with full geo data
       await env.DB.prepare(
-        `INSERT INTO page_views (site, timestamp, url, page_title, referrer, country, device_type, visitor_hash)
-         VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO page_views (site, timestamp, url, page_title, referrer, country, region, city, latitude, longitude, device_type, visitor_hash)
+         VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           data.site,
@@ -123,6 +129,10 @@ export default {
           data.title,
           data.ref,
           country,
+          region,
+          city,
+          latitude,
+          longitude,
           deviceType,
           visitorHash
         )

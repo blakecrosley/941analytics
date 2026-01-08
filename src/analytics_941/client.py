@@ -123,7 +123,7 @@ class AnalyticsClient:
             [self.site_name, start_str],
         )
 
-        # Countries
+        # Countries (with region breakdown for US)
         countries = await self._query(
             """
             SELECT
@@ -134,6 +134,39 @@ class AnalyticsClient:
             GROUP BY country
             ORDER BY views DESC
             LIMIT 10
+            """,
+            [self.site_name, start_str],
+        )
+
+        # Regions (states) for US visitors
+        regions = await self._query(
+            """
+            SELECT
+                country,
+                region,
+                COUNT(*) as views
+            FROM page_views
+            WHERE site = ? AND date(timestamp) >= ? AND region != '' AND region IS NOT NULL
+            GROUP BY country, region
+            ORDER BY views DESC
+            LIMIT 20
+            """,
+            [self.site_name, start_str],
+        )
+
+        # Cities (top 10 per country)
+        cities = await self._query(
+            """
+            SELECT
+                country,
+                region,
+                city,
+                COUNT(*) as views
+            FROM page_views
+            WHERE site = ? AND date(timestamp) >= ? AND city != '' AND city IS NOT NULL
+            GROUP BY country, region, city
+            ORDER BY views DESC
+            LIMIT 30
             """,
             [self.site_name, start_str],
         )
@@ -161,6 +194,8 @@ class AnalyticsClient:
             top_pages=top_pages,
             top_referrers=top_referrers,
             countries=countries,
+            regions=regions,
+            cities=cities,
             devices=devices,
         )
 

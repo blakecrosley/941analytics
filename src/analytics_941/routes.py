@@ -233,6 +233,25 @@ def create_dashboard_router(
                 "normalized": c["views"] / max_views if max_views > 0 else 0
             })
 
+        # Build region data for drill-down (states for US, etc.)
+        region_data = []
+        for r in data.regions:
+            region_data.append({
+                "country": r["country"],
+                "region": r["region"],
+                "views": r["views"]
+            })
+
+        # Build city data for further drill-down
+        city_data = []
+        for city in data.cities:
+            city_data.append({
+                "country": city["country"],
+                "region": city["region"],
+                "city": city["city"],
+                "views": city["views"]
+            })
+
         # Simple HTML dashboard
         html = f"""
 <!DOCTYPE html>
@@ -504,6 +523,8 @@ def create_dashboard_router(
 
         // Visitor data from server
         const globeData = {str(globe_data).replace("'", '"')};
+        const regionData = {str(region_data).replace("'", '"')};
+        const cityData = {str(city_data).replace("'", '"')};
 
         // Country centroids (lat, lon)
         const COUNTRY_COORDS = {{
@@ -550,6 +571,40 @@ def create_dashboard_router(
             'ID': 'Indonesia', 'PH': 'Philippines', 'NZ': 'New Zealand', 'AT': 'Austria',
             'BE': 'Belgium', 'GR': 'Greece', 'HU': 'Hungary', 'RO': 'Romania',
             'BD': 'Bangladesh', 'KE': 'Kenya'
+        }};
+
+        // US State centroids (lat, lon) for drill-down
+        const US_STATE_COORDS = {{
+            'AL': [32.7, -86.7], 'AK': [64.0, -153.0], 'AZ': [34.3, -111.7], 'AR': [34.9, -92.4],
+            'CA': [37.2, -119.4], 'CO': [39.0, -105.5], 'CT': [41.6, -72.7], 'DE': [39.0, -75.5],
+            'FL': [28.6, -82.4], 'GA': [32.6, -83.4], 'HI': [20.8, -156.3], 'ID': [44.4, -114.6],
+            'IL': [40.0, -89.2], 'IN': [40.0, -86.3], 'IA': [42.0, -93.5], 'KS': [38.5, -98.4],
+            'KY': [37.8, -85.7], 'LA': [31.1, -92.0], 'ME': [45.4, -69.2], 'MD': [39.0, -76.8],
+            'MA': [42.2, -71.5], 'MI': [44.2, -85.4], 'MN': [46.3, -94.2], 'MS': [32.7, -89.7],
+            'MO': [38.4, -92.5], 'MT': [47.0, -109.6], 'NE': [41.5, -99.8], 'NV': [39.3, -116.6],
+            'NH': [43.7, -71.6], 'NJ': [40.1, -74.7], 'NM': [34.4, -106.1], 'NY': [42.9, -75.5],
+            'NC': [35.5, -79.4], 'ND': [47.4, -100.5], 'OH': [40.4, -82.8], 'OK': [35.6, -97.5],
+            'OR': [44.0, -120.5], 'PA': [40.9, -77.8], 'RI': [41.7, -71.5], 'SC': [33.9, -80.9],
+            'SD': [44.4, -100.2], 'TN': [35.8, -86.3], 'TX': [31.5, -99.4], 'UT': [39.3, -111.7],
+            'VT': [44.1, -72.7], 'VA': [37.5, -78.8], 'WA': [47.4, -120.5], 'WV': [38.9, -80.5],
+            'WI': [44.6, -89.8], 'WY': [43.0, -107.5], 'DC': [38.9, -77.0]
+        }};
+
+        // US State names lookup
+        const US_STATE_NAMES = {{
+            'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+            'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+            'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+            'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+            'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+            'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+            'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+            'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+            'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+            'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+            'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+            'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+            'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'Washington DC'
         }};
 
         let isAnimating = false;
@@ -618,6 +673,9 @@ def create_dashboard_router(
             if (isAnimating) return;
             isAnimating = true;
 
+            // Clear state markers when returning to world view
+            clearStateMarkers();
+
             const targetPos = new THREE.Vector3(0, 0, 280);
             const startPos = camera.position.clone();
             const startTime = performance.now();
@@ -643,27 +701,119 @@ def create_dashboard_router(
             animate();
         }}
 
+        let stateMarkers = [];  // Track state markers for cleanup
+
+        function clearStateMarkers() {{
+            stateMarkers.forEach(m => {{
+                if (m.mesh) globeGroup.remove(m.mesh);
+                if (m.sprite) globeGroup.remove(m.sprite);
+            }});
+            stateMarkers = [];
+        }}
+
+        function addStateMarkers(countryCode) {{
+            clearStateMarkers();
+            if (countryCode !== 'US') return;
+
+            // Get US region data
+            const usRegions = regionData.filter(r => r.country === 'US');
+            if (usRegions.length === 0) return;
+
+            const maxViews = Math.max(...usRegions.map(r => r.views), 1);
+            const glowTexture = createGlowTexture();
+
+            usRegions.forEach(item => {{
+                const coords = US_STATE_COORDS[item.region];
+                if (!coords) return;
+
+                const [lat, lon] = coords;
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1.5);
+
+                // Size based on views (log scale)
+                const logViews = Math.log10(item.views + 1);
+                const logMax = Math.log10(maxViews + 1);
+                const size = 0.8 + (logViews / logMax) * 2;
+
+                // Marker sphere
+                const mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(size, 16, 16),
+                    new THREE.MeshBasicMaterial({{ color: '#ff6b6b', transparent: true, opacity: 0.9 }})
+                );
+                mesh.position.copy(position);
+                mesh.userData = {{ state: item.region, views: item.views, isState: true }};
+                globeGroup.add(mesh);
+
+                // Glow sprite
+                const spriteMat = new THREE.SpriteMaterial({{
+                    map: glowTexture, color: '#ff6b6b', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                }});
+                const sprite = new THREE.Sprite(spriteMat);
+                sprite.scale.set(size * 5, size * 5, 1);
+                sprite.position.copy(position);
+                globeGroup.add(sprite);
+
+                stateMarkers.push({{ mesh, sprite }});
+            }});
+        }}
+
         function drillToCountry(code, views) {{
             const coords = COUNTRY_COORDS[code];
             if (!coords) return;
 
             currentView = 'country';
             selectedCountry = {{ code, views, name: COUNTRY_NAMES[code] || code }};
-            animateCameraTo(coords[0], coords[1], 120);
+
+            // For US, zoom in closer and show state markers
+            if (code === 'US') {{
+                animateCameraTo(coords[0], coords[1], 80);
+                setTimeout(() => addStateMarkers('US'), CONFIG.animationDuration / 2);
+            }} else {{
+                animateCameraTo(coords[0], coords[1], 120);
+            }}
             updateDetailPanel(selectedCountry);
         }}
 
-        function updateDetailPanel(country) {{
+        function drillToState(stateCode, views) {{
+            const coords = US_STATE_COORDS[stateCode];
+            if (!coords) return;
+
+            currentView = 'state';
+            const stateName = US_STATE_NAMES[stateCode] || stateCode;
+
+            // Get cities for this state
+            const stateCities = cityData.filter(c => c.country === 'US' && c.region === stateCode);
+
+            updateDetailPanel({{
+                code: stateCode,
+                name: stateName,
+                views: views,
+                cities: stateCities
+            }});
+            animateCameraTo(coords[0], coords[1], 40);
+        }}
+
+        function updateDetailPanel(data) {{
             const panel = document.getElementById('detail-panel');
             const backBtn = document.getElementById('back-btn');
             if (!panel || !backBtn) return;
 
-            if (country) {{
-                panel.innerHTML = `
-                    <h3 style="color: var(--accent); margin-bottom: 0.5rem;">${{country.name}}</h3>
-                    <div style="font-size: 2rem; font-weight: 600;">${{country.views.toLocaleString()}}</div>
+            if (data) {{
+                let html = `
+                    <h3 style="color: var(--accent); margin-bottom: 0.5rem;">${{data.name}}</h3>
+                    <div style="font-size: 2rem; font-weight: 600;">${{data.views.toLocaleString()}}</div>
                     <div style="color: var(--muted); font-size: 0.875rem;">page views</div>
                 `;
+
+                // Show cities if available (state view)
+                if (data.cities && data.cities.length > 0) {{
+                    html += `<div style="margin-top: 0.75rem; font-size: 0.75rem; color: var(--muted);">`;
+                    data.cities.slice(0, 5).forEach(c => {{
+                        html += `<div>${{c.city}}: ${{c.views}}</div>`;
+                    }});
+                    html += `</div>`;
+                }}
+
+                panel.innerHTML = html;
                 panel.style.display = 'block';
                 backBtn.style.display = 'block';
             }} else {{
@@ -702,8 +852,21 @@ def create_dashboard_router(
 
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(mouse, camera);
-            const hits = raycaster.intersectObjects(markers);
 
+            // Check state markers first (if we're in US view)
+            if (currentView === 'country' && selectedCountry && selectedCountry.code === 'US') {{
+                const stateHits = raycaster.intersectObjects(stateMarkers.map(m => m.mesh));
+                if (stateHits.length > 0) {{
+                    const data = stateHits[0].object.userData;
+                    if (data.isState && data.state && data.views) {{
+                        drillToState(data.state, data.views);
+                        return;
+                    }}
+                }}
+            }}
+
+            // Check country markers
+            const hits = raycaster.intersectObjects(markers);
             if (hits.length > 0) {{
                 const data = hits[0].object.userData;
                 if (data.country && data.views) {{
@@ -839,12 +1002,29 @@ def create_dashboard_router(
                 mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
                 raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(markers);
 
+                // Check state markers first when in US view
+                if (currentView === 'country' && selectedCountry && selectedCountry.code === 'US' && stateMarkers.length > 0) {{
+                    const stateIntersects = raycaster.intersectObjects(stateMarkers.map(m => m.mesh));
+                    if (stateIntersects.length > 0 && tooltip) {{
+                        const data = stateIntersects[0].object.userData;
+                        const name = US_STATE_NAMES[data.state] || data.state;
+                        tooltip.innerHTML = `<strong style="color:#ff6b6b">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click for cities</small>`;
+                        tooltip.style.display = 'block';
+                        tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
+                        renderer.domElement.style.cursor = 'pointer';
+                        return;
+                    }}
+                }}
+
+                // Check country markers
+                const intersects = raycaster.intersectObjects(markers);
                 if (intersects.length > 0 && tooltip) {{
                     const data = intersects[0].object.userData;
                     const name = COUNTRY_NAMES[data.country] || data.country;
-                    tooltip.innerHTML = `<strong style="color:var(--accent)">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click to zoom</small>`;
+                    const hint = data.country === 'US' ? 'Click for states' : 'Click to zoom';
+                    tooltip.innerHTML = `<strong style="color:var(--accent)">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">${{hint}}</small>`;
                     tooltip.style.display = 'block';
                     tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
                     tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
