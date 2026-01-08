@@ -549,6 +549,118 @@ def create_dashboard_router(
             text-align: center;
             min-width: 120px;
         }}
+        #fullscreen-btn {{
+            position: absolute;
+            top: 1rem;
+            right: 8rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        #fullscreen-btn:hover {{
+            border-color: var(--accent);
+            color: var(--accent);
+        }}
+        /* Fullscreen Modal */
+        .globe-modal {{
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: var(--bg);
+            z-index: 1000;
+        }}
+        .globe-modal.active {{
+            display: block;
+        }}
+        .globe-modal-content {{
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }}
+        #modal-globe-container {{
+            width: 100%;
+            height: 100%;
+        }}
+        .modal-close {{
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s;
+        }}
+        .modal-close:hover {{
+            border-color: var(--accent);
+            color: var(--accent);
+        }}
+        .modal-back {{
+            display: none;
+            position: absolute;
+            top: 1.5rem;
+            left: 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s;
+        }}
+        .modal-back:hover {{
+            background: var(--accent);
+            color: var(--bg);
+        }}
+        #modal-detail-panel {{
+            display: none;
+            position: absolute;
+            bottom: 2rem;
+            left: 2rem;
+            background: rgba(18, 22, 29, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            z-index: 10;
+            min-width: 200px;
+            max-width: 350px;
+        }}
+        #modal-tooltip {{
+            display: none;
+            position: absolute;
+            background: var(--surface);
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            z-index: 100;
+            box-shadow: 0 0 25px rgba(89, 178, 204, 0.4);
+        }}
+        /* City markers (different color from country markers) */
+        .city-marker {{
+            background: #f39c12;
+        }}
     </style>
 </head>
 <body>
@@ -716,6 +828,7 @@ def create_dashboard_router(
                     <div id="globe-container">
                         <span class="globe-title">Visitors by Country</span>
                         <button id="back-btn">← Back to World</button>
+                        <button id="fullscreen-btn" title="Fullscreen">⛶</button>
                         <div id="detail-panel"></div>
                         <div id="globe-tooltip"></div>
                     </div>
@@ -729,6 +842,17 @@ def create_dashboard_router(
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Globe Modal -->
+    <div id="globe-modal" class="globe-modal">
+        <div class="globe-modal-content">
+            <button id="modal-close-btn" class="modal-close">✕</button>
+            <button id="modal-back-btn" class="modal-back">← Back</button>
+            <div id="modal-globe-container"></div>
+            <div id="modal-detail-panel"></div>
+            <div id="modal-tooltip"></div>
         </div>
     </div>
 
@@ -822,6 +946,40 @@ def create_dashboard_router(
             'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'Washington DC'
         }};
 
+        // City coordinates (approximate) for major cities worldwide
+        const CITY_COORDS = {{
+            // US Cities
+            'New York|NY|US': [40.71, -74.01], 'Los Angeles|CA|US': [34.05, -118.24],
+            'Chicago|IL|US': [41.88, -87.63], 'Houston|TX|US': [29.76, -95.37],
+            'Phoenix|AZ|US': [33.45, -112.07], 'San Francisco|CA|US': [37.77, -122.42],
+            'Seattle|WA|US': [47.61, -122.33], 'Miami|FL|US': [25.76, -80.19],
+            'Boston|MA|US': [42.36, -71.06], 'Denver|CO|US': [39.74, -104.99],
+            'Atlanta|GA|US': [33.75, -84.39], 'Dallas|TX|US': [32.78, -96.80],
+            'Austin|TX|US': [30.27, -97.74], 'San Diego|CA|US': [32.72, -117.16],
+            'Portland|OR|US': [45.52, -122.68], 'Las Vegas|NV|US': [36.17, -115.14],
+            // International Cities
+            'London||GB': [51.51, -0.13], 'Manchester||GB': [53.48, -2.24],
+            'Toronto|ON|CA': [43.65, -79.38], 'Vancouver|BC|CA': [49.28, -123.12],
+            'Montreal|QC|CA': [45.50, -73.57], 'Sydney|NSW|AU': [-33.87, 151.21],
+            'Melbourne|VIC|AU': [-37.81, 144.96], 'Berlin||DE': [52.52, 13.41],
+            'Munich||DE': [48.14, 11.58], 'Frankfurt||DE': [50.11, 8.68],
+            'Paris||FR': [48.86, 2.35], 'Lyon||FR': [45.76, 4.83],
+            'Tokyo||JP': [35.68, 139.65], 'Osaka||JP': [34.69, 135.50],
+            'Singapore||SG': [1.35, 103.82], 'Mumbai||IN': [19.08, 72.88],
+            'Delhi||IN': [28.70, 77.10], 'Bangalore||IN': [12.97, 77.59],
+            'Seoul||KR': [37.57, 126.98], 'Amsterdam||NL': [52.37, 4.90],
+            'Stockholm||SE': [59.33, 18.07], 'Dublin||IE': [53.35, -6.26],
+            'Zurich||CH': [47.38, 8.54], 'Madrid||ES': [40.42, -3.70],
+            'Barcelona||ES': [41.39, 2.17], 'Rome||IT': [41.90, 12.50],
+            'Milan||IT': [45.46, 9.19], 'Sao Paulo||BR': [-23.55, -46.63],
+            'Mexico City||MX': [19.43, -99.13], 'Hong Kong||HK': [22.32, 114.17]
+        }};
+
+        // Fullscreen mode state
+        let isFullscreen = false;
+        let fullscreenScene, fullscreenCamera, fullscreenRenderer, fullscreenControls, fullscreenGlobeGroup;
+        let fullscreenMarkers = [];
+
         let isAnimating = false;
         let autoRotate = true;
         let currentView = 'world';
@@ -888,8 +1046,9 @@ def create_dashboard_router(
             if (isAnimating) return;
             isAnimating = true;
 
-            // Clear state markers when returning to world view
+            // Clear all drill-down markers when returning to world view
             clearStateMarkers();
+            clearCityMarkers();
 
             const targetPos = new THREE.Vector3(0, 0, 280);
             const startPos = camera.position.clone();
@@ -971,6 +1130,77 @@ def create_dashboard_router(
             }});
         }}
 
+        let cityMarkers = [];  // Track city markers for cleanup
+
+        function clearCityMarkers() {{
+            cityMarkers.forEach(m => {{
+                if (m.mesh) globeGroup.remove(m.mesh);
+                if (m.sprite) globeGroup.remove(m.sprite);
+            }});
+            cityMarkers = [];
+        }}
+
+        function addCityMarkers(countryCode) {{
+            clearCityMarkers();
+
+            // Get cities for this country
+            const countryCities = cityData.filter(c => c.country === countryCode);
+            if (countryCities.length === 0) return;
+
+            const maxViews = Math.max(...countryCities.map(c => c.views), 1);
+            const glowTexture = createGlowTexture();
+
+            countryCities.slice(0, 15).forEach(item => {{
+                // Try to find city coordinates
+                const cityKey = `${{item.city}}|${{item.region || ''}}|${{countryCode}}`;
+                let coords = CITY_COORDS[cityKey];
+
+                // Try without region
+                if (!coords) {{
+                    coords = CITY_COORDS[`${{item.city}}||${{countryCode}}`];
+                }}
+
+                // Fall back to country coords with offset
+                if (!coords) {{
+                    const countryCoords = COUNTRY_COORDS[countryCode];
+                    if (countryCoords) {{
+                        const offset = Math.random() * 8 - 4;
+                        coords = [countryCoords[0] + offset, countryCoords[1] + offset];
+                    }}
+                }}
+
+                if (!coords) return;
+
+                const [lat, lon] = coords;
+                const position = latLonToVector3(lat, lon, CONFIG.globeRadius + 1.5);
+
+                // Size based on views (log scale)
+                const logViews = Math.log10(item.views + 1);
+                const logMax = Math.log10(maxViews + 1);
+                const size = 0.6 + (logViews / logMax) * 1.8;
+
+                // Marker sphere - orange for cities
+                const mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(size, 16, 16),
+                    new THREE.MeshBasicMaterial({{ color: '#f39c12', transparent: true, opacity: 0.9 }})
+                );
+                mesh.position.copy(position);
+                mesh.userData = {{ city: item.city, region: item.region, views: item.views, isCity: true }};
+                globeGroup.add(mesh);
+
+                // Glow sprite
+                const spriteMat = new THREE.SpriteMaterial({{
+                    map: glowTexture, color: '#f39c12', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending
+                }});
+                const sprite = new THREE.Sprite(spriteMat);
+                sprite.scale.set(size * 4, size * 4, 1);
+                sprite.position.copy(position);
+                globeGroup.add(sprite);
+
+                cityMarkers.push({{ mesh, sprite }});
+            }});
+        }}
+
         function drillToCountry(code, views) {{
             const coords = COUNTRY_COORDS[code];
             if (!coords) return;
@@ -978,12 +1208,22 @@ def create_dashboard_router(
             currentView = 'country';
             selectedCountry = {{ code, views, name: COUNTRY_NAMES[code] || code }};
 
+            // Get cities for this country for the detail panel
+            const countryCities = cityData.filter(c => c.country === code);
+            selectedCountry.cities = countryCities;
+
             // For US, zoom in closer and show state markers
             if (code === 'US') {{
                 animateCameraTo(coords[0], coords[1], 80);
-                setTimeout(() => addStateMarkers('US'), CONFIG.animationDuration / 2);
+                setTimeout(() => {{
+                    addStateMarkers('US');
+                }}, CONFIG.animationDuration / 2);
             }} else {{
-                animateCameraTo(coords[0], coords[1], 120);
+                // For other countries, show city markers
+                animateCameraTo(coords[0], coords[1], 100);
+                setTimeout(() => {{
+                    addCityMarkers(code);
+                }}, CONFIG.animationDuration / 2);
             }}
             updateDetailPanel(selectedCountry);
         }}
@@ -1233,6 +1473,22 @@ def create_dashboard_router(
                     }}
                 }}
 
+                // Check city markers when viewing a non-US country
+                if (currentView === 'country' && selectedCountry && selectedCountry.code !== 'US' && cityMarkers.length > 0) {{
+                    const cityIntersects = raycaster.intersectObjects(cityMarkers.map(m => m.mesh));
+                    if (cityIntersects.length > 0 && tooltip) {{
+                        const data = cityIntersects[0].object.userData;
+                        const cityName = data.city || 'Unknown';
+                        const regionName = data.region ? ` (${{data.region}})` : '';
+                        tooltip.innerHTML = `<strong style="color:#f39c12">${{cityName}}${{regionName}}</strong><br>${{data.views.toLocaleString()}} views`;
+                        tooltip.style.display = 'block';
+                        tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                        tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
+                        renderer.domElement.style.cursor = 'pointer';
+                        return;
+                    }}
+                }}
+
                 // Check country markers
                 const intersects = raycaster.intersectObjects(markers);
                 if (intersects.length > 0 && tooltip) {{
@@ -1263,12 +1519,112 @@ def create_dashboard_router(
                 }});
             }}
 
-            // Escape key to go back
+            // Escape key to go back or close modal
             document.addEventListener('keydown', (e) => {{
-                if (e.key === 'Escape' && currentView !== 'world') {{
-                    animateCameraToWorld();
+                if (e.key === 'Escape') {{
+                    const modal = document.getElementById('globe-modal');
+                    if (modal && modal.classList.contains('active')) {{
+                        closeFullscreenModal();
+                    }} else if (currentView !== 'world') {{
+                        animateCameraToWorld();
+                    }}
                 }}
             }});
+
+            // Fullscreen modal handlers
+            const fullscreenBtn = document.getElementById('fullscreen-btn');
+            const modal = document.getElementById('globe-modal');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+            const modalBackBtn = document.getElementById('modal-back-btn');
+
+            function openFullscreenModal() {{
+                if (!modal) return;
+                modal.classList.add('active');
+
+                // Initialize fullscreen globe if not already done
+                if (!fullscreenRenderer) {{
+                    initFullscreenGlobe();
+                }} else {{
+                    // Just start the animation loop
+                    animateFullscreen();
+                }}
+            }}
+
+            function closeFullscreenModal() {{
+                if (!modal) return;
+                modal.classList.remove('active');
+            }}
+
+            function initFullscreenGlobe() {{
+                const modalContainer = document.getElementById('modal-globe-container');
+                if (!modalContainer) return;
+
+                // Create fullscreen scene
+                fullscreenScene = new THREE.Scene();
+                fullscreenScene.background = new THREE.Color(CONFIG.backgroundColor);
+
+                // Camera
+                fullscreenCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+                fullscreenCamera.position.z = 280;
+
+                // Renderer
+                fullscreenRenderer = new THREE.WebGLRenderer({{ antialias: true }});
+                fullscreenRenderer.setSize(window.innerWidth, window.innerHeight);
+                fullscreenRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                modalContainer.appendChild(fullscreenRenderer.domElement);
+
+                // Controls
+                fullscreenControls = new OrbitControls(fullscreenCamera, fullscreenRenderer.domElement);
+                fullscreenControls.enableDamping = true;
+                fullscreenControls.dampingFactor = 0.05;
+                fullscreenControls.minDistance = 130;
+                fullscreenControls.maxDistance = 500;
+                fullscreenControls.enablePan = false;
+                fullscreenControls.autoRotate = true;
+                fullscreenControls.autoRotateSpeed = 0.2;
+
+                // Starfield
+                fullscreenScene.add(createStarfield());
+
+                // Clone the globe content
+                fullscreenGlobeGroup = globeGroup.clone();
+                fullscreenScene.add(fullscreenGlobeGroup);
+
+                // Handle window resize
+                window.addEventListener('resize', () => {{
+                    if (fullscreenRenderer && modal.classList.contains('active')) {{
+                        fullscreenCamera.aspect = window.innerWidth / window.innerHeight;
+                        fullscreenCamera.updateProjectionMatrix();
+                        fullscreenRenderer.setSize(window.innerWidth, window.innerHeight);
+                    }}
+                }});
+
+                // Start animation
+                animateFullscreen();
+            }}
+
+            function animateFullscreen() {{
+                if (!modal.classList.contains('active')) return;
+                requestAnimationFrame(animateFullscreen);
+                fullscreenControls.update();
+                fullscreenRenderer.render(fullscreenScene, fullscreenCamera);
+            }}
+
+            if (fullscreenBtn) {{
+                fullscreenBtn.addEventListener('click', openFullscreenModal);
+            }}
+
+            if (modalCloseBtn) {{
+                modalCloseBtn.addEventListener('click', closeFullscreenModal);
+            }}
+
+            if (modalBackBtn) {{
+                modalBackBtn.addEventListener('click', () => {{
+                    if (currentView !== 'world') {{
+                        animateCameraToWorld();
+                    }}
+                }});
+            }}
 
             // Handle resize
             const resizeObserver = new ResizeObserver(() => {{
