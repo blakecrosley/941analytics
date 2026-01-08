@@ -951,6 +951,21 @@ def create_dashboard_router(
             'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'Washington DC'
         }};
 
+        // Reverse lookup: state name -> code (Cloudflare returns full names like "California")
+        const STATE_NAME_TO_CODE = {{}};
+        Object.entries(US_STATE_NAMES).forEach(([code, name]) => {{
+            STATE_NAME_TO_CODE[name] = code;
+            STATE_NAME_TO_CODE[name.toLowerCase()] = code;
+            STATE_NAME_TO_CODE[code] = code;  // Also allow code lookup
+        }});
+
+        // Helper to normalize state identifier to code
+        function normalizeStateCode(region) {{
+            if (!region) return null;
+            // Try direct lookup (handles both "CA" and "California")
+            return STATE_NAME_TO_CODE[region] || STATE_NAME_TO_CODE[region.toLowerCase()] || null;
+        }}
+
         // City coordinates (approximate) for major cities worldwide
         const CITY_COORDS = {{
             // US Cities
@@ -1131,9 +1146,13 @@ def create_dashboard_router(
             const glowTexture = createGlowTexture();
 
             usRegions.forEach(item => {{
-                const coords = US_STATE_COORDS[item.region];
+                // Normalize state name to code (Cloudflare returns "California", we need "CA")
+                const stateCode = normalizeStateCode(item.region);
+                console.log('[STATE] Processing region:', item.region, '-> code:', stateCode);
+
+                const coords = stateCode ? US_STATE_COORDS[stateCode] : null;
                 if (!coords) {{
-                    console.log('[STATE] No coords for state:', item.region);
+                    console.log('[STATE] No coords for state:', item.region, '(code:', stateCode, ')');
                     return;
                 }}
 
@@ -1151,7 +1170,7 @@ def create_dashboard_router(
                     new THREE.MeshBasicMaterial({{ color: '#ff6b6b', transparent: true, opacity: 0.95 }})
                 );
                 mesh.position.copy(position);
-                mesh.userData = {{ state: item.region, views: item.views, isState: true }};
+                mesh.userData = {{ state: stateCode, stateName: item.region, views: item.views, isState: true }};
                 globeGroup.add(mesh);
 
                 // Glow sprite - brighter glow
@@ -1287,19 +1306,28 @@ def create_dashboard_router(
             updateDetailPanel(selectedCountry);
         }}
 
-        function drillToState(stateCode, views) {{
+        function drillToState(stateCode, views, stateName) {{
+            // stateCode should already be normalized (e.g., "CA")
             const coords = US_STATE_COORDS[stateCode];
-            if (!coords) return;
+            if (!coords) {{
+                console.log('[DRILL-STATE] No coords for state:', stateCode);
+                return;
+            }}
 
             currentView = 'state';
-            const stateName = US_STATE_NAMES[stateCode] || stateCode;
+            const displayName = stateName || US_STATE_NAMES[stateCode] || stateCode;
 
-            // Get cities for this state
-            const stateCities = cityData.filter(c => c.country === 'US' && c.region === stateCode);
+            // Get cities for this state - try both code and full name since DB might have either
+            const stateCities = cityData.filter(c => {{
+                if (c.country !== 'US') return false;
+                const cityStateCode = normalizeStateCode(c.region);
+                return cityStateCode === stateCode || c.region === stateCode;
+            }});
+            console.log('[DRILL-STATE] Found cities for', stateCode, ':', stateCities.length);
 
             selectedState = {{
                 code: stateCode,
-                name: stateName,
+                name: displayName,
                 views: views,
                 cities: stateCities
             }};
@@ -1473,7 +1501,7 @@ def create_dashboard_router(
                     const data = stateHits[0].object.userData;
                     console.log('[CLICK] State hit data:', data);
                     if (data.isState && data.state && data.views) {{
-                        drillToState(data.state, data.views);
+                        drillToState(data.state, data.views, data.stateName);
                         return;
                     }}
                 }}
@@ -1631,7 +1659,7 @@ def create_dashboard_router(
                     const stateIntersects = raycaster.intersectObjects(stateMarkers.map(m => m.mesh));
                     if (stateIntersects.length > 0 && tooltip) {{
                         const data = stateIntersects[0].object.userData;
-                        const name = US_STATE_NAMES[data.state] || data.state;
+                        const name = data.stateName || US_STATE_NAMES[data.state] || data.state;
                         tooltip.innerHTML = `<strong style="color:#ff6b6b">${{name}}</strong><br>${{data.views.toLocaleString()}} views<br><small style="color:var(--muted)">Click for cities</small>`;
                         tooltip.style.display = 'block';
                         tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
