@@ -476,6 +476,10 @@ def create_dashboard_router(
                 <h3>Unique Visitors</h3>
                 <div class="value">{data.unique_visitors:,}</div>
             </div>
+            <div class="stat-card">
+                <h3>Bot Traffic</h3>
+                <div class="value" style="color: var(--muted);">{data.bot_views:,}</div>
+            </div>
         </div>
 
         <div class="main-grid">
@@ -491,11 +495,31 @@ def create_dashboard_router(
                 </div>
 
                 <div class="section">
+                    <h2>Traffic Sources</h2>
+                    <table>
+                        <thead><tr><th>Type</th><th>Views</th></tr></thead>
+                        <tbody>
+                            {''.join(f'<tr><td>{t.title() if t else "Direct"}</td><td>{v:,}</td></tr>' for t, v in sorted(data.referrer_types.items(), key=lambda x: x[1], reverse=True)) or '<tr><td colspan="2">No data</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="section">
                     <h2>Top Referrers</h2>
                     <table>
-                        <thead><tr><th>Source</th><th>Views</th></tr></thead>
+                        <thead><tr><th>Domain</th><th>Type</th><th>Views</th></tr></thead>
                         <tbody>
-                            {''.join(f'<tr><td>{r["referrer"] or "Direct"}</td><td>{r["views"]:,}</td></tr>' for r in data.top_referrers) or '<tr><td colspan="2">No referrer data</td></tr>'}
+                            {''.join('<tr><td>' + r.get("domain", "Direct") + '</td><td style="color:var(--muted)">' + r.get("type", "direct") + '</td><td>' + f'{r["views"]:,}' + '</td></tr>' for r in data.top_referrers) or '<tr><td colspan="3">No referrer data</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="section">
+                    <h2>UTM Campaigns</h2>
+                    <table>
+                        <thead><tr><th>Campaign</th><th>Source</th><th>Views</th></tr></thead>
+                        <tbody>
+                            {''.join('<tr><td>' + c.get("campaign", "-") + '</td><td style="color:var(--muted)">' + c.get("source", "-") + '</td><td>' + f'{c["views"]:,}' + '</td></tr>' for c in data.utm_campaigns) or '<tr><td colspan="3">No campaign data</td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -505,7 +529,27 @@ def create_dashboard_router(
                     <table>
                         <thead><tr><th>Type</th><th>Views</th></tr></thead>
                         <tbody>
-                            {''.join(f'<tr><td>{d.title()}</td><td>{v:,}</td></tr>' for d, v in data.devices.items()) or '<tr><td colspan="2">No device data</td></tr>'}
+                            {''.join(f'<tr><td>{d.title() if d else "Unknown"}</td><td>{v:,}</td></tr>' for d, v in sorted(data.devices.items(), key=lambda x: x[1], reverse=True)) or '<tr><td colspan="2">No device data</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="section">
+                    <h2>Browsers</h2>
+                    <table>
+                        <thead><tr><th>Browser</th><th>Views</th></tr></thead>
+                        <tbody>
+                            {''.join(f'<tr><td>{b}</td><td>{v:,}</td></tr>' for b, v in data.browsers.items()) or '<tr><td colspan="2">No browser data</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="section">
+                    <h2>Operating Systems</h2>
+                    <table>
+                        <thead><tr><th>OS</th><th>Views</th></tr></thead>
+                        <tbody>
+                            {''.join(f'<tr><td>{os}</td><td>{v:,}</td></tr>' for os, v in data.operating_systems.items()) or '<tr><td colspan="2">No OS data</td></tr>'}
                         </tbody>
                     </table>
                 </div>
