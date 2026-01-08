@@ -1,12 +1,13 @@
 name = "941-analytics"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
+account_id = "0cbfc64a7f11a17453d2cb691107fa45"
 
 # D1 Database binding
 [[d1_databases]]
 binding = "DB"
 database_name = "941-analytics"
-database_id = "YOUR_D1_DATABASE_ID"  # Replace after creating database
+database_id = "243ae7ac-3f21-4287-a665-4ee624dd0d49"
 
 [vars]
 # Set via wrangler secret put ANALYTICS_SECRET

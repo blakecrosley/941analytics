@@ -36,16 +36,20 @@ class Analytics:
         d1_database_id: str,
         cf_account_id: str,
         cf_api_token: str,
+        passkey: str = None,
     ):
         self.site_name = site_name
         self.worker_url = worker_url
+        self.passkey = passkey
         self.client = AnalyticsClient(
             d1_database_id=d1_database_id,
             cf_account_id=cf_account_id,
             cf_api_token=cf_api_token,
             site_name=site_name,
         )
-        self.dashboard_router = create_dashboard_router(self.client, site_name)
+        self.dashboard_router = create_dashboard_router(
+            self.client, site_name, passkey=passkey
+        )
 
     def tracking_script(self) -> str:
         """Generate the tracking script HTML for templates."""
@@ -72,6 +76,7 @@ def setup_analytics(
     d1_database_id: str,
     cf_account_id: str,
     cf_api_token: str,
+    passkey: str = None,
 ) -> Analytics:
     """
     Set up analytics for a site.
@@ -82,6 +87,8 @@ def setup_analytics(
         d1_database_id: Cloudflare D1 database ID
         cf_account_id: Cloudflare account ID
         cf_api_token: Cloudflare API token with D1 read access
+        passkey: Optional passkey to protect the dashboard. If set, users must
+                 enter this passkey to access analytics.
 
     Returns:
         Analytics instance with dashboard_router and tracking_script()
@@ -92,4 +99,5 @@ def setup_analytics(
         d1_database_id=d1_database_id,
         cf_account_id=cf_account_id,
         cf_api_token=cf_api_token,
+        passkey=passkey,
     )
