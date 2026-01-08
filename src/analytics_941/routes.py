@@ -248,7 +248,9 @@ def create_dashboard_router(
         """Render the analytics dashboard."""
         # Check auth if passkey is configured
         if passkey and not _verify_auth(analytics_auth, expected_hash):
-            return RedirectResponse(url="./login", status_code=302)
+            # Use path from current URL to construct proper relative redirect
+            base_path = str(request.url.path).rstrip("/")
+            return RedirectResponse(url=f"{base_path}/login", status_code=302)
 
         try:
             data = await client.get_dashboard_data(period)
