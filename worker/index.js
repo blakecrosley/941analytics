@@ -405,6 +405,11 @@ export default {
       return handleCollect(request, env, corsHeaders);
     }
 
+    // Real-time stats API
+    if (url.pathname === "/stats") {
+      return handleStats(request, env, corsHeaders);
+    }
+
     return new Response("Not Found", { status: 404 });
   }
 };
@@ -538,6 +543,123 @@ async function handleCollect(request, env, corsHeaders) {
 
 function generateSessionId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+/**
+ * Handle real-time stats API requests
+ * Returns analytics data for dashboard consumption
+ */
+async function handleStats(request, env, corsHeaders) {
+  try {
+    const url = new URL(request.url);
+    const site = url.searchParams.get("site");
+    const period = url.searchParams.get("period") || "today"; // today, 7d, 30d
+
+    if (!site) {
+      return new Response(JSON.stringify({ error: "Missing site parameter" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Calculate date range
+    const now = new Date();
+    let startDate;
+    if (period === "today") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    } else if (period === "7d") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (period === "30d") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    }
+
+    // Query real-time stats from D1
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_views,
+        COUNT(DISTINCT visitor_hash) as unique_visitors,
+        COUNT(DISTINCT session_id) as sessions,
+        SUM(CASE WHEN is_bot = 1 THEN 1 ELSE 0 END) as bot_views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ?
+    `;
+
+    const topPagesQuery = `
+      SELECT url, COUNT(*) as views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ? AND is_bot = 0
+      GROUP BY url
+      ORDER BY views DESC
+      LIMIT 10
+    `;
+
+    const countriesQuery = `
+      SELECT country, COUNT(*) as views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ? AND is_bot = 0 AND country != ''
+      GROUP BY country
+      ORDER BY views DESC
+      LIMIT 10
+    `;
+
+    const devicesQuery = `
+      SELECT device_type, COUNT(*) as views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ? AND is_bot = 0
+      GROUP BY device_type
+      ORDER BY views DESC
+    `;
+
+    const recentQuery = `
+      SELECT url, country, device_type, timestamp, city
+      FROM page_views
+      WHERE site = ? AND is_bot = 0
+      ORDER BY id DESC
+      LIMIT 10
+    `;
+
+    // Execute queries in parallel
+    const [statsResult, topPagesResult, countriesResult, devicesResult, recentResult] = await Promise.all([
+      env.DB.prepare(statsQuery).bind(site, startDate).first(),
+      env.DB.prepare(topPagesQuery).bind(site, startDate).all(),
+      env.DB.prepare(countriesQuery).bind(site, startDate).all(),
+      env.DB.prepare(devicesQuery).bind(site, startDate).all(),
+      env.DB.prepare(recentQuery).bind(site).all()
+    ]);
+
+    const response = {
+      site,
+      period,
+      generated_at: new Date().toISOString(),
+      summary: {
+        total_views: statsResult?.total_views || 0,
+        unique_visitors: statsResult?.unique_visitors || 0,
+        sessions: statsResult?.sessions || 0,
+        bot_views: statsResult?.bot_views || 0
+      },
+      top_pages: topPagesResult?.results || [],
+      countries: countriesResult?.results || [],
+      devices: devicesResult?.results || [],
+      recent_visitors: recentResult?.results || []
+    };
+
+    return new Response(JSON.stringify(response), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate"
+      }
+    });
+
+  } catch (error) {
+    console.error("Stats API error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
 }
 
 // Inline tracking script (served at /track.js)
