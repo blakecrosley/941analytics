@@ -1,0 +1,63 @@
+{# Data table component - reusable table with bar visualization #}
+{# Parameters: title, items, columns, max_value, filter_key #}
+
+<div class="section">
+    <div class="section__header">
+        <span class="section__title">{{ title }}</span>
+        {% if show_more_link %}
+        <a href="{{ show_more_link }}" class="btn btn--small">View All</a>
+        {% endif %}
+    </div>
+    <div class="section__content section__content--flush">
+        {% if items|length > 0 %}
+        <table class="table">
+            <thead>
+                <tr>
+                    {% for col in columns %}
+                    <th{% if col.align %} class="text-{{ col.align }}"{% endif %}>{{ col.label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items[:limit|default(10)] %}
+                <tr>
+                    {% for col in columns %}
+                    <td{% if col.align %} class="text-{{ col.align }}"{% endif %}{% if col.type == 'number' %} class="table__number"{% endif %}>
+                        {% if col.key == 'name' and filter_key %}
+                        <a href="?{{ filter_key }}={{ item[col.field]|urlencode }}"
+                           hx-get="./partials/overview?{{ filter_key }}={{ item[col.field]|urlencode }}"
+                           hx-target="#main-content"
+                           hx-push-url="?{{ filter_key }}={{ item[col.field]|urlencode }}"
+                           class="text-muted"
+                           style="text-decoration: none;">
+                            {{ item[col.field] or '(not set)' }}
+                        </a>
+                        {% elif col.format == 'number' %}
+                        {{ "{:,}".format(item[col.field]) }}
+                        {% elif col.format == 'percent' %}
+                        {{ "{:.1f}".format(item[col.field]) }}%
+                        {% elif col.format == 'duration' %}
+                        {{ format_duration(item[col.field]) }}
+                        {% else %}
+                        {{ item[col.field] or '(not set)' }}
+                        {% endif %}
+
+                        {% if col.show_bar and max_value %}
+                        <div class="table__bar">
+                            <div class="table__bar-fill" style="width: {{ (item[col.field] / max_value * 100)|int }}%;"></div>
+                        </div>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            <div class="empty__icon">📊</div>
+            <p>No data for this period</p>
+        </div>
+        {% endif %}
+    </div>
+</div>

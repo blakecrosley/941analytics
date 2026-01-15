@@ -1,0 +1,235 @@
+{# Overview tab content - loaded via HTMX or full page #}
+
+{% include "components/date_picker.html" %}
+
+{% include "components/stats_cards.html" %}
+
+{% include "components/chart.html" %}
+
+<div class="grid-2">
+    {# Top Pages #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Top Pages</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if top_pages|length > 0 %}
+            {% set max_views = top_pages|map(attribute='views')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Page</th>
+                        <th class="text-right">Views</th>
+                        <th class="text-right">Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page in top_pages[:10] %}
+                    <tr>
+                        <td>
+                            <a href="?page={{ page.url|urlencode }}"
+                               hx-get="./partials/overview?page={{ page.url|urlencode }}"
+                               hx-target="#main-content"
+                               hx-push-url="?page={{ page.url|urlencode }}"
+                               class="truncate" style="display: block; max-width: 300px; text-decoration: none; color: var(--muted);">
+                                {{ page.url }}
+                            </a>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (page.views / max_views * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:,}".format(page.views) }}</td>
+                        <td class="text-right table__number">{{ "{:,}".format(page.visitors) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">📄</div>
+                <p>No pageviews recorded</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Top Sources #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Top Sources</span>
+            <a href="./sources" class="btn btn--small" hx-get="./partials/sources" hx-target="#main-content" hx-push-url="./sources">View All</a>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if sources|length > 0 %}
+            {% set max_visits = sources|map(attribute='visits')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th class="text-right">Visits</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for source in sources[:10] %}
+                    <tr>
+                        <td>
+                            <a href="?source={{ source.source|urlencode }}"
+                               hx-get="./partials/overview?source={{ source.source|urlencode }}"
+                               hx-target="#main-content"
+                               hx-push-url="?source={{ source.source|urlencode }}"
+                               style="text-decoration: none; color: var(--muted);">
+                                {{ source.source or 'Direct' }}
+                            </a>
+                            <span class="text-muted" style="font-size: 0.75rem; margin-left: 0.5rem;">{{ source.source_type }}</span>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (source.visits / max_visits * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:,}".format(source.visits) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">🔗</div>
+                <p>No sources recorded</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid-3">
+    {# Countries #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Countries</span>
+            <a href="./geography" class="btn btn--small" hx-get="./partials/geography" hx-target="#main-content" hx-push-url="./geography">View All</a>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if countries|length > 0 %}
+            {% set max_country_visits = countries|map(attribute='visits')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Country</th>
+                        <th class="text-right">Visits</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for country in countries[:7] %}
+                    <tr>
+                        <td>
+                            <a href="?country={{ country.country_code }}"
+                               hx-get="./partials/overview?country={{ country.country_code }}"
+                               hx-target="#main-content"
+                               hx-push-url="?country={{ country.country_code }}"
+                               style="text-decoration: none; color: var(--muted);">
+                                {{ country.country_name }}
+                            </a>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (country.visits / max_country_visits * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:,}".format(country.visits) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">🌍</div>
+                <p>No geographic data</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Devices #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Devices</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if devices|length > 0 %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th class="text-right">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for device in devices %}
+                    <tr>
+                        <td>
+                            <a href="?device={{ device.device_type }}"
+                               hx-get="./partials/overview?device={{ device.device_type }}"
+                               hx-target="#main-content"
+                               hx-push-url="?device={{ device.device_type }}"
+                               style="text-decoration: none; color: var(--muted);">
+                                {% if device.device_type == 'desktop' %}💻{% elif device.device_type == 'mobile' %}📱{% else %}📟{% endif %}
+                                {{ device.device_type|capitalize }}
+                            </a>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ device.percentage|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:.1f}".format(device.percentage) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">📱</div>
+                <p>No device data</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Browsers #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Browsers</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if browsers|length > 0 %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Browser</th>
+                        <th class="text-right">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for browser in browsers[:5] %}
+                    <tr>
+                        <td>
+                            <a href="?browser={{ browser.browser }}"
+                               hx-get="./partials/overview?browser={{ browser.browser }}"
+                               hx-target="#main-content"
+                               hx-push-url="?browser={{ browser.browser }}"
+                               style="text-decoration: none; color: var(--muted);">
+                                {{ browser.browser }}
+                            </a>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ browser.percentage|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:.1f}".format(browser.percentage) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">🌐</div>
+                <p>No browser data</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

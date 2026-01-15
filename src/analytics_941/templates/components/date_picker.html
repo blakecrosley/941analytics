@@ -1,0 +1,66 @@
+{# Date range picker component #}
+<div class="controls" x-data="{ customOpen: false }">
+    <div class="controls__group">
+        {% for period in [
+            ('24h', '24 hours'),
+            ('7d', '7 days'),
+            ('30d', '30 days'),
+            ('90d', '90 days'),
+            ('year', 'Year'),
+            ('all', 'All time')
+        ] %}
+        <button class="btn{% if date_range_key == period[0] %} active{% endif %}"
+                hx-get="./partials/{{ active_tab }}?period={{ period[0] }}"
+                hx-target="#main-content"
+                hx-push-url="?period={{ period[0] }}">
+            {{ period[1] }}
+        </button>
+        {% endfor %}
+    </div>
+
+    {# Active filters display #}
+    {% if filters and (filters.country or filters.device or filters.browser or filters.source or filters.page) %}
+    <div class="filters">
+        {% if filters.country %}
+        <span class="filter-chip">
+            {{ filters.country }}
+            <button class="filter-chip__remove"
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('country=' ~ filters.country, '')|replace('&&', '&') }}"
+                    hx-target="#main-content">&times;</button>
+        </span>
+        {% endif %}
+        {% if filters.device %}
+        <span class="filter-chip">
+            {{ filters.device }}
+            <button class="filter-chip__remove"
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('device=' ~ filters.device, '')|replace('&&', '&') }}"
+                    hx-target="#main-content">&times;</button>
+        </span>
+        {% endif %}
+        {% if filters.browser %}
+        <span class="filter-chip">
+            {{ filters.browser }}
+            <button class="filter-chip__remove"
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('browser=' ~ filters.browser, '')|replace('&&', '&') }}"
+                    hx-target="#main-content">&times;</button>
+        </span>
+        {% endif %}
+        {% if filters.source %}
+        <span class="filter-chip">
+            {{ filters.source }}
+            <button class="filter-chip__remove"
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('source=' ~ filters.source, '')|replace('&&', '&') }}"
+                    hx-target="#main-content">&times;</button>
+        </span>
+        {% endif %}
+        {% if filters.page %}
+        <span class="filter-chip">
+            {{ filters.page|truncate(30) }}
+            <button class="filter-chip__remove"
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('page=' ~ filters.page|urlencode, '')|replace('&&', '&') }}"
+                    hx-target="#main-content">&times;</button>
+        </span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

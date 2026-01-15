@@ -1,0 +1,22 @@
+{# Chart bars - the actual bar chart visualization #}
+{% set max_value = time_series|map(attribute=chart_metric)|max if time_series else 1 %}
+{% set max_value = max_value if max_value > 0 else 1 %}
+
+<div class="chart">
+    {% for point in time_series %}
+    {% set value = point[chart_metric] if chart_metric in point else point.visitors %}
+    {% set height = (value / max_value * 100)|int %}
+    <div class="chart__bar" style="height: {{ height }}%;">
+        <div class="chart__tooltip">
+            <strong>{{ point.timestamp.strftime('%b %d') if granularity == 'day' else point.timestamp.strftime('%H:%M') }}</strong><br>
+            {{ "{:,}".format(value) }} {{ chart_metric }}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+<div class="chart__labels">
+    {% if time_series|length > 0 %}
+    <span>{{ time_series[0].timestamp.strftime('%b %d') }}</span>
+    <span>{{ time_series[-1].timestamp.strftime('%b %d') }}</span>
+    {% endif %}
+</div>

@@ -1,0 +1,172 @@
+{# Realtime tab content - live visitors #}
+
+<div class="stats-grid" style="margin-bottom: 1.5rem;">
+    <div class="stat-card" style="background: linear-gradient(135deg, var(--surface) 0%, var(--surface-elevated) 100%);">
+        <div class="stat-card__label">
+            <span class="live"><span class="live__dot"></span></span>
+            Active Visitors
+        </div>
+        <div class="stat-card__value" style="font-size: 3rem;">{{ realtime.active_visitors }}</div>
+        <div class="text-muted" style="font-size: 0.75rem;">in the last 5 minutes</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    {# Active Pages #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Active Pages</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if realtime.pages|length > 0 %}
+            {% set max_page_count = realtime.pages|map(attribute='count')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Page</th>
+                        <th class="text-right">Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page in realtime.pages[:15] %}
+                    <tr>
+                        <td>
+                            <span class="truncate" style="display: block; max-width: 350px;">{{ page.url }}</span>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (page.count / max_page_count * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ page.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">📄</div>
+                <p>No active pages</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Active Sources #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Active Sources</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if realtime.sources|length > 0 %}
+            {% set max_source_count = realtime.sources|map(attribute='count')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th class="text-right">Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for source in realtime.sources[:10] %}
+                    <tr>
+                        <td>
+                            {{ source.source or 'Direct' }}
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (source.count / max_source_count * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ source.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">🔗</div>
+                <p>No active sources</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    {# Active Countries #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Active Countries</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if realtime.countries|length > 0 %}
+            {% set max_country_count = realtime.countries|map(attribute='count')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Country</th>
+                        <th class="text-right">Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for country in realtime.countries[:10] %}
+                    <tr>
+                        <td>
+                            {{ country.name or country.code or 'Unknown' }}
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (country.count / max_country_count * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ country.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">🌍</div>
+                <p>No active visitors by country</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Active Sessions (detailed view) #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Live Sessions</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if realtime.active_sessions|length > 0 %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Page</th>
+                        <th>Device</th>
+                        <th>Country</th>
+                        <th class="text-right">Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in realtime.active_sessions[:15] %}
+                    <tr>
+                        <td>
+                            <span class="truncate" style="display: block; max-width: 200px; font-size: 0.8125rem;">{{ session.page }}</span>
+                        </td>
+                        <td style="font-size: 0.8125rem;">
+                            {% if session.device == 'desktop' %}💻{% elif session.device == 'mobile' %}📱{% else %}📟{% endif %}
+                        </td>
+                        <td style="font-size: 0.8125rem;">{{ session.country or '🌐' }}</td>
+                        <td class="text-right text-muted" style="font-size: 0.75rem;">
+                            {{ session.started|timesince if session.started else 'now' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">👤</div>
+                <p>No active sessions</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

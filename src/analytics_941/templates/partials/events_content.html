@@ -1,0 +1,162 @@
+{# Events tab content - auto-tracked and custom events #}
+
+{% include "components/date_picker.html" %}
+
+{% include "components/stats_cards.html" %}
+
+<div class="grid-2">
+    {# All Events #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">All Events</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if events|length > 0 %}
+            {% set max_count = events|map(attribute='count')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>Type</th>
+                        <th class="text-right">Count</th>
+                        <th class="text-right">Sessions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in events[:20] %}
+                    <tr>
+                        <td>
+                            <a href="?event={{ event.event_name|urlencode }}"
+                               hx-get="./partials/events?event={{ event.event_name|urlencode }}"
+                               hx-target="#main-content"
+                               hx-push-url="?event={{ event.event_name|urlencode }}"
+                               style="text-decoration: none; color: var(--muted);">
+                                {{ event.event_name }}
+                            </a>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (event.count / max_count * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="filter-chip" style="font-size: 0.6875rem;">
+                                {% if event.event_type == 'click' %}🖱️{% elif event.event_type == 'scroll' %}📜{% elif event.event_type == 'form' %}📝{% elif event.event_type == 'video' %}🎬{% elif event.event_type == 'error' %}⚠️{% elif event.event_type == 'custom' %}⚙️{% else %}📊{% endif %}
+                                {{ event.event_type }}
+                            </span>
+                        </td>
+                        <td class="text-right table__number">{{ "{:,}".format(event.count) }}</td>
+                        <td class="text-right table__number">{{ "{:,}".format(event.unique_sessions) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">📊</div>
+                <p>No events recorded for this period</p>
+                <p class="text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;">Events are auto-tracked: outbound clicks, downloads, scroll depth, forms, errors</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Scroll Depth #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Scroll Depth</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if scroll_depth %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Depth</th>
+                        <th class="text-right">Sessions</th>
+                        <th class="text-right">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set total_sessions = scroll_depth.get('25', 0) %}
+                    {% for depth in [25, 50, 75, 100] %}
+                    {% set count = scroll_depth.get(depth|string, 0) %}
+                    <tr>
+                        <td>
+                            {{ depth }}%
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (count / total_sessions * 100)|int if total_sessions > 0 else 0 }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:,}".format(count) }}</td>
+                        <td class="text-right table__number">{{ "{:.1f}".format(count / total_sessions * 100) if total_sessions > 0 else '0.0' }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">📜</div>
+                <p>No scroll depth data</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{# Event Types Breakdown #}
+<div class="section">
+    <div class="section__header">
+        <span class="section__title">Event Types</span>
+    </div>
+    <div class="section__content section__content--flush">
+        {% if event_types|length > 0 %}
+        {% set total_events = event_types|map(attribute='count')|sum %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Description</th>
+                    <th class="text-right">Count</th>
+                    <th class="text-right">%</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for etype in event_types %}
+                <tr>
+                    <td>
+                        <a href="?event_type={{ etype.event_type }}"
+                           hx-get="./partials/events?event_type={{ etype.event_type }}"
+                           hx-target="#main-content"
+                           hx-push-url="?event_type={{ etype.event_type }}"
+                           style="text-decoration: none; color: var(--muted);">
+                            {% if etype.event_type == 'click' %}🖱️ Clicks
+                            {% elif etype.event_type == 'scroll' %}📜 Scroll
+                            {% elif etype.event_type == 'form' %}📝 Forms
+                            {% elif etype.event_type == 'video' %}🎬 Video
+                            {% elif etype.event_type == 'error' %}⚠️ Errors
+                            {% elif etype.event_type == 'pageview' %}👁️ Pageviews
+                            {% elif etype.event_type == 'custom' %}⚙️ Custom
+                            {% else %}📊 {{ etype.event_type|capitalize }}{% endif %}
+                        </a>
+                    </td>
+                    <td class="text-muted" style="font-size: 0.75rem;">
+                        {% if etype.event_type == 'click' %}Outbound links, downloads, buttons
+                        {% elif etype.event_type == 'scroll' %}Scroll depth milestones (25%, 50%, 75%, 100%)
+                        {% elif etype.event_type == 'form' %}Form submissions and interactions
+                        {% elif etype.event_type == 'video' %}Video plays, pauses, completions
+                        {% elif etype.event_type == 'error' %}JavaScript errors, 404s
+                        {% elif etype.event_type == 'custom' %}Custom tracked events
+                        {% else %}Auto-tracked events{% endif %}
+                    </td>
+                    <td class="text-right table__number">{{ "{:,}".format(etype.count) }}</td>
+                    <td class="text-right table__number">{{ "{:.1f}".format(etype.count / total_events * 100) if total_events > 0 else '0.0' }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            <div class="empty__icon">📊</div>
+            <p>No event type data</p>
+        </div>
+        {% endif %}
+    </div>
+</div>

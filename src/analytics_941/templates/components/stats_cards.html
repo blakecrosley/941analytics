@@ -1,0 +1,66 @@
+{# Stats cards component - displays core metrics with comparison changes #}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-card__label">Visitors</div>
+        <div class="stat-card__value">{{ "{:,}".format(metrics.visitors.value) }}</div>
+        {% if metrics.visitors.change_percent is not none %}
+        <div class="stat-card__change stat-card__change--{{ metrics.visitors.change_direction }}">
+            {% if metrics.visitors.change_direction == 'up' %}↑{% elif metrics.visitors.change_direction == 'down' %}↓{% else %}→{% endif %}
+            {{ "{:.1f}".format(metrics.visitors.change_percent|abs) }}%
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-card__label">Views</div>
+        <div class="stat-card__value">{{ "{:,}".format(metrics.views.value) }}</div>
+        {% if metrics.views.change_percent is not none %}
+        <div class="stat-card__change stat-card__change--{{ metrics.views.change_direction }}">
+            {% if metrics.views.change_direction == 'up' %}↑{% elif metrics.views.change_direction == 'down' %}↓{% else %}→{% endif %}
+            {{ "{:.1f}".format(metrics.views.change_percent|abs) }}%
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-card__label">Sessions</div>
+        <div class="stat-card__value">{{ "{:,}".format(metrics.sessions.value) }}</div>
+        {% if metrics.sessions.change_percent is not none %}
+        <div class="stat-card__change stat-card__change--{{ metrics.sessions.change_direction }}">
+            {% if metrics.sessions.change_direction == 'up' %}↑{% elif metrics.sessions.change_direction == 'down' %}↓{% else %}→{% endif %}
+            {{ "{:.1f}".format(metrics.sessions.change_percent|abs) }}%
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-card__label">Bounce Rate</div>
+        <div class="stat-card__value">{{ "{:.0f}".format(metrics.bounce_rate.value) }}%</div>
+        {% if metrics.bounce_rate.change_percent is not none %}
+        {# Lower bounce rate is better, so invert the direction #}
+        {% set bounce_direction = 'up' if metrics.bounce_rate.change_direction == 'down' else ('down' if metrics.bounce_rate.change_direction == 'up' else 'same') %}
+        <div class="stat-card__change stat-card__change--{{ bounce_direction }}">
+            {% if metrics.bounce_rate.change_direction == 'up' %}↑{% elif metrics.bounce_rate.change_direction == 'down' %}↓{% else %}→{% endif %}
+            {{ "{:.1f}".format(metrics.bounce_rate.change_percent|abs) }}%
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-card__label">Avg. Duration</div>
+        <div class="stat-card__value">{{ format_duration(metrics.avg_duration.value) }}</div>
+        {% if metrics.avg_duration.change_percent is not none %}
+        <div class="stat-card__change stat-card__change--{{ metrics.avg_duration.change_direction }}">
+            {% if metrics.avg_duration.change_direction == 'up' %}↑{% elif metrics.avg_duration.change_direction == 'down' %}↓{% else %}→{% endif %}
+            {{ "{:.1f}".format(metrics.avg_duration.change_percent|abs) }}%
+        </div>
+        {% endif %}
+    </div>
+
+    {% if metrics.bot_views > 0 %}
+    <div class="stat-card">
+        <div class="stat-card__label">Bot Views</div>
+        <div class="stat-card__value text-muted">{{ "{:,}".format(metrics.bot_views) }}</div>
+    </div>
+    {% endif %}
+</div>

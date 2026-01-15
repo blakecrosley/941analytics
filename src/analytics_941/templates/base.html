@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Analytics{% endblock %} - {{ site_name }}</title>
+
+    <!-- Preload critical assets -->
+    <link rel="preconnect" href="https://unpkg.com">
+
+    <!-- HTMX for server-driven interactivity -->
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+
+    <!-- Alpine.js for client state -->
+    <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+
+    <!-- Inline critical CSS for fast first paint -->
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #111111;
+            --surface-elevated: #1a1a1a;
+            --border: rgba(255, 255, 255, 0.1);
+            --text: #ffffff;
+            --muted: rgba(255, 255, 255, 0.65);
+            --tertiary: rgba(255, 255, 255, 0.4);
+            --accent: #ffffff;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --radius: 8px;
+            --radius-lg: 16px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        /* Layout */
+        .layout {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header__title {
+            font-size: 1.125rem;
+            font-weight: 500;
+            letter-spacing: -0.02em;
+        }
+
+        .header__site {
+            color: var(--muted);
+            font-weight: 400;
+        }
+
+        .header__actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header__link {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s;
+        }
+
+        .header__link:hover {
+            color: var(--text);
+        }
+
+        /* Navigation tabs */
+        .nav {
+            display: flex;
+            gap: 0.25rem;
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .nav__link {
+            padding: 0.5rem 1rem;
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            border-radius: var(--radius);
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .nav__link:hover {
+            background: var(--surface);
+            color: var(--text);
+        }
+
+        .nav__link.active {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        /* Main content */
+        .main {
+            flex: 1;
+            padding: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Controls bar (date picker, filters) */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            align-items: center;
+        }
+
+        .controls__group {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 400;
+            color: var(--muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            border-color: var(--text);
+            color: var(--text);
+        }
+
+        .btn.active {
+            background: var(--text);
+            color: var(--bg);
+            border-color: var(--text);
+        }
+
+        .btn--small {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        /* Filter chips */
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            color: var(--text);
+        }
+
+        .filter-chip__remove {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .filter-chip__remove:hover {
+            color: var(--error);
+        }
+
+        /* Stats cards grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+        }
+
+        .stat-card__label {
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card__value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .stat-card__change {
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+        }
+
+        .stat-card__change--up {
+            color: var(--success);
+        }
+
+        .stat-card__change--down {
+            color: var(--error);
+        }
+
+        .stat-card__change--same {
+            color: var(--muted);
+        }
+
+        /* Sections */
+        .section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 1.5rem;
+        }
+
+        .section__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section__title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--muted);
+        }
+
+        .section__content {
+            padding: 1.25rem;
+        }
+
+        .section__content--flush {
+            padding: 0;
+        }
+
+        /* Grid layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            .grid-3 { grid-template-columns: 1fr 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+        }
+
+        /* Tables */
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th,
+        .table td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .table th {
+            font-size: 0.6875rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+        }
+
+        .table td {
+            font-size: 0.875rem;
+        }
+
+        .table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .table__number {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .table__bar {
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            margin-top: 0.25rem;
+            overflow: hidden;
+        }
+
+        .table__bar-fill {
+            height: 100%;
+            background: var(--text);
+            border-radius: 2px;
+        }
+
+        /* Chart */
+        .chart {
+            height: 200px;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            padding: 1rem 0;
+        }
+
+        .chart__bar {
+            flex: 1;
+            min-width: 4px;
+            background: linear-gradient(to top, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.5));
+            border-radius: 2px 2px 0 0;
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .chart__bar:hover {
+            background: linear-gradient(to top, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.8));
+        }
+
+        .chart__tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            padding: 0.375rem 0.625rem;
+            border-radius: 4px;
+            font-size: 0.6875rem;
+            white-space: nowrap;
+            z-index: 10;
+            margin-bottom: 4px;
+        }
+
+        .chart__bar:hover .chart__tooltip {
+            display: block;
+        }
+
+        .chart__labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.6875rem;
+            color: var(--muted);
+            padding-top: 0.5rem;
+        }
+
+        /* Live indicator */
+        .live {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .live__dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.9); }
+        }
+
+        /* Loading states */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 3rem;
+            color: var(--muted);
+        }
+
+        .htmx-request .loading-indicator {
+            display: block;
+        }
+
+        .htmx-request .loading-content {
+            opacity: 0.5;
+        }
+
+        /* Empty states */
+        .empty {
+            text-align: center;
+            padding: 3rem;
+            color: var(--muted);
+        }
+
+        .empty__icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* Utilities */
+        .text-muted { color: var(--muted); }
+        .text-success { color: var(--success); }
+        .text-error { color: var(--error); }
+        .text-right { text-align: right; }
+        .font-mono { font-family: 'SF Mono', Monaco, monospace; }
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .main { padding: 1rem; }
+            .nav { padding: 0.5rem 1rem; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="layout">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="header__title">
+                Analytics <span class="header__site">· {{ site_name }}</span>
+            </h1>
+            <div class="header__actions">
+                {% if has_auth %}
+                <a href="./logout" class="header__link">Logout</a>
+                {% endif %}
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav" role="tablist">
+            <a href="./"
+               class="nav__link {% if active_tab == 'overview' %}active{% endif %}"
+               hx-get="./partials/overview"
+               hx-target="#main-content"
+               hx-push-url="./"
+               role="tab">
+                Overview
+            </a>
+            <a href="./realtime"
+               class="nav__link {% if active_tab == 'realtime' %}active{% endif %}"
+               hx-get="./partials/realtime"
+               hx-target="#main-content"
+               hx-push-url="./realtime"
+               role="tab">
+                <span class="live"><span class="live__dot"></span></span>
+                Realtime
+            </a>
+            <a href="./sources"
+               class="nav__link {% if active_tab == 'sources' %}active{% endif %}"
+               hx-get="./partials/sources"
+               hx-target="#main-content"
+               hx-push-url="./sources"
+               role="tab">
+                Sources
+            </a>
+            <a href="./geography"
+               class="nav__link {% if active_tab == 'geography' %}active{% endif %}"
+               hx-get="./partials/geography"
+               hx-target="#main-content"
+               hx-push-url="./geography"
+               role="tab">
+                Geography
+            </a>
+            <a href="./technology"
+               class="nav__link {% if active_tab == 'technology' %}active{% endif %}"
+               hx-get="./partials/technology"
+               hx-target="#main-content"
+               hx-push-url="./technology"
+               role="tab">
+                Technology
+            </a>
+            <a href="./events"
+               class="nav__link {% if active_tab == 'events' %}active{% endif %}"
+               hx-get="./partials/events"
+               hx-target="#main-content"
+               hx-push-url="./events"
+               role="tab">
+                Events
+            </a>
+        </nav>
+
+        <!-- Main content -->
+        <main class="main" id="main-content" role="tabpanel">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

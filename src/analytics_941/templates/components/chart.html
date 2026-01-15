@@ -1,0 +1,23 @@
+{# Time series chart component - displays visitors/views over time #}
+<div class="section">
+    <div class="section__header">
+        <span class="section__title">Traffic Over Time</span>
+        <div class="controls__group">
+            <button class="btn btn--small{% if chart_metric == 'visitors' %} active{% endif %}"
+                    hx-get="./partials/chart?metric=visitors"
+                    hx-target="#chart-container"
+                    hx-swap="innerHTML">
+                Visitors
+            </button>
+            <button class="btn btn--small{% if chart_metric == 'views' %} active{% endif %}"
+                    hx-get="./partials/chart?metric=views"
+                    hx-target="#chart-container"
+                    hx-swap="innerHTML">
+                Views
+            </button>
+        </div>
+    </div>
+    <div class="section__content" id="chart-container">
+        {% include "components/chart_bars.html" %}
+    </div>
+</div>
