@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Request, Response, Cookie, Query, HTTPException
+from fastapi import APIRouter, Request, Response, Cookie, Query, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -186,7 +186,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     async def login_submit(
         request: Request,
         response: Response,
-        passkey: str = Query(...),
+        passkey: str = Form(...),
     ):
         """Handle passkey login."""
         if config.passkey and passkey == config.passkey:
