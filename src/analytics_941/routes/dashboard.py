@@ -414,7 +414,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "countries": countries,
             "regions": regions,
             "cities": cities,
-            "globe_data": globe_data,
+            "globe_data": globe_data.model_dump(),
             "filters": filters,
         })
 
@@ -452,7 +452,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "countries": countries,
             "regions": regions,
             "cities": cities,
-            "globe_data": globe_data,
+            "globe_data": globe_data.model_dump(),
             "filters": filters,
         })
 

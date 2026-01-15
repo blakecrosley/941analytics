@@ -410,7 +410,7 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         filters: Optional[DashboardFilters] = None,
-    ) -> Dict[str, int]:
+    ) -> List[Dict[str, Any]]:
         """Get traffic breakdown by source type."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -418,17 +418,18 @@ class AnalyticsClient:
         results = await self._query(
             f"""
             SELECT
-                COALESCE(referrer_type, 'direct') as type,
+                COALESCE(referrer_type, 'direct') as source_type,
                 COUNT(*) as visits
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
                 AND is_bot = 0 {filter_sql}
             GROUP BY referrer_type
+            ORDER BY visits DESC
             """,
             [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
         )
 
-        return {r["type"]: r["visits"] for r in results}
+        return results
 
     # =========================================================================
     # GEOGRAPHY
