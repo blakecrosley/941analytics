@@ -113,8 +113,8 @@ class Event(BaseModel):
 
 class MetricChange(BaseModel):
     """A metric with its change from comparison period."""
-    value: int
-    previous: Optional[int] = None
+    value: float  # Can be int or float (e.g., bounce_rate, avg_duration)
+    previous: Optional[float] = None
     change_percent: Optional[float] = None
     change_direction: Optional[str] = None  # up, down, same
 
