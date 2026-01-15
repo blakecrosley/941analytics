@@ -432,12 +432,57 @@
             color: var(--muted);
         }
 
-        .htmx-request .loading-indicator {
+        /* Skeleton loading - shown via hx-indicator */
+        .skeleton {
+            display: none;
+            padding: 1.5rem;
+        }
+
+        .skeleton.htmx-request {
             display: block;
         }
 
-        .htmx-request .loading-content {
-            opacity: 0.5;
+        /* Hide content when skeleton is loading */
+        .skeleton.htmx-request + .main-content-inner {
+            display: none;
+        }
+
+        .skeleton__pulse {
+            background: linear-gradient(90deg, var(--surface) 25%, var(--surface-elevated) 50%, var(--surface) 75%);
+            background-size: 200% 100%;
+            animation: skeleton-pulse 1.5s ease-in-out infinite;
+            border-radius: var(--radius);
+        }
+
+        @keyframes skeleton-pulse {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton__stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .skeleton__stat {
+            height: 100px;
+        }
+
+        .skeleton__section {
+            height: 300px;
+            margin-bottom: 1.5rem;
+        }
+
+        .skeleton__grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .skeleton__grid { grid-template-columns: 1fr; }
         }
 
         /* Empty states */
@@ -497,6 +542,7 @@
                @click="active = 'overview'"
                hx-get="./partials/overview"
                hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
                hx-push-url="./"
                role="tab">
                 Overview
@@ -507,6 +553,7 @@
                @click="active = 'realtime'"
                hx-get="./partials/realtime"
                hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
                hx-push-url="./realtime"
                role="tab">
                 <span class="live"><span class="live__dot"></span></span>
@@ -518,6 +565,7 @@
                @click="active = 'sources'"
                hx-get="./partials/sources"
                hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
                hx-push-url="./sources"
                role="tab">
                 Sources
@@ -528,6 +576,7 @@
                @click="active = 'geography'"
                hx-get="./partials/geography"
                hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
                hx-push-url="./geography"
                role="tab">
                 Geography
@@ -538,6 +587,7 @@
                @click="active = 'technology'"
                hx-get="./partials/technology"
                hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
                hx-push-url="./technology"
                role="tab">
                 Technology
@@ -548,6 +598,7 @@
                @click="active = 'events'"
                hx-get="./partials/events"
                hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
                hx-push-url="./events"
                role="tab">
                 Events
@@ -555,8 +606,26 @@
         </nav>
 
         <!-- Main content -->
-        <main class="main" id="main-content" role="tabpanel">
-            {% block content %}{% endblock %}
+        <main class="main" role="tabpanel">
+            <!-- Skeleton loader shown via hx-indicator -->
+            <div class="skeleton" id="loading-skeleton">
+                <div class="skeleton__stats">
+                    <div class="skeleton__stat skeleton__pulse"></div>
+                    <div class="skeleton__stat skeleton__pulse"></div>
+                    <div class="skeleton__stat skeleton__pulse"></div>
+                    <div class="skeleton__stat skeleton__pulse"></div>
+                    <div class="skeleton__stat skeleton__pulse"></div>
+                </div>
+                <div class="skeleton__section skeleton__pulse"></div>
+                <div class="skeleton__grid">
+                    <div class="skeleton__section skeleton__pulse"></div>
+                    <div class="skeleton__section skeleton__pulse"></div>
+                </div>
+            </div>
+            <!-- Actual page content - this is the swap target -->
+            <div class="main-content-inner" id="main-content">
+                {% block content %}{% endblock %}
+            </div>
         </main>
     </div>
 
