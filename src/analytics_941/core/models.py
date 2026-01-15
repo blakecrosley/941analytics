@@ -201,16 +201,37 @@ class DateRange(BaseModel):
 
 
 class DashboardFilters(BaseModel):
-    """Filters applied to dashboard."""
+    """Filters applied to dashboard queries.
+
+    All filters use parameterized queries to prevent SQL injection.
+    Multiple filters are AND'd together.
+    """
     country: Optional[str] = None
     region: Optional[str] = None
+    city: Optional[str] = None
     device: Optional[str] = None
     browser: Optional[str] = None
+    os: Optional[str] = None
     source: Optional[str] = None
     source_type: Optional[str] = None
     page: Optional[str] = None
     utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
     utm_campaign: Optional[str] = None
+
+    def is_empty(self) -> bool:
+        """Check if all filters are None/empty."""
+        return all(
+            getattr(self, field) is None
+            for field in self.__class__.model_fields.keys()
+        )
+
+    def active_filters(self) -> dict[str, str]:
+        """Return dict of active (non-None) filters."""
+        return {
+            k: v for k, v in self.model_dump().items()
+            if v is not None
+        }
 
 
 class DashboardData(BaseModel):

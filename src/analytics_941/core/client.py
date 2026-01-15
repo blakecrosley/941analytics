@@ -90,6 +90,7 @@ class AnalyticsClient:
         )
 
         # Session metrics (bounce rate, avg duration)
+        session_filter_sql, session_filter_params = self._build_session_filter_sql(filters)
         session_stats = await self._query(
             f"""
             SELECT
@@ -97,9 +98,9 @@ class AnalyticsClient:
                 AVG(duration_seconds) as avg_duration
             FROM sessions
             WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
-                {self._build_session_filter_sql(filters)}
+                {session_filter_sql}
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + session_filter_params,
         )
 
         current_data = current[0] if current else {}
@@ -134,9 +135,9 @@ class AnalyticsClient:
                     AVG(duration_seconds) as avg_duration
                 FROM sessions
                 WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
-                    {self._build_session_filter_sql(filters)}
+                    {session_filter_sql}
                 """,
-                [self.site_name, compare_start.isoformat(), compare_end.isoformat()],
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + session_filter_params,
             )
             if prev:
                 prev_views = prev[0].get("views") or 0
@@ -174,34 +175,105 @@ class AnalyticsClient:
         )
 
     def _build_filter_sql(self, filters: Optional[DashboardFilters]) -> tuple[str, list]:
-        """Build SQL WHERE clauses from filters."""
+        """Build SQL WHERE clauses from filters.
+
+        Uses parameterized queries to prevent SQL injection.
+        Returns (sql_string, params_list) tuple.
+        """
         if not filters:
             return "", []
 
         clauses = []
         params = []
 
+        # Geographic filters
         if filters.country:
             clauses.append("AND country = ?")
             params.append(filters.country)
         if filters.region:
             clauses.append("AND region = ?")
             params.append(filters.region)
+        if filters.city:
+            clauses.append("AND city = ?")
+            params.append(filters.city)
+
+        # Technology filters
         if filters.device:
             clauses.append("AND device_type = ?")
             params.append(filters.device)
         if filters.browser:
             clauses.append("AND browser = ?")
             params.append(filters.browser)
+        if filters.os:
+            clauses.append("AND os = ?")
+            params.append(filters.os)
+
+        # Source filters
         if filters.source_type:
             clauses.append("AND referrer_type = ?")
             params.append(filters.source_type)
         if filters.source:
             clauses.append("AND referrer_domain = ?")
             params.append(filters.source)
+
+        # Page filter
         if filters.page:
             clauses.append("AND url = ?")
             params.append(filters.page)
+
+        # UTM filters
+        if filters.utm_source:
+            clauses.append("AND utm_source = ?")
+            params.append(filters.utm_source)
+        if filters.utm_medium:
+            clauses.append("AND utm_medium = ?")
+            params.append(filters.utm_medium)
+        if filters.utm_campaign:
+            clauses.append("AND utm_campaign = ?")
+            params.append(filters.utm_campaign)
+
+        return " ".join(clauses), params
+
+    def _build_session_filter_sql(self, filters: Optional[DashboardFilters]) -> tuple[str, list]:
+        """Build session table filter SQL with parameterized queries.
+
+        Sessions table has fewer columns than page_views, so only
+        certain filters apply.
+        """
+        if not filters:
+            return "", []
+
+        clauses = []
+        params = []
+
+        # Geographic (sessions table has country, region)
+        if filters.country:
+            clauses.append("AND country = ?")
+            params.append(filters.country)
+        if filters.region:
+            clauses.append("AND region = ?")
+            params.append(filters.region)
+
+        # Technology (sessions table has device_type, browser, os)
+        if filters.device:
+            clauses.append("AND device_type = ?")
+            params.append(filters.device)
+        if filters.browser:
+            clauses.append("AND browser = ?")
+            params.append(filters.browser)
+        if filters.os:
+            clauses.append("AND os = ?")
+            params.append(filters.os)
+
+        # Source (sessions table has referrer_type, referrer_domain)
+        if filters.source_type:
+            clauses.append("AND referrer_type = ?")
+            params.append(filters.source_type)
+        if filters.source:
+            clauses.append("AND referrer_domain = ?")
+            params.append(filters.source)
+
+        # UTM (sessions table has utm_source, utm_campaign)
         if filters.utm_source:
             clauses.append("AND utm_source = ?")
             params.append(filters.utm_source)
@@ -211,18 +283,28 @@ class AnalyticsClient:
 
         return " ".join(clauses), params
 
-    def _build_session_filter_sql(self, filters: Optional[DashboardFilters]) -> str:
-        """Build session filter SQL (simpler, no params needed for session table)."""
+    def _build_event_filter_sql(self, filters: Optional[DashboardFilters]) -> tuple[str, list]:
+        """Build event table filter SQL with parameterized queries.
+
+        Events table has limited columns: country, device_type, page_url.
+        """
         if not filters:
-            return ""
+            return "", []
 
         clauses = []
-        if filters.country:
-            clauses.append(f"AND country = '{filters.country}'")
-        if filters.device:
-            clauses.append(f"AND device_type = '{filters.device}'")
+        params = []
 
-        return " ".join(clauses)
+        if filters.country:
+            clauses.append("AND country = ?")
+            params.append(filters.country)
+        if filters.device:
+            clauses.append("AND device_type = ?")
+            params.append(filters.device)
+        if filters.page:
+            clauses.append("AND page_url = ?")
+            params.append(filters.page)
+
+        return " ".join(clauses), params
 
     # =========================================================================
     # TIME SERIES
@@ -311,22 +393,26 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[PageStats]:
         """Get top entry pages (first page of sessions)."""
 
+        filter_sql, filter_params = self._build_session_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 entry_page as url,
                 COUNT(*) as entries,
                 COUNT(DISTINCT visitor_hash) as visitors
             FROM sessions
             WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                {filter_sql}
             GROUP BY entry_page
             ORDER BY entries DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return [
@@ -339,23 +425,26 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[PageStats]:
         """Get top exit pages (last page of sessions)."""
 
+        filter_sql, filter_params = self._build_session_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 exit_page as url,
                 COUNT(*) as exits,
                 COUNT(DISTINCT visitor_hash) as visitors
             FROM sessions
             WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
-                AND exit_page IS NOT NULL
+                AND exit_page IS NOT NULL {filter_sql}
             GROUP BY exit_page
             ORDER BY exits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return [
@@ -483,11 +572,14 @@ class AnalyticsClient:
         end_date: date,
         country: str,
         limit: int = 20,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[Dict[str, Any]]:
         """Get regions/states for a specific country."""
 
+        filter_sql, filter_params = self._build_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 region,
                 COUNT(*) as visits,
@@ -496,12 +588,12 @@ class AnalyticsClient:
                 AVG(longitude) as lon
             FROM page_views
             WHERE site = ? AND country = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
-                AND is_bot = 0 AND region != '' AND region IS NOT NULL
+                AND is_bot = 0 AND region != '' AND region IS NOT NULL {filter_sql}
             GROUP BY region
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, country, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, country, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return results
@@ -513,12 +605,15 @@ class AnalyticsClient:
         country: str,
         region: Optional[str] = None,
         limit: int = 30,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[Dict[str, Any]]:
         """Get cities for a specific country/region."""
 
+        filter_sql, filter_params = self._build_filter_sql(filters)
+
         if region:
             results = await self._query(
-                """
+                f"""
                 SELECT
                     city,
                     COUNT(*) as visits,
@@ -527,16 +622,16 @@ class AnalyticsClient:
                 FROM page_views
                 WHERE site = ? AND country = ? AND region = ?
                     AND date(timestamp) >= ? AND date(timestamp) <= ?
-                    AND is_bot = 0 AND city != '' AND city IS NOT NULL
+                    AND is_bot = 0 AND city != '' AND city IS NOT NULL {filter_sql}
                 GROUP BY city
                 ORDER BY visits DESC
                 LIMIT ?
                 """,
-                [self.site_name, country, region, start_date.isoformat(), end_date.isoformat(), limit],
+                [self.site_name, country, region, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
             )
         else:
             results = await self._query(
-                """
+                f"""
                 SELECT
                     city,
                     region,
@@ -546,12 +641,12 @@ class AnalyticsClient:
                 FROM page_views
                 WHERE site = ? AND country = ?
                     AND date(timestamp) >= ? AND date(timestamp) <= ?
-                    AND is_bot = 0 AND city != '' AND city IS NOT NULL
+                    AND is_bot = 0 AND city != '' AND city IS NOT NULL {filter_sql}
                 GROUP BY city, region
                 ORDER BY visits DESC
                 LIMIT ?
                 """,
-                [self.site_name, country, start_date.isoformat(), end_date.isoformat(), limit],
+                [self.site_name, country, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
             )
 
         return results
@@ -798,13 +893,17 @@ class AnalyticsClient:
         end_date: date,
         limit: int = 20,
         event_type: Optional[str] = None,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[EventStats]:
         """Get event statistics, optionally filtered by event type."""
 
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
         type_filter = "AND event_type = ?" if event_type else ""
+
         params = [self.site_name, start_date.isoformat(), end_date.isoformat()]
         if event_type:
             params.append(event_type)
+        params.extend(filter_params)
         params.append(limit)
 
         results = await self._query(
@@ -816,7 +915,7 @@ class AnalyticsClient:
                 COUNT(DISTINCT session_id) as unique_sessions
             FROM events
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
-                {type_filter}
+                {type_filter} {filter_sql}
             GROUP BY event_name, event_type
             ORDER BY count DESC
             LIMIT ?
@@ -838,20 +937,23 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
+        filters: Optional[DashboardFilters] = None,
     ) -> Dict[str, int]:
         """Get scroll depth breakdown."""
 
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 event_name,
                 COUNT(*) as count
             FROM events
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
-                AND event_type = 'scroll'
+                AND event_type = 'scroll' {filter_sql}
             GROUP BY event_name
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
         )
 
         depths = {"25": 0, "50": 0, "75": 0, "100": 0}
@@ -867,20 +969,24 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[Dict[str, Any]]:
         """Get event type breakdown."""
 
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 event_type,
                 COUNT(*) as count
             FROM events
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                {filter_sql}
             GROUP BY event_type
             ORDER BY count DESC
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
         )
 
         return results
@@ -985,11 +1091,23 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10000,
+        filters: Optional[DashboardFilters] = None,
+        include_bots: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Export raw pageview data for CSV."""
+        """Export raw pageview data for CSV.
+
+        Args:
+            start_date: Start of date range
+            end_date: End of date range
+            limit: Maximum rows to export (default 10000)
+            filters: Optional filters to apply
+            include_bots: If True, include bot traffic (default False)
+        """
+        filter_sql, filter_params = self._build_filter_sql(filters)
+        bot_filter = "" if include_bots else "AND is_bot = 0"
 
         results = await self._query(
-            """
+            f"""
             SELECT
                 timestamp, url, page_title,
                 referrer_type, referrer_domain,
@@ -998,11 +1116,11 @@ class AnalyticsClient:
                 utm_source, utm_medium, utm_campaign
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
-                AND is_bot = 0
+                {bot_filter} {filter_sql}
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return results
@@ -1012,20 +1130,24 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10000,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[Dict[str, Any]]:
         """Export event data for CSV."""
 
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 timestamp, event_type, event_name, event_data,
                 page_url, country, device_type
             FROM events
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                {filter_sql}
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return results
