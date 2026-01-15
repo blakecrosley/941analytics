@@ -105,12 +105,12 @@ class AnalyticsClient:
         current_data = current[0] if current else {}
         session_data = session_stats[0] if session_stats else {}
 
-        views = current_data.get("views", 0)
-        visitors = current_data.get("visitors", 0)
-        sessions = current_data.get("sessions", 0)
+        views = current_data.get("views") or 0
+        visitors = current_data.get("visitors") or 0
+        sessions = current_data.get("sessions") or 0
         bounce_rate = round(session_data.get("bounce_rate", 0) or 0, 1)
         avg_duration = round(session_data.get("avg_duration", 0) or 0)
-        bot_views = current_data.get("bot_views", 0)
+        bot_views = current_data.get("bot_views") or 0
 
         # Comparison period
         prev_views = prev_visitors = prev_sessions = prev_bounce = prev_duration = None
@@ -139,9 +139,9 @@ class AnalyticsClient:
                 [self.site_name, compare_start.isoformat(), compare_end.isoformat()],
             )
             if prev:
-                prev_views = prev[0].get("views", 0)
-                prev_visitors = prev[0].get("visitors", 0)
-                prev_sessions = prev[0].get("sessions", 0)
+                prev_views = prev[0].get("views") or 0
+                prev_visitors = prev[0].get("visitors") or 0
+                prev_sessions = prev[0].get("sessions") or 0
             if prev_sess:
                 prev_bounce = round(prev_sess[0].get("bounce_rate", 0) or 0, 1)
                 prev_duration = round(prev_sess[0].get("avg_duration", 0) or 0)
