@@ -728,6 +728,155 @@ const TRANSPARENT_GIF = new Uint8Array([
 ]);
 
 // =============================================================================
+// STATS API HANDLER
+// =============================================================================
+
+interface StatsResponse {
+  site: string;
+  period: string;
+  generated_at: string;
+  summary: {
+    total_views: number;
+    unique_visitors: number;
+    sessions: number;
+    bot_views: number;
+  };
+  top_pages: Array<{ url: string; views: number }>;
+  countries: Array<{ country: string; views: number }>;
+  devices: Array<{ device_type: string; views: number }>;
+  recent_visitors: Array<{
+    url: string;
+    country: string;
+    device_type: string;
+    timestamp: string;
+    city: string;
+  }>;
+}
+
+async function handleStats(
+  url: URL,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const site = url.searchParams.get("site");
+    const period = url.searchParams.get("period") || "today";
+
+    if (!site) {
+      return new Response(JSON.stringify({ error: "Missing site parameter" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Calculate date range
+    const now = new Date();
+    let startDate: string;
+    if (period === "today") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    } else if (period === "7d") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (period === "30d") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    }
+
+    // Query real-time stats from D1
+    const statsQuery = `
+      SELECT
+        COUNT(*) as total_views,
+        COUNT(DISTINCT visitor_hash) as unique_visitors,
+        COUNT(DISTINCT session_id) as sessions,
+        SUM(CASE WHEN is_bot = 1 THEN 1 ELSE 0 END) as bot_views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ?
+    `;
+
+    const topPagesQuery = `
+      SELECT url, COUNT(*) as views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ? AND is_bot = 0
+      GROUP BY url
+      ORDER BY views DESC
+      LIMIT 10
+    `;
+
+    const countriesQuery = `
+      SELECT country, COUNT(*) as views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ? AND is_bot = 0 AND country != ''
+      GROUP BY country
+      ORDER BY views DESC
+      LIMIT 10
+    `;
+
+    const devicesQuery = `
+      SELECT device_type, COUNT(*) as views
+      FROM page_views
+      WHERE site = ? AND timestamp >= ? AND is_bot = 0
+      GROUP BY device_type
+      ORDER BY views DESC
+    `;
+
+    const recentQuery = `
+      SELECT url, country, device_type, timestamp, city
+      FROM page_views
+      WHERE site = ? AND is_bot = 0
+      ORDER BY id DESC
+      LIMIT 10
+    `;
+
+    // Execute queries in parallel
+    const [statsResult, topPagesResult, countriesResult, devicesResult, recentResult] =
+      await Promise.all([
+        env.DB.prepare(statsQuery).bind(site, startDate).first(),
+        env.DB.prepare(topPagesQuery).bind(site, startDate).all(),
+        env.DB.prepare(countriesQuery).bind(site, startDate).all(),
+        env.DB.prepare(devicesQuery).bind(site, startDate).all(),
+        env.DB.prepare(recentQuery).bind(site).all(),
+      ]);
+
+    const response: StatsResponse = {
+      site,
+      period,
+      generated_at: new Date().toISOString(),
+      summary: {
+        total_views: (statsResult?.total_views as number) || 0,
+        unique_visitors: (statsResult?.unique_visitors as number) || 0,
+        sessions: (statsResult?.sessions as number) || 0,
+        bot_views: (statsResult?.bot_views as number) || 0,
+      },
+      top_pages: (topPagesResult?.results as Array<{ url: string; views: number }>) || [],
+      countries: (countriesResult?.results as Array<{ country: string; views: number }>) || [],
+      devices: (devicesResult?.results as Array<{ device_type: string; views: number }>) || [],
+      recent_visitors:
+        (recentResult?.results as Array<{
+          url: string;
+          country: string;
+          device_type: string;
+          timestamp: string;
+          city: string;
+        }>) || [],
+    };
+
+    return new Response(JSON.stringify(response), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+      },
+    });
+  } catch (error) {
+    console.error("Stats API error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
+
+// =============================================================================
 // MAIN WORKER EXPORT
 // =============================================================================
 
@@ -745,6 +894,11 @@ export default {
     // Handle preflight
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    // Handle /stats endpoint for real-time analytics
+    if (url.pathname === "/stats" && request.method === "GET") {
+      return handleStats(url, env, corsHeaders);
     }
 
     // Only handle GET /collect
