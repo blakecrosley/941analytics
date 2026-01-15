@@ -118,131 +118,179 @@ def create_dashboard_router(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics Login - {site_name}</title>
+    <title>Analytics - {site_name}</title>
     <style>
         :root {{
-            --bg: #0a0d12;
-            --surface: #12161d;
-            --border: #1e2530;
-            --text: #e8edf3;
-            --muted: #9ba3ad;
-            --accent: #59b2cc;
-            --accent-hover: #4a9bb5;
-            --error: #e74c3c;
-            --success: #2ecc71;
+            /* Colors - True Minimal (matching blakecrosley.com) */
+            --color-bg-dark: #000000;
+            --color-bg-elevated: #111111;
+            --color-bg-surface: #1a1a1a;
+            --color-text-primary: #ffffff;
+            --color-text-secondary: rgba(255, 255, 255, 0.65);
+            --color-text-tertiary: rgba(255, 255, 255, 0.4);
+            --color-border: rgba(255, 255, 255, 0.1);
+            --color-border-hover: rgba(255, 255, 255, 0.2);
+            --color-error: #ff4444;
+            --color-success: #00ff41;
+
+            /* Typography */
+            --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+
+            /* Spacing */
+            --spacing-xs: 0.5rem;
+            --spacing-sm: 1rem;
+            --spacing-md: 1.5rem;
+            --spacing-lg: 2rem;
+            --spacing-xl: 3rem;
+
+            /* Border Radius */
+            --radius-sm: 8px;
+            --radius-md: 16px;
+            --radius-lg: 32px;
+
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }}
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        html {{
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }}
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            font-family: var(--font-family);
+            background: var(--color-bg-dark);
+            color: var(--color-text-primary);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: var(--spacing-sm);
         }}
         .login-card {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2.5rem;
+            background: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xl);
             width: 100%;
-            max-width: 360px;
+            max-width: 400px;
         }}
         h1 {{
-            font-size: 1.25rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: var(--spacing-xs);
             text-align: center;
+            letter-spacing: -0.02em;
         }}
         .subtitle {{
-            color: var(--muted);
+            color: var(--color-text-secondary);
             font-size: 0.875rem;
             text-align: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: var(--spacing-lg);
         }}
         .error {{
-            background: rgba(231, 76, 60, 0.1);
-            border: 1px solid var(--error);
-            color: var(--error);
-            padding: 0.75rem;
-            border-radius: 6px;
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid rgba(255, 68, 68, 0.3);
+            color: var(--color-error);
+            padding: var(--spacing-sm);
+            border-radius: var(--radius-sm);
             font-size: 0.875rem;
-            margin-bottom: 1rem;
+            margin-bottom: var(--spacing-sm);
             text-align: center;
         }}
         .success {{
-            background: rgba(46, 204, 113, 0.1);
-            border: 1px solid var(--success);
-            color: var(--success);
-            padding: 0.75rem;
-            border-radius: 6px;
+            background: rgba(0, 255, 65, 0.1);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            color: var(--color-success);
+            padding: var(--spacing-sm);
+            border-radius: var(--radius-sm);
             font-size: 0.875rem;
-            margin-bottom: 1rem;
+            margin-bottom: var(--spacing-sm);
             text-align: center;
         }}
         label {{
             display: block;
             font-size: 0.875rem;
-            color: var(--muted);
-            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--color-text-primary);
+            margin-bottom: var(--spacing-xs);
         }}
         input[type="password"], input[type="text"] {{
             width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text);
+            padding: var(--spacing-sm) var(--spacing-md);
+            font-family: inherit;
             font-size: 1rem;
-            margin-bottom: 1rem;
+            color: var(--color-text-primary);
+            background: var(--color-bg-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            margin-bottom: var(--spacing-md);
+            transition: border-color var(--transition-fast);
         }}
         input:focus {{
-            outline: none;
-            border-color: var(--accent);
+            outline: 2px solid var(--color-text-primary);
+            outline-offset: 2px;
+            border-color: var(--color-text-tertiary);
+        }}
+        input::placeholder {{
+            color: var(--color-text-tertiary);
         }}
         button {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--accent);
-            border: none;
-            border-radius: 6px;
-            color: var(--bg);
+            height: 48px;
+            padding: 0 var(--spacing-md);
+            font-family: inherit;
             font-size: 1rem;
             font-weight: 500;
+            color: var(--color-bg-dark);
+            background: var(--color-text-primary);
+            border: none;
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            transition: all 0.2s;
-            margin-bottom: 0.75rem;
+            transition: all 0.2s ease;
+            margin-bottom: var(--spacing-sm);
         }}
         button:hover:not(:disabled) {{
-            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);
+        }}
+        button:active:not(:disabled) {{
+            transform: translateY(0) scale(0.98);
         }}
         button:disabled {{
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
         }}
         button.secondary {{
             background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text);
+            border: 1px solid var(--color-border);
+            color: var(--color-text-primary);
         }}
         button.secondary:hover:not(:disabled) {{
-            background: var(--bg);
-            border-color: var(--accent);
+            background: var(--color-bg-surface);
+            border-color: var(--color-border-hover);
+            transform: none;
+            box-shadow: none;
         }}
         .divider {{
             display: flex;
             align-items: center;
-            gap: 1rem;
-            margin: 1.25rem 0;
-            color: var(--muted);
+            gap: var(--spacing-sm);
+            margin: var(--spacing-md) 0;
+            color: var(--color-text-tertiary);
             font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }}
         .divider::before, .divider::after {{
             content: '';
             flex: 1;
             height: 1px;
-            background: var(--border);
+            background: var(--color-border);
         }}
         .hidden {{ display: none !important; }}
         .passkey-icon {{
@@ -255,8 +303,14 @@ def create_dashboard_router(
         #status {{
             font-size: 0.875rem;
             text-align: center;
-            margin-bottom: 1rem;
+            margin-bottom: var(--spacing-sm);
             min-height: 1.5rem;
+        }}
+        @media (max-width: 480px) {{
+            .login-card {{
+                padding: var(--spacing-lg);
+                border-radius: var(--radius-md);
+            }}
         }}
     </style>
 </head>
