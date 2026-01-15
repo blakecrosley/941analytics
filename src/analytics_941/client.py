@@ -598,3 +598,183 @@ class AnalyticsClient:
             [self.site_name, start_date.isoformat()],
         )
         return result[0]["count"] > 0 if result else False
+
+    # =========================================================================
+    # AUTHENTICATION (WebAuthn Passkeys)
+    # =========================================================================
+
+    async def has_passkeys(self) -> bool:
+        """Check if any passkeys are registered for this site."""
+        result = await self._query(
+            "SELECT id FROM passkeys WHERE site = ? LIMIT 1",
+            [self.site_name],
+        )
+        return len(result) > 0
+
+    async def get_passkeys(self) -> list[dict]:
+        """Get all passkeys for this site."""
+        return await self._query(
+            """
+            SELECT id, credential_id, public_key, sign_count, device_name,
+                   created_at, last_used_at
+            FROM passkeys WHERE site = ? ORDER BY created_at DESC
+            """,
+            [self.site_name],
+        )
+
+    async def get_passkey_by_credential_id(self, credential_id: str) -> Optional[dict]:
+        """Get a passkey by its credential ID."""
+        result = await self._query(
+            """
+            SELECT id, credential_id, public_key, sign_count, device_name,
+                   created_at, last_used_at
+            FROM passkeys WHERE site = ? AND credential_id = ?
+            """,
+            [self.site_name, credential_id],
+        )
+        return result[0] if result else None
+
+    async def create_passkey(
+        self,
+        credential_id: str,
+        public_key: str,
+        sign_count: int = 0,
+        device_name: str = "Unknown Device",
+    ) -> int:
+        """Create a new passkey. Returns the passkey ID."""
+        await self._query(
+            """
+            INSERT INTO passkeys (site, credential_id, public_key, sign_count, device_name)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [self.site_name, credential_id, public_key, sign_count, device_name],
+        )
+        # Get the ID of the inserted row
+        result = await self._query(
+            "SELECT id FROM passkeys WHERE site = ? AND credential_id = ?",
+            [self.site_name, credential_id],
+        )
+        return result[0]["id"] if result else 0
+
+    async def update_passkey_sign_count(
+        self, passkey_id: int, sign_count: int
+    ) -> None:
+        """Update passkey sign count and last_used_at timestamp."""
+        await self._query(
+            """
+            UPDATE passkeys
+            SET sign_count = ?, last_used_at = datetime('now')
+            WHERE id = ? AND site = ?
+            """,
+            [sign_count, passkey_id, self.site_name],
+        )
+
+    async def delete_passkey(self, passkey_id: int) -> bool:
+        """Delete a passkey by ID. Returns True if deleted."""
+        # First check how many passkeys exist
+        count_result = await self._query(
+            "SELECT COUNT(*) as count FROM passkeys WHERE site = ?",
+            [self.site_name],
+        )
+        count = count_result[0]["count"] if count_result else 0
+
+        if count <= 1:
+            return False  # Cannot delete last passkey
+
+        await self._query(
+            "DELETE FROM passkeys WHERE id = ? AND site = ?",
+            [passkey_id, self.site_name],
+        )
+        return True
+
+    # -------------------------------------------------------------------------
+    # Session Management
+    # -------------------------------------------------------------------------
+
+    async def create_session(
+        self,
+        token_hash: str,
+        passkey_id: Optional[int] = None,
+        user_agent: str = "",
+        ip_address: str = "",
+        expires_hours: int = 168,  # 7 days
+    ) -> None:
+        """Create a new authenticated session."""
+        await self._query(
+            """
+            INSERT INTO auth_sessions (site, token_hash, passkey_id, expires_at, user_agent, ip_address)
+            VALUES (?, ?, ?, datetime('now', '+' || ? || ' hours'), ?, ?)
+            """,
+            [self.site_name, token_hash, passkey_id, expires_hours, user_agent, ip_address],
+        )
+
+    async def validate_session(self, token_hash: str) -> Optional[dict]:
+        """Validate a session token. Returns session data if valid."""
+        result = await self._query(
+            """
+            SELECT id, passkey_id, created_at, expires_at
+            FROM auth_sessions
+            WHERE site = ? AND token_hash = ? AND expires_at > datetime('now')
+            """,
+            [self.site_name, token_hash],
+        )
+        return result[0] if result else None
+
+    async def delete_session(self, token_hash: str) -> None:
+        """Delete a session (logout)."""
+        await self._query(
+            "DELETE FROM auth_sessions WHERE site = ? AND token_hash = ?",
+            [self.site_name, token_hash],
+        )
+
+    async def cleanup_expired_sessions(self) -> int:
+        """Remove expired sessions. Returns count deleted."""
+        # D1 doesn't return rowcount easily, just execute
+        await self._query(
+            "DELETE FROM auth_sessions WHERE site = ? AND expires_at <= datetime('now')",
+            [self.site_name],
+        )
+        return 0  # D1 doesn't return affected row count
+
+    # -------------------------------------------------------------------------
+    # WebAuthn Challenge Management
+    # -------------------------------------------------------------------------
+
+    async def store_challenge(self, challenge: str, challenge_type: str) -> None:
+        """Store a WebAuthn challenge (expires in 5 minutes)."""
+        # Clean up expired challenges first
+        await self._query(
+            "DELETE FROM webauthn_challenges WHERE site = ? AND expires_at <= datetime('now')",
+            [self.site_name],
+        )
+        # Store new challenge
+        await self._query(
+            """
+            INSERT INTO webauthn_challenges (site, challenge, challenge_type, expires_at)
+            VALUES (?, ?, ?, datetime('now', '+5 minutes'))
+            """,
+            [self.site_name, challenge, challenge_type],
+        )
+
+    async def consume_challenge(self, challenge_type: str) -> Optional[str]:
+        """Get and delete the most recent valid challenge. Returns challenge string or None."""
+        result = await self._query(
+            """
+            SELECT id, challenge FROM webauthn_challenges
+            WHERE site = ? AND challenge_type = ? AND expires_at > datetime('now')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            [self.site_name, challenge_type],
+        )
+        if not result:
+            return None
+
+        challenge = result[0]["challenge"]
+        challenge_id = result[0]["id"]
+
+        # Delete the consumed challenge
+        await self._query(
+            "DELETE FROM webauthn_challenges WHERE id = ?",
+            [challenge_id],
+        )
+        return challenge

@@ -1,13 +1,34 @@
 """FastAPI routes for the analytics dashboard."""
 
+import base64
 import hashlib
+import json
 import os
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Request, Form, Response, Cookie
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+
+from webauthn import (
+    generate_registration_options,
+    verify_registration_response,
+    generate_authentication_options,
+    verify_authentication_response,
+    options_to_json,
+)
+from webauthn.helpers import (
+    bytes_to_base64url,
+    base64url_to_bytes,
+)
+from webauthn.helpers.structs import (
+    AuthenticatorSelectionCriteria,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+    PublicKeyCredentialDescriptor,
+    AuthenticatorTransport,
+)
 
 from .client import AnalyticsClient
 
@@ -32,7 +53,9 @@ def _verify_auth(auth_cookie: Optional[str], expected_hash: str) -> bool:
 def create_dashboard_router(
     client: AnalyticsClient,
     site_name: str,
-    passkey: Optional[str] = None
+    passkey: Optional[str] = None,
+    rp_id: Optional[str] = None,
+    rp_origin: Optional[str] = None,
 ) -> APIRouter:
     """Create a FastAPI router for the analytics dashboard.
 
@@ -41,6 +64,10 @@ def create_dashboard_router(
         site_name: The site name for the dashboard title
         passkey: Optional passkey to protect the dashboard. If set, users must
                  enter this passkey to access the dashboard.
+        rp_id: WebAuthn Relying Party ID (domain name, e.g., "example.com").
+               Required for passkey/WebAuthn authentication.
+        rp_origin: WebAuthn Relying Party origin (full URL, e.g., "https://example.com").
+                   Required for passkey/WebAuthn authentication.
     """
     router = APIRouter(tags=["analytics"])
 
@@ -82,8 +109,9 @@ def create_dashboard_router(
             </div>
         '''
 
-    def _render_login_page(error: str = "") -> str:
-        """Render the login page HTML."""
+    def _render_login_page(error: str = "", show_register: bool = False) -> str:
+        """Render the login page HTML with WebAuthn support."""
+        webauthn_enabled = bool(rp_id and rp_origin)
         return f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -99,7 +127,9 @@ def create_dashboard_router(
             --text: #e8edf3;
             --muted: #9ba3ad;
             --accent: #59b2cc;
+            --accent-hover: #4a9bb5;
             --error: #e74c3c;
+            --success: #2ecc71;
         }}
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
@@ -141,13 +171,23 @@ def create_dashboard_router(
             margin-bottom: 1rem;
             text-align: center;
         }}
+        .success {{
+            background: rgba(46, 204, 113, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }}
         label {{
             display: block;
             font-size: 0.875rem;
             color: var(--muted);
             margin-bottom: 0.5rem;
         }}
-        input[type="password"] {{
+        input[type="password"], input[type="text"] {{
             width: 100%;
             padding: 0.75rem 1rem;
             background: var(--bg);
@@ -155,9 +195,9 @@ def create_dashboard_router(
             border-radius: 6px;
             color: var(--text);
             font-size: 1rem;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }}
-        input[type="password"]:focus {{
+        input:focus {{
             outline: none;
             border-color: var(--accent);
         }}
@@ -171,10 +211,52 @@ def create_dashboard_router(
             font-size: 1rem;
             font-weight: 500;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: all 0.2s;
+            margin-bottom: 0.75rem;
         }}
-        button:hover {{
-            opacity: 0.9;
+        button:hover:not(:disabled) {{
+            background: var(--accent-hover);
+        }}
+        button:disabled {{
+            opacity: 0.6;
+            cursor: not-allowed;
+        }}
+        button.secondary {{
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }}
+        button.secondary:hover:not(:disabled) {{
+            background: var(--bg);
+            border-color: var(--accent);
+        }}
+        .divider {{
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 1.25rem 0;
+            color: var(--muted);
+            font-size: 0.75rem;
+        }}
+        .divider::before, .divider::after {{
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }}
+        .hidden {{ display: none !important; }}
+        .passkey-icon {{
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }}
+        #status {{
+            font-size: 0.875rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            min-height: 1.5rem;
         }}
     </style>
 </head>
@@ -182,24 +264,270 @@ def create_dashboard_router(
     <div class="login-card">
         <h1>Analytics</h1>
         <p class="subtitle">{site_name}</p>
+
+        <div id="status"></div>
         {f'<div class="error">{error}</div>' if error else ''}
-        <form method="POST" action="login">
-            <label for="passkey">Passkey</label>
-            <input type="password" id="passkey" name="passkey" placeholder="Enter passkey" autofocus required>
+
+        <!-- WebAuthn Login Section (shown when passkeys exist) -->
+        <div id="webauthn-login" class="hidden">
+            <button type="button" id="btn-passkey-login" onclick="loginWithPasskey()">
+                <svg class="passkey-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                </svg>
+                Sign in with Passkey
+            </button>
+            <div class="divider">or use password</div>
+        </div>
+
+        <!-- Simple Passkey Form (fallback) -->
+        <form id="password-form" method="POST" action="login">
+            <label for="passkey">Password</label>
+            <input type="password" id="passkey" name="passkey" placeholder="Enter password" autofocus required>
             <button type="submit">Access Dashboard</button>
         </form>
+
+        <!-- WebAuthn Registration Section (shown after password login) -->
+        <div id="webauthn-register" class="{'hidden' if not show_register else ''}">
+            <div class="divider">Set up biometric login</div>
+            <label for="device-name">Device Name</label>
+            <input type="text" id="device-name" placeholder="e.g., MacBook Pro, iPhone" value="">
+            <button type="button" id="btn-register" onclick="registerPasskey()">
+                <svg class="passkey-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 4v16m8-8H4"/>
+                </svg>
+                Register Passkey
+            </button>
+            <button type="button" class="secondary" onclick="window.location.href='./'">
+                Skip for now
+            </button>
+        </div>
     </div>
+
+    <script>
+        const WEBAUTHN_ENABLED = {'true' if webauthn_enabled else 'false'};
+        const AUTH_COOKIE = '{AUTH_COOKIE_NAME}';
+
+        // Check browser support
+        const webauthnSupported = window.PublicKeyCredential !== undefined;
+
+        // Helper to show status messages
+        function showStatus(msg, isError = false) {{
+            const el = document.getElementById('status');
+            el.textContent = msg;
+            el.className = isError ? 'error' : 'success';
+            if (!msg) el.className = '';
+        }}
+
+        // Base64URL encoding/decoding helpers
+        function base64UrlToBuffer(base64url) {{
+            const padding = '='.repeat((4 - base64url.length % 4) % 4);
+            const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/') + padding;
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes.buffer;
+        }}
+
+        function bufferToBase64Url(buffer) {{
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+            return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');
+        }}
+
+        // Check if passkeys are registered and update UI
+        async function checkPasskeys() {{
+            if (!WEBAUTHN_ENABLED || !webauthnSupported) return;
+
+            try {{
+                const resp = await fetch('auth/has-passkeys');
+                const data = await resp.json();
+
+                if (data.has_passkeys) {{
+                    // Show passkey login button
+                    document.getElementById('webauthn-login').classList.remove('hidden');
+                    // Auto-trigger passkey login on page load
+                    setTimeout(() => loginWithPasskey(), 500);
+                }}
+            }} catch (e) {{
+                console.error('Failed to check passkeys:', e);
+            }}
+        }}
+
+        // Login with WebAuthn passkey
+        async function loginWithPasskey() {{
+            if (!webauthnSupported) {{
+                showStatus('WebAuthn not supported in this browser', true);
+                return;
+            }}
+
+            const btn = document.getElementById('btn-passkey-login');
+            btn.disabled = true;
+            showStatus('Requesting passkey...');
+
+            try {{
+                // Get authentication options
+                const optResp = await fetch('auth/login/options', {{ method: 'POST' }});
+                if (!optResp.ok) {{
+                    const err = await optResp.json();
+                    throw new Error(err.error || 'Failed to get options');
+                }}
+                const options = await optResp.json();
+
+                // Transform options for WebAuthn API
+                options.challenge = base64UrlToBuffer(options.challenge);
+                if (options.allowCredentials) {{
+                    options.allowCredentials = options.allowCredentials.map(c => ({{
+                        ...c,
+                        id: base64UrlToBuffer(c.id)
+                    }}));
+                }}
+
+                // Prompt for passkey
+                showStatus('Touch your passkey...');
+                const credential = await navigator.credentials.get({{ publicKey: options }});
+
+                // Prepare credential for server
+                const credentialJSON = {{
+                    id: credential.id,
+                    rawId: bufferToBase64Url(credential.rawId),
+                    type: credential.type,
+                    response: {{
+                        clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+                        authenticatorData: bufferToBase64Url(credential.response.authenticatorData),
+                        signature: bufferToBase64Url(credential.response.signature),
+                        userHandle: credential.response.userHandle ?
+                            bufferToBase64Url(credential.response.userHandle) : null
+                    }}
+                }};
+
+                // Verify with server
+                showStatus('Verifying...');
+                const verifyResp = await fetch('auth/login/verify', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ credential: credentialJSON }})
+                }});
+
+                if (!verifyResp.ok) {{
+                    const err = await verifyResp.json();
+                    throw new Error(err.error || 'Verification failed');
+                }}
+
+                const result = await verifyResp.json();
+
+                // Set auth cookie and redirect
+                document.cookie = `${{AUTH_COOKIE}}=${{result.token}}; path=/; max-age=${{60*60*24*30}}; SameSite=Lax`;
+                showStatus('Success! Redirecting...');
+                window.location.href = './';
+
+            }} catch (e) {{
+                console.error('Passkey login failed:', e);
+                if (e.name === 'NotAllowedError') {{
+                    showStatus('Passkey authentication was cancelled', true);
+                }} else {{
+                    showStatus(e.message || 'Login failed', true);
+                }}
+                btn.disabled = false;
+            }}
+        }}
+
+        // Register new passkey
+        async function registerPasskey() {{
+            if (!webauthnSupported) {{
+                showStatus('WebAuthn not supported in this browser', true);
+                return;
+            }}
+
+            const btn = document.getElementById('btn-register');
+            btn.disabled = true;
+
+            const deviceName = document.getElementById('device-name').value.trim() ||
+                (navigator.platform || 'Unknown Device');
+
+            showStatus('Starting registration...');
+
+            try {{
+                // Get registration options
+                const optResp = await fetch('auth/register/options', {{ method: 'POST' }});
+                if (!optResp.ok) {{
+                    const err = await optResp.json();
+                    throw new Error(err.error || 'Failed to get options');
+                }}
+                const options = await optResp.json();
+
+                // Transform options for WebAuthn API
+                options.challenge = base64UrlToBuffer(options.challenge);
+                options.user.id = base64UrlToBuffer(options.user.id);
+                if (options.excludeCredentials) {{
+                    options.excludeCredentials = options.excludeCredentials.map(c => ({{
+                        ...c,
+                        id: base64UrlToBuffer(c.id)
+                    }}));
+                }}
+
+                // Prompt for passkey creation
+                showStatus('Create your passkey...');
+                const credential = await navigator.credentials.create({{ publicKey: options }});
+
+                // Prepare credential for server
+                const credentialJSON = {{
+                    id: credential.id,
+                    rawId: bufferToBase64Url(credential.rawId),
+                    type: credential.type,
+                    response: {{
+                        clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+                        attestationObject: bufferToBase64Url(credential.response.attestationObject)
+                    }}
+                }};
+
+                // Verify with server
+                showStatus('Registering passkey...');
+                const verifyResp = await fetch('auth/register/verify', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        credential: credentialJSON,
+                        device_name: deviceName
+                    }})
+                }});
+
+                if (!verifyResp.ok) {{
+                    const err = await verifyResp.json();
+                    throw new Error(err.error || 'Registration failed');
+                }}
+
+                showStatus('Passkey registered successfully!');
+                setTimeout(() => window.location.href = './', 1500);
+
+            }} catch (e) {{
+                console.error('Passkey registration failed:', e);
+                if (e.name === 'NotAllowedError') {{
+                    showStatus('Passkey creation was cancelled', true);
+                }} else if (e.name === 'InvalidStateError') {{
+                    showStatus('A passkey already exists for this device', true);
+                }} else {{
+                    showStatus(e.message || 'Registration failed', true);
+                }}
+                btn.disabled = false;
+            }}
+        }}
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', checkPasskeys);
+    </script>
 </body>
 </html>
 """
 
     @router.get("/login", response_class=HTMLResponse)
-    async def login_page(error: str = ""):
+    async def login_page(error: str = "", setup: str = ""):
         """Show the login page."""
         if not passkey:
             # No passkey configured, redirect to dashboard
             return RedirectResponse(url="./", status_code=302)
-        return HTMLResponse(content=_render_login_page(error))
+        show_register = setup == "1" and bool(rp_id and rp_origin)
+        return HTMLResponse(content=_render_login_page(error, show_register=show_register))
 
     @router.post("/login")
     async def login_submit(
@@ -211,10 +539,28 @@ def create_dashboard_router(
             return RedirectResponse(url="./", status_code=302)
 
         if passkey_input == passkey:
-            # Valid passkey - set auth cookie and redirect
-            redirect = RedirectResponse(url="./", status_code=302)
+            # Valid passkey - set auth cookie
             # Only set Secure flag on HTTPS (production)
             is_secure = request.url.scheme == "https"
+
+            # Check if WebAuthn is enabled but no passkeys registered
+            if rp_id and rp_origin:
+                has_passkeys = await client.has_passkeys()
+                if not has_passkeys:
+                    # Redirect to login with setup flag to show registration UI
+                    redirect = RedirectResponse(url="./login?setup=1", status_code=302)
+                    redirect.set_cookie(
+                        key=AUTH_COOKIE_NAME,
+                        value=expected_hash,
+                        max_age=AUTH_COOKIE_MAX_AGE,
+                        httponly=True,
+                        secure=is_secure,
+                        samesite="lax"
+                    )
+                    return redirect
+
+            # Normal redirect to dashboard
+            redirect = RedirectResponse(url="./", status_code=302)
             redirect.set_cookie(
                 key=AUTH_COOKIE_NAME,
                 value=expected_hash,
@@ -238,6 +584,293 @@ def create_dashboard_router(
         redirect.delete_cookie(key=AUTH_COOKIE_NAME)
         return redirect
 
+    # =========================================================================
+    # WebAuthn Passkey Endpoints
+    # =========================================================================
+
+    @router.get("/auth/has-passkeys")
+    async def check_has_passkeys():
+        """Check if any passkeys are registered for this site."""
+        if not rp_id or not rp_origin:
+            return JSONResponse({"has_passkeys": False, "webauthn_enabled": False})
+
+        has_passkeys = await client.has_passkeys()
+        return JSONResponse({"has_passkeys": has_passkeys, "webauthn_enabled": True})
+
+    @router.post("/auth/register/options")
+    async def webauthn_register_options(
+        request: Request,
+        analytics_auth: Optional[str] = Cookie(None)
+    ):
+        """Generate WebAuthn registration options.
+
+        Requires existing authentication (simple passkey) for first-time setup,
+        OR an existing WebAuthn passkey session for adding additional passkeys.
+        """
+        if not rp_id or not rp_origin:
+            return JSONResponse(
+                {"error": "WebAuthn not configured"},
+                status_code=400
+            )
+
+        # Must be authenticated to register passkeys
+        if passkey and not _verify_auth(analytics_auth, expected_hash):
+            # Check if they have a valid WebAuthn session
+            session = await client.validate_session(analytics_auth or "")
+            if not session:
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        # Generate registration options
+        options = generate_registration_options(
+            rp_id=rp_id,
+            rp_name=f"{site_name} Analytics",
+            user_id=site_name.encode(),
+            user_name=f"admin@{site_name}",
+            user_display_name=f"{site_name} Admin",
+            authenticator_selection=AuthenticatorSelectionCriteria(
+                resident_key=ResidentKeyRequirement.PREFERRED,
+                user_verification=UserVerificationRequirement.PREFERRED,
+            ),
+        )
+
+        # Store challenge for verification
+        await client.store_challenge(
+            bytes_to_base64url(options.challenge),
+            "registration"
+        )
+
+        return JSONResponse(json.loads(options_to_json(options)))
+
+    @router.post("/auth/register/verify")
+    async def webauthn_register_verify(request: Request):
+        """Verify WebAuthn registration response and store credential."""
+        if not rp_id or not rp_origin:
+            return JSONResponse(
+                {"error": "WebAuthn not configured"},
+                status_code=400
+            )
+
+        body = await request.json()
+        credential = body.get("credential")
+        device_name = body.get("device_name", "Unknown Device")
+
+        if not credential:
+            return JSONResponse({"error": "Missing credential"}, status_code=400)
+
+        # Get stored challenge
+        challenge_b64 = await client.consume_challenge("registration")
+        if not challenge_b64:
+            return JSONResponse(
+                {"error": "Challenge expired or not found"},
+                status_code=400
+            )
+
+        try:
+            # Verify the registration response
+            verification = verify_registration_response(
+                credential=credential,
+                expected_challenge=base64url_to_bytes(challenge_b64),
+                expected_rp_id=rp_id,
+                expected_origin=rp_origin,
+            )
+
+            # Store the passkey
+            await client.create_passkey(
+                credential_id=bytes_to_base64url(verification.credential_id),
+                public_key=bytes_to_base64url(verification.credential_public_key),
+                sign_count=verification.sign_count,
+                device_name=device_name,
+            )
+
+            return JSONResponse({"status": "ok", "device_name": device_name})
+
+        except Exception as e:
+            return JSONResponse(
+                {"error": f"Registration failed: {str(e)}"},
+                status_code=400
+            )
+
+    @router.post("/auth/login/options")
+    async def webauthn_login_options():
+        """Generate WebAuthn authentication options."""
+        if not rp_id or not rp_origin:
+            return JSONResponse(
+                {"error": "WebAuthn not configured"},
+                status_code=400
+            )
+
+        # Get existing passkeys for this site
+        passkeys = await client.get_passkeys()
+
+        if not passkeys:
+            return JSONResponse(
+                {"error": "No passkeys registered"},
+                status_code=400
+            )
+
+        # Build credential descriptors
+        allow_credentials = [
+            PublicKeyCredentialDescriptor(
+                id=base64url_to_bytes(pk["credential_id"]),
+                transports=[
+                    AuthenticatorTransport.INTERNAL,
+                    AuthenticatorTransport.HYBRID,
+                ],
+            )
+            for pk in passkeys
+        ]
+
+        # Generate authentication options
+        options = generate_authentication_options(
+            rp_id=rp_id,
+            allow_credentials=allow_credentials,
+            user_verification=UserVerificationRequirement.PREFERRED,
+        )
+
+        # Store challenge for verification
+        await client.store_challenge(
+            bytes_to_base64url(options.challenge),
+            "authentication"
+        )
+
+        return JSONResponse(json.loads(options_to_json(options)))
+
+    @router.post("/auth/login/verify")
+    async def webauthn_login_verify(request: Request):
+        """Verify WebAuthn authentication response and create session."""
+        if not rp_id or not rp_origin:
+            return JSONResponse(
+                {"error": "WebAuthn not configured"},
+                status_code=400
+            )
+
+        body = await request.json()
+        credential = body.get("credential")
+
+        if not credential:
+            return JSONResponse({"error": "Missing credential"}, status_code=400)
+
+        # Get stored challenge
+        challenge_b64 = await client.consume_challenge("authentication")
+        if not challenge_b64:
+            return JSONResponse(
+                {"error": "Challenge expired or not found"},
+                status_code=400
+            )
+
+        # Find the passkey by credential ID
+        credential_id_b64 = credential.get("id", "")
+        stored_passkey = await client.get_passkey_by_credential_id(credential_id_b64)
+
+        if not stored_passkey:
+            return JSONResponse({"error": "Unknown credential"}, status_code=400)
+
+        try:
+            # Verify the authentication response
+            verification = verify_authentication_response(
+                credential=credential,
+                expected_challenge=base64url_to_bytes(challenge_b64),
+                expected_rp_id=rp_id,
+                expected_origin=rp_origin,
+                credential_public_key=base64url_to_bytes(stored_passkey["public_key"]),
+                credential_current_sign_count=stored_passkey["sign_count"],
+            )
+
+            # Update sign count
+            await client.update_passkey_sign_count(
+                stored_passkey["id"],
+                verification.new_sign_count
+            )
+
+            # Create session token
+            session_token = secrets.token_hex(32)
+            token_hash = hashlib.sha256(session_token.encode()).hexdigest()
+
+            # Store session
+            await client.create_session(
+                token_hash=token_hash,
+                passkey_id=stored_passkey["id"],
+                user_agent=request.headers.get("user-agent", ""),
+                ip_address=request.client.host if request.client else "",
+            )
+
+            # Return token (client will set as cookie)
+            return JSONResponse({
+                "status": "ok",
+                "token": token_hash,
+                "device_name": stored_passkey.get("device_name", "Unknown"),
+            })
+
+        except Exception as e:
+            return JSONResponse(
+                {"error": f"Authentication failed: {str(e)}"},
+                status_code=400
+            )
+
+    @router.get("/auth/passkeys")
+    async def list_passkeys(analytics_auth: Optional[str] = Cookie(None)):
+        """List registered passkeys for management."""
+        # Must be authenticated
+        if passkey and not _verify_auth(analytics_auth, expected_hash):
+            session = await client.validate_session(analytics_auth or "")
+            if not session:
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        passkeys = await client.get_passkeys()
+        # Don't expose public keys
+        safe_passkeys = [
+            {
+                "id": pk["id"],
+                "device_name": pk.get("device_name", "Unknown"),
+                "created_at": pk.get("created_at"),
+                "last_used_at": pk.get("last_used_at"),
+            }
+            for pk in passkeys
+        ]
+        return JSONResponse({"passkeys": safe_passkeys})
+
+    @router.delete("/auth/passkeys/{passkey_id}")
+    async def delete_passkey_endpoint(
+        passkey_id: int,
+        analytics_auth: Optional[str] = Cookie(None)
+    ):
+        """Delete a registered passkey."""
+        # Must be authenticated
+        if passkey and not _verify_auth(analytics_auth, expected_hash):
+            session = await client.validate_session(analytics_auth or "")
+            if not session:
+                return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        # Check if this is the last passkey
+        passkeys = await client.get_passkeys()
+        if len(passkeys) <= 1:
+            return JSONResponse(
+                {"error": "Cannot delete the last passkey"},
+                status_code=400
+            )
+
+        success = await client.delete_passkey(passkey_id)
+        if success:
+            return JSONResponse({"status": "ok"})
+        return JSONResponse({"error": "Passkey not found"}, status_code=404)
+
+    async def _check_auth(analytics_auth: Optional[str]) -> bool:
+        """Check if the user is authenticated via simple passkey or WebAuthn session."""
+        if not passkey:
+            return True  # No auth configured
+
+        # Check simple passkey hash
+        if _verify_auth(analytics_auth, expected_hash):
+            return True
+
+        # Check WebAuthn session
+        if analytics_auth and rp_id and rp_origin:
+            session = await client.validate_session(analytics_auth)
+            if session:
+                return True
+
+        return False
+
     @router.get("", response_class=HTMLResponse)
     @router.get("/", response_class=HTMLResponse)
     async def dashboard(
@@ -247,7 +880,7 @@ def create_dashboard_router(
     ):
         """Render the analytics dashboard."""
         # Check auth if passkey is configured
-        if passkey and not _verify_auth(analytics_auth, expected_hash):
+        if not await _check_auth(analytics_auth):
             # Use path from current URL to construct proper relative redirect
             base_path = str(request.url.path).rstrip("/")
             return RedirectResponse(url=f"{base_path}/login", status_code=302)
@@ -1883,7 +2516,7 @@ def create_dashboard_router(
         analytics_auth: Optional[str] = Cookie(None)
     ):
         """API endpoint for dashboard data."""
-        if passkey and not _verify_auth(analytics_auth, expected_hash):
+        if not await _check_auth(analytics_auth):
             return {"error": "unauthorized"}, 401
 
         data = await client.get_dashboard_data(period)
@@ -1892,7 +2525,7 @@ def create_dashboard_router(
     @router.get("/api/realtime", response_class=HTMLResponse)
     async def api_realtime(analytics_auth: Optional[str] = Cookie(None)):
         """Get realtime visitor count (last 5 minutes) - returns HTML for HTMX."""
-        if passkey and not _verify_auth(analytics_auth, expected_hash):
+        if not await _check_auth(analytics_auth):
             return HTMLResponse(content="<span>-</span>", status_code=401)
 
         count = await client.get_realtime_count()

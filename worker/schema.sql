@@ -89,3 +89,51 @@ CREATE TABLE IF NOT EXISTS daily_stats (
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_site_date ON daily_stats(site, date);
+
+-- =============================================================================
+-- AUTHENTICATION TABLES (WebAuthn Passkeys)
+-- =============================================================================
+
+-- Passkeys (WebAuthn credentials)
+CREATE TABLE IF NOT EXISTS passkeys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,                     -- Which site this passkey belongs to
+    credential_id TEXT NOT NULL UNIQUE,     -- Base64URL encoded credential ID
+    public_key TEXT NOT NULL,               -- Base64URL encoded public key
+    sign_count INTEGER DEFAULT 0,           -- Replay protection counter
+    device_name TEXT DEFAULT 'Unknown Device',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_passkeys_site ON passkeys(site);
+CREATE INDEX IF NOT EXISTS idx_passkeys_credential ON passkeys(credential_id);
+
+-- Authenticated sessions
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,        -- SHA-256 hash of session token
+    passkey_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    user_agent TEXT DEFAULT '',
+    ip_address TEXT DEFAULT '',
+    FOREIGN KEY (passkey_id) REFERENCES passkeys(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON auth_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_sessions_site ON auth_sessions(site);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON auth_sessions(expires_at);
+
+-- WebAuthn challenges (temporary, single-use)
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    challenge TEXT NOT NULL UNIQUE,         -- Base64URL encoded challenge
+    challenge_type TEXT NOT NULL,           -- 'registration' or 'authentication'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_challenges_site_type ON webauthn_challenges(site, challenge_type);

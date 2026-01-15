@@ -37,10 +37,14 @@ class Analytics:
         cf_account_id: str,
         cf_api_token: str,
         passkey: str = None,
+        rp_id: str = None,
+        rp_origin: str = None,
     ):
         self.site_name = site_name
         self.worker_url = worker_url
         self.passkey = passkey
+        self.rp_id = rp_id
+        self.rp_origin = rp_origin
         self.client = AnalyticsClient(
             d1_database_id=d1_database_id,
             cf_account_id=cf_account_id,
@@ -48,7 +52,11 @@ class Analytics:
             site_name=site_name,
         )
         self.dashboard_router = create_dashboard_router(
-            self.client, site_name, passkey=passkey
+            self.client,
+            site_name,
+            passkey=passkey,
+            rp_id=rp_id,
+            rp_origin=rp_origin,
         )
 
     def tracking_script(self) -> str:
@@ -115,6 +123,8 @@ def setup_analytics(
     cf_account_id: str,
     cf_api_token: str,
     passkey: str = None,
+    rp_id: str = None,
+    rp_origin: str = None,
 ) -> Analytics:
     """
     Set up analytics for a site.
@@ -127,6 +137,10 @@ def setup_analytics(
         cf_api_token: Cloudflare API token with D1 read access
         passkey: Optional passkey to protect the dashboard. If set, users must
                  enter this passkey to access analytics.
+        rp_id: WebAuthn Relying Party ID (domain name, e.g., "example.com").
+               Required for passkey/biometric authentication.
+        rp_origin: WebAuthn Relying Party origin (full URL, e.g., "https://example.com").
+                   Required for passkey/biometric authentication.
 
     Returns:
         Analytics instance with dashboard_router and tracking_script()
@@ -138,4 +152,6 @@ def setup_analytics(
         cf_account_id=cf_account_id,
         cf_api_token=cf_api_token,
         passkey=passkey,
+        rp_id=rp_id,
+        rp_origin=rp_origin,
     )
