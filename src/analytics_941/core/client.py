@@ -478,9 +478,9 @@ class AnalyticsClient:
 
     async def get_regions(
         self,
-        country: str,
         start_date: date,
         end_date: date,
+        country: str,
         limit: int = 20,
     ) -> List[Dict[str, Any]]:
         """Get regions/states for a specific country."""
@@ -507,10 +507,10 @@ class AnalyticsClient:
 
     async def get_cities(
         self,
-        country: str,
-        region: Optional[str],
         start_date: date,
         end_date: date,
+        country: str,
+        region: Optional[str] = None,
         limit: int = 30,
     ) -> List[Dict[str, Any]]:
         """Get cities for a specific country/region."""
@@ -559,11 +559,14 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
+        filters: Optional[DashboardFilters] = None,
     ) -> GlobeData:
         """Get data for the 3D globe visualization."""
 
+        filter_sql, filter_params = self._build_filter_sql(filters)
+
         countries = await self._query(
-            """
+            f"""
             SELECT
                 country as code,
                 COUNT(*) as visits,
@@ -571,11 +574,11 @@ class AnalyticsClient:
                 AVG(longitude) as lon
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
-                AND is_bot = 0 AND country != ''
+                AND is_bot = 0 AND country != '' {filter_sql}
             GROUP BY country
             ORDER BY visits DESC
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
         )
 
         names = self._get_country_names()
@@ -1031,11 +1034,14 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[Dict[str, Any]]:
         """Get UTM source breakdown."""
 
+        filter_sql, filter_params = self._build_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 utm_source as source,
                 utm_medium as medium,
@@ -1044,11 +1050,12 @@ class AnalyticsClient:
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
                 AND is_bot = 0 AND utm_source != '' AND utm_source IS NOT NULL
+                {filter_sql}
             GROUP BY utm_source, utm_medium
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return results
@@ -1058,11 +1065,14 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[Dict[str, Any]]:
         """Get UTM campaign breakdown."""
 
+        filter_sql, filter_params = self._build_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 utm_campaign as campaign,
                 utm_source as source,
@@ -1071,11 +1081,12 @@ class AnalyticsClient:
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
                 AND is_bot = 0 AND utm_campaign != '' AND utm_campaign IS NOT NULL
+                {filter_sql}
             GROUP BY utm_campaign, utm_source
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return results
