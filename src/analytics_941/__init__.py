@@ -18,46 +18,28 @@ Usage:
     # In templates: {{ analytics.tracking_script() }}
 """
 
-from .client import AnalyticsClient
+from .config import AnalyticsConfig
+from .core import AnalyticsClient
 from .routes import create_dashboard_router
-from .models import PageView, DailyStats
 
 __version__ = "0.3.0"
-__all__ = ["setup_analytics", "AnalyticsClient", "PageView", "DailyStats"]
+__all__ = ["setup_analytics", "AnalyticsClient", "AnalyticsConfig"]
 
 
 class Analytics:
     """Main analytics interface for a site."""
 
-    def __init__(
-        self,
-        site_name: str,
-        worker_url: str,
-        d1_database_id: str,
-        cf_account_id: str,
-        cf_api_token: str,
-        passkey: str = None,
-        rp_id: str = None,
-        rp_origin: str = None,
-    ):
-        self.site_name = site_name
-        self.worker_url = worker_url
-        self.passkey = passkey
-        self.rp_id = rp_id
-        self.rp_origin = rp_origin
+    def __init__(self, config: AnalyticsConfig):
+        self.config = config
+        self.site_name = config.site_name
+        self.worker_url = config.worker_url
         self.client = AnalyticsClient(
-            d1_database_id=d1_database_id,
-            cf_account_id=cf_account_id,
-            cf_api_token=cf_api_token,
-            site_name=site_name,
+            d1_database_id=config.d1_database_id,
+            cf_account_id=config.cf_account_id,
+            cf_api_token=config.cf_api_token,
+            site_name=config.site_name,
         )
-        self.dashboard_router = create_dashboard_router(
-            self.client,
-            site_name,
-            passkey=passkey,
-            rp_id=rp_id,
-            rp_origin=rp_origin,
-        )
+        self.dashboard_router = create_dashboard_router(config)
 
     def tracking_script(self) -> str:
         """Generate the tracking script HTML for templates.
@@ -103,7 +85,7 @@ def setup_analytics(
     Returns:
         Analytics instance with dashboard_router and tracking_script()
     """
-    return Analytics(
+    config = AnalyticsConfig(
         site_name=site_name,
         worker_url=worker_url,
         d1_database_id=d1_database_id,
@@ -113,3 +95,4 @@ def setup_analytics(
         rp_id=rp_id,
         rp_origin=rp_origin,
     )
+    return Analytics(config)
