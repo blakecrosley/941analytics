@@ -734,22 +734,26 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
+        filters: Optional[DashboardFilters] = None,
     ) -> List[Dict[str, Any]]:
         """Get language breakdown."""
 
+        filter_sql, filter_params = self._build_filter_sql(filters)
+
         results = await self._query(
-            """
+            f"""
             SELECT
                 language,
                 COUNT(*) as visits
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
                 AND is_bot = 0 AND language != '' AND language IS NOT NULL
+                {filter_sql}
             GROUP BY language
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat(), limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
         return results
