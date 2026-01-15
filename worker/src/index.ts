@@ -717,6 +717,64 @@ async function handleScheduled(env: Env): Promise<void> {
 }
 
 // =============================================================================
+// TRACKING SCRIPT (served at /track.js)
+// =============================================================================
+
+const TRACKING_SCRIPT = `
+(function() {
+  'use strict';
+
+  // Get script element and config
+  var s = document.currentScript;
+  var endpoint = s?.getAttribute('data-endpoint') || '';
+  var site = s?.getAttribute('data-site') || '';
+
+  if (!endpoint || !site) return;
+
+  // Send pageview
+  function track(extra) {
+    var params = new URLSearchParams({
+      site: site,
+      url: window.location.href,
+      title: document.title || '',
+      ref: document.referrer || '',
+      w: String(window.innerWidth || 0)
+    });
+
+    // Add any extra params
+    if (extra) {
+      for (var k in extra) params.set(k, extra[k]);
+    }
+
+    // Use image beacon for reliability
+    var img = new Image();
+    img.src = endpoint + '?' + params.toString();
+  }
+
+  // Track initial pageview
+  if (document.readyState === 'complete') {
+    track();
+  } else {
+    window.addEventListener('load', function() { track(); });
+  }
+
+  // Handle SPA navigation (History API)
+  var pushState = history.pushState;
+  history.pushState = function() {
+    pushState.apply(history, arguments);
+    setTimeout(track, 100);
+  };
+
+  window.addEventListener('popstate', function() {
+    setTimeout(track, 100);
+  });
+
+  // Expose for manual tracking
+  window._941 = { track: track };
+})();
+`;
+
+// =============================================================================
 // 1x1 TRANSPARENT GIF
 // =============================================================================
 
@@ -894,6 +952,17 @@ export default {
     // Handle preflight
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    // Serve tracking script
+    if (url.pathname === "/track.js" && request.method === "GET") {
+      return new Response(TRACKING_SCRIPT, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/javascript",
+          "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        },
+      });
     }
 
     // Handle /stats endpoint for real-time analytics
