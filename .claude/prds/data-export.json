@@ -1,0 +1,72 @@
+{
+  "project": {
+    "name": "Data Export & API",
+    "description": "Add CSV export functionality and improve the API for programmatic access. Essential for data analysis outside the dashboard.",
+    "priority": 4,
+    "estimated_effort": "1 day"
+  },
+  "stories": [
+    {
+      "id": "export-1",
+      "title": "CSV export for pageviews",
+      "description": "Allow exporting raw pageview data as CSV for the selected date range.",
+      "acceptance_criteria": [
+        "Export button in dashboard header",
+        "CSV includes: timestamp, url, title, referrer, country, device, browser",
+        "Respects current date range and filters",
+        "Streams large exports (no memory issues)",
+        "Filename includes date range (e.g., pageviews_2024-01-01_2024-01-15.csv)",
+        "Bot traffic excluded by default (option to include)"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/core/client.py",
+        "src/analytics_941/templates/base.html"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "export-2",
+      "title": "CSV export for aggregated data",
+      "description": "Export summary tables (top pages, countries, etc.) as CSV.",
+      "acceptance_criteria": [
+        "Export button on each table/section",
+        "Top pages export with views, visitors, bounce rate",
+        "Countries export with views, visitors, percentage",
+        "Sources export with domain, type, views",
+        "Technology export (browsers, OS, devices)",
+        "Events export with type, count, properties"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/templates/components/_table.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "export-3",
+      "title": "JSON API endpoints",
+      "description": "Expose dashboard data as JSON API for programmatic access.",
+      "acceptance_criteria": [
+        "/api/stats returns overview metrics as JSON",
+        "/api/pages returns top pages as JSON",
+        "/api/sources returns traffic sources as JSON",
+        "All endpoints respect date range and filter params",
+        "API key authentication (separate from dashboard auth)",
+        "Rate limited (100 req/min)",
+        "OpenAPI/Swagger documentation"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/api.py",
+        "src/analytics_941/core/client.py"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    }
+  ]
+}

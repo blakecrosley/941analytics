@@ -1,0 +1,89 @@
+{
+  "project": {
+    "name": "Session Metrics & Engagement",
+    "description": "Complete the session tracking implementation. Schema exists in D1 but bounce rate and session duration are not being calculated or displayed. This is critical for understanding engagement quality.",
+    "priority": 2,
+    "estimated_effort": "1-2 days"
+  },
+  "stories": [
+    {
+      "id": "session-1",
+      "title": "Session aggregation in Worker",
+      "description": "Update the Cloudflare Worker to properly close sessions and calculate duration/bounce status when session times out or new session starts.",
+      "acceptance_criteria": [
+        "Session closed after 30 minutes of inactivity",
+        "Session duration calculated as last_activity - first_pageview",
+        "is_bounce = true if pageview_count = 1",
+        "Sessions table updated with duration_seconds, is_bounce, exit_page",
+        "Heartbeat pings extend session without creating new pageview",
+        "Works correctly with multiple tabs open"
+      ],
+      "files_to_modify": [
+        "worker/src/index.ts"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "session-2",
+      "title": "Session metrics client methods",
+      "description": "Add client methods to query session metrics from D1 database.",
+      "acceptance_criteria": [
+        "get_bounce_rate(start, end, filters) returns float 0-100",
+        "get_avg_session_duration(start, end, filters) returns seconds",
+        "get_sessions_count(start, end, filters) returns int",
+        "get_pages_per_session(start, end, filters) returns float",
+        "All methods handle zero-data gracefully (return 0, not error)",
+        "Comparison period support for trend calculation"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/core/client.py",
+        "tests/test_sessions.py"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "session-3",
+      "title": "Display session metrics in dashboard",
+      "description": "Add bounce rate and avg session duration to the overview stats cards and show session trends.",
+      "acceptance_criteria": [
+        "Bounce rate stat card with trend arrow",
+        "Avg session duration stat card (formatted as Xm Ys)",
+        "Pages per session stat card",
+        "Session-based chart option (toggle between views/sessions)",
+        "Bounce rate shown per page in top pages table",
+        "Session metrics respect active filters"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/partials/_overview.html",
+        "src/analytics_941/templates/components/_stat_card.html",
+        "src/analytics_941/routes/dashboard.py"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "session-4",
+      "title": "Entry/exit page analysis",
+      "description": "Show which pages users land on and leave from, helping identify drop-off points.",
+      "acceptance_criteria": [
+        "Top entry pages table with session count",
+        "Top exit pages table with exit rate percentage",
+        "Entry → Exit flow visualization (simple, not Sankey)",
+        "Bounce rate per entry page",
+        "Accessible from overview or dedicated section"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/partials/_overview.html",
+        "src/analytics_941/core/client.py"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "project": {
+    "name": "Custom Date Ranges & Filtering",
+    "description": "Add custom date range selection and multi-dimensional filtering to the analytics dashboard. These are the two most critical missing features blocking daily use of the dashboard.",
+    "priority": 1,
+    "estimated_effort": "2-3 days"
+  },
+  "stories": [
+    {
+      "id": "date-1",
+      "title": "Date range picker component",
+      "description": "Create a reusable date picker component that allows selecting custom start/end dates. Should integrate with existing preset buttons (Today, 7d, 30d, etc.)",
+      "acceptance_criteria": [
+        "Date picker shows calendar UI when 'Custom' button clicked",
+        "Can select start date and end date",
+        "Validates end >= start",
+        "Displays selected range in human-readable format (e.g., 'Jan 1 - Jan 15')",
+        "Works on mobile (touch-friendly)",
+        "Keyboard accessible"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/components/_date_picker.html",
+        "src/analytics_941/templates/base.html"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "date-2",
+      "title": "API support for custom date ranges",
+      "description": "Update all dashboard routes and client methods to accept arbitrary start/end dates instead of preset periods only.",
+      "acceptance_criteria": [
+        "All /partials/* routes accept ?start=YYYY-MM-DD&end=YYYY-MM-DD query params",
+        "Client methods accept date objects, not just period strings",
+        "Comparison period calculated automatically (same duration, immediately prior)",
+        "Invalid date ranges return 400 with helpful error message",
+        "Dates outside retention period show warning but still work"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/core/client.py"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "filter-1",
+      "title": "Filter chips UI component",
+      "description": "Create filter chips that show active filters and allow removal. Filters persist across tab navigation.",
+      "acceptance_criteria": [
+        "Filter chips appear below date picker when filters active",
+        "Each chip shows filter type and value (e.g., 'Country: US')",
+        "X button removes individual filter",
+        "'Clear all' link when 2+ filters active",
+        "Filters included in HTMX requests via hx-vals or query params",
+        "Filters persist when switching tabs"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/components/_filter_chips.html",
+        "src/analytics_941/templates/base.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "filter-2",
+      "title": "Clickable drill-down in tables",
+      "description": "Make table rows clickable to filter by that dimension. Clicking 'United States' in countries table filters all data to US traffic.",
+      "acceptance_criteria": [
+        "Country names in geography tab are clickable",
+        "Browser/OS names in technology tab are clickable",
+        "Referrer domains in sources tab are clickable",
+        "Device types clickable",
+        "Click adds filter chip and refreshes current view",
+        "Cursor changes to pointer on hover"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/partials/*.html",
+        "src/analytics_941/templates/components/_table.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "filter-3",
+      "title": "Query builder for filtered queries",
+      "description": "Create DashboardFilters model and query builder that applies filters to all D1 queries consistently.",
+      "acceptance_criteria": [
+        "DashboardFilters Pydantic model with country, device, browser, os, source fields",
+        "All client methods accept optional filters parameter",
+        "Filters applied via parameterized WHERE clauses (SQL injection safe)",
+        "Empty filters = no WHERE clause added",
+        "Multiple filters AND'd together",
+        "Unit tests for query builder"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/core/client.py",
+        "src/analytics_941/core/models.py",
+        "tests/test_filters.py"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    }
+  ]
+}

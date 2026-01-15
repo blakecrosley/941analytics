@@ -1,0 +1,152 @@
+{
+  "project": {
+    "name": "Enhanced Event Tracking",
+    "description": "Expand tracking beyond pageviews to capture meaningful user interactions automatically, plus support for custom events. This transforms the analytics from 'traffic counter' to 'behavior insights'.",
+    "priority": 3,
+    "estimated_effort": "2-3 days"
+  },
+  "stories": [
+    {
+      "id": "track-1",
+      "title": "Auto-track scroll depth",
+      "description": "Automatically track how far users scroll on each page (25%, 50%, 75%, 100% milestones).",
+      "acceptance_criteria": [
+        "Scroll depth tracked at 25%, 50%, 75%, 100% thresholds",
+        "Each threshold fires only once per page",
+        "Works with infinite scroll / dynamic content",
+        "Debounced to avoid excessive events",
+        "Event includes page URL and max depth reached",
+        "Dashboard shows avg scroll depth per page"
+      ],
+      "files_to_modify": [
+        "worker/src/track.js",
+        "src/analytics_941/templates/partials/_events.html",
+        "src/analytics_941/core/client.py"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "track-2",
+      "title": "Auto-track outbound clicks",
+      "description": "Automatically track clicks on external links leaving your site.",
+      "acceptance_criteria": [
+        "Outbound link clicks captured with destination URL",
+        "Internal links (same domain) ignored",
+        "Event fires before navigation (with small delay)",
+        "Dashboard shows top outbound destinations",
+        "Link text/context captured for identification",
+        "Works with target=_blank links"
+      ],
+      "files_to_modify": [
+        "worker/src/track.js",
+        "src/analytics_941/templates/partials/_events.html",
+        "src/analytics_941/core/client.py"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "track-3",
+      "title": "Auto-track file downloads",
+      "description": "Automatically track downloads of common file types (PDF, ZIP, etc.).",
+      "acceptance_criteria": [
+        "Downloads tracked for: pdf, zip, doc, xls, ppt, csv, txt, mp3, mp4",
+        "Event includes filename and file type",
+        "Works for both same-origin and cross-origin files",
+        "Dashboard shows top downloaded files",
+        "File extension configurable via data attribute"
+      ],
+      "files_to_modify": [
+        "worker/src/track.js",
+        "src/analytics_941/templates/partials/_events.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "track-4",
+      "title": "Auto-track form submissions",
+      "description": "Automatically track form submissions with form identification.",
+      "acceptance_criteria": [
+        "Form submit events captured with form id/name/action",
+        "No form data content captured (privacy)",
+        "Success/failure status if detectable",
+        "Dashboard shows form conversion rates",
+        "Works with HTMX form submissions",
+        "Excludes search forms by default"
+      ],
+      "files_to_modify": [
+        "worker/src/track.js",
+        "src/analytics_941/templates/partials/_events.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "track-5",
+      "title": "JavaScript error tracking",
+      "description": "Capture JavaScript errors to identify broken functionality.",
+      "acceptance_criteria": [
+        "window.onerror captured with message, source, line, column",
+        "Unhandled promise rejections captured",
+        "Stack trace included (truncated for size)",
+        "Dashboard shows error count and top errors",
+        "Errors grouped by message similarity",
+        "Rate limited to prevent flood on broken page"
+      ],
+      "files_to_modify": [
+        "worker/src/track.js",
+        "src/analytics_941/templates/partials/_events.html"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "track-6",
+      "title": "Custom event API",
+      "description": "Provide a simple JavaScript API for tracking custom events from application code.",
+      "acceptance_criteria": [
+        "window.analytics.track(name, properties) available",
+        "Properties object serialized to JSON",
+        "Events batched with pageviews (not separate requests)",
+        "TypeScript types available for IDE support",
+        "Example usage documented in README",
+        "Works before/after DOMContentLoaded"
+      ],
+      "files_to_modify": [
+        "worker/src/track.js",
+        "README.md"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "track-7",
+      "title": "Events dashboard improvements",
+      "description": "Complete the events dashboard with proper visualizations and filtering.",
+      "acceptance_criteria": [
+        "Event type breakdown chart (pie/bar)",
+        "Events over time chart",
+        "Top events table with count and trend",
+        "Event properties drill-down",
+        "Filter by event type",
+        "Export events to CSV"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/partials/_events.html",
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/core/client.py"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    }
+  ]
+}
