@@ -490,9 +490,11 @@
         </header>
 
         <!-- Navigation -->
-        <nav class="nav" role="tablist">
+        <nav class="nav" role="tablist" x-data="{ active: '{{ active_tab }}' }">
             <a href="./"
-               class="nav__link {% if active_tab == 'overview' %}active{% endif %}"
+               class="nav__link"
+               :class="{ 'active': active === 'overview' }"
+               @click="active = 'overview'"
                hx-get="./partials/overview"
                hx-target="#main-content"
                hx-push-url="./"
@@ -500,7 +502,9 @@
                 Overview
             </a>
             <a href="./realtime"
-               class="nav__link {% if active_tab == 'realtime' %}active{% endif %}"
+               class="nav__link"
+               :class="{ 'active': active === 'realtime' }"
+               @click="active = 'realtime'"
                hx-get="./partials/realtime"
                hx-target="#main-content"
                hx-push-url="./realtime"
@@ -509,7 +513,9 @@
                 Realtime
             </a>
             <a href="./sources"
-               class="nav__link {% if active_tab == 'sources' %}active{% endif %}"
+               class="nav__link"
+               :class="{ 'active': active === 'sources' }"
+               @click="active = 'sources'"
                hx-get="./partials/sources"
                hx-target="#main-content"
                hx-push-url="./sources"
@@ -517,7 +523,9 @@
                 Sources
             </a>
             <a href="./geography"
-               class="nav__link {% if active_tab == 'geography' %}active{% endif %}"
+               class="nav__link"
+               :class="{ 'active': active === 'geography' }"
+               @click="active = 'geography'"
                hx-get="./partials/geography"
                hx-target="#main-content"
                hx-push-url="./geography"
@@ -525,7 +533,9 @@
                 Geography
             </a>
             <a href="./technology"
-               class="nav__link {% if active_tab == 'technology' %}active{% endif %}"
+               class="nav__link"
+               :class="{ 'active': active === 'technology' }"
+               @click="active = 'technology'"
                hx-get="./partials/technology"
                hx-target="#main-content"
                hx-push-url="./technology"
@@ -533,7 +543,9 @@
                 Technology
             </a>
             <a href="./events"
-               class="nav__link {% if active_tab == 'events' %}active{% endif %}"
+               class="nav__link"
+               :class="{ 'active': active === 'events' }"
+               @click="active = 'events'"
                hx-get="./partials/events"
                hx-target="#main-content"
                hx-push-url="./events"
