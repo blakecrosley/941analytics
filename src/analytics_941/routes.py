@@ -947,11 +947,11 @@ def create_dashboard_router(
 <!DOCTYPE html>
 <html>
 <head><title>Analytics Error</title></head>
-<body style="font-family: system-ui; padding: 2rem; background: #0a0d12; color: #e8edf3;">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif; padding: 2rem; background: #000000; color: #ffffff;">
 <h1>Dashboard Error</h1>
-<p>Failed to load analytics data:</p>
-<pre style="background: #1a1f29; padding: 1rem; border-radius: 6px; overflow: auto;">{str(e)}</pre>
-<p><a href="./login" style="color: #59b2cc;">Back to login</a></p>
+<p style="color: rgba(255, 255, 255, 0.65);">Failed to load analytics data:</p>
+<pre style="background: #111111; padding: 1rem; border-radius: 8px; overflow: auto; border: 1px solid rgba(255, 255, 255, 0.1);">{str(e)}</pre>
+<p><a href="./login" style="color: rgba(255, 255, 255, 0.65);">Back to login</a></p>
 </body>
 </html>"""
             return HTMLResponse(content=error_html, status_code=500)
@@ -1015,16 +1015,19 @@ def create_dashboard_router(
     </script>
     <style>
         :root {{
-            --bg: #0a0d12;
-            --surface: #12161d;
-            --border: #1e2530;
-            --text: #e8edf3;
-            --muted: #9ba3ad;
-            --accent: #59b2cc;
+            --bg: #000000;
+            --surface: #111111;
+            --surface-elevated: #1a1a1a;
+            --border: rgba(255, 255, 255, 0.1);
+            --text: #ffffff;
+            --muted: rgba(255, 255, 255, 0.65);
+            --tertiary: rgba(255, 255, 255, 0.4);
+            --accent: #ffffff;
+            --radius: 8px;
         }}
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
             background: var(--bg);
             color: var(--text);
             padding: 2rem;
@@ -1037,11 +1040,12 @@ def create_dashboard_router(
             align-items: center;
             margin-bottom: 1.5rem;
         }}
-        h1 {{ font-size: 1.5rem; font-weight: 500; }}
+        h1 {{ font-size: 1.5rem; font-weight: 500; letter-spacing: -0.02em; }}
         .logout {{
             color: var(--muted);
             text-decoration: none;
             font-size: 0.875rem;
+            transition: color 0.2s;
         }}
         .logout:hover {{ color: var(--text); }}
         .period-tabs {{
@@ -1053,15 +1057,16 @@ def create_dashboard_router(
             padding: 0.5rem 1rem;
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-radius: var(--radius);
             color: var(--muted);
             text-decoration: none;
             font-size: 0.875rem;
+            transition: all 0.2s;
         }}
         .period-tabs a.active, .period-tabs a:hover {{
-            background: var(--accent);
+            background: var(--text);
             color: var(--bg);
-            border-color: var(--accent);
+            border-color: var(--text);
         }}
         .stats-grid {{
             display: grid;
@@ -1072,7 +1077,7 @@ def create_dashboard_router(
         .stat-card {{
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: var(--radius);
             padding: 1.5rem;
         }}
         .stat-card h3 {{
@@ -1085,6 +1090,7 @@ def create_dashboard_router(
         .stat-card .value {{
             font-size: 2rem;
             font-weight: 600;
+            letter-spacing: -0.02em;
         }}
         .main-grid {{
             display: grid;
@@ -1097,7 +1103,7 @@ def create_dashboard_router(
         .section {{
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: var(--radius);
             padding: 1.5rem;
             margin-bottom: 1.5rem;
         }}
@@ -1124,13 +1130,13 @@ def create_dashboard_router(
         .chart-bar {{
             flex: 1;
             min-width: 8px;
-            background: linear-gradient(to top, rgba(89, 178, 204, 0.6), rgba(89, 178, 204, 0.9));
+            background: linear-gradient(to top, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.6));
             border-radius: 2px 2px 0 0;
             position: relative;
             transition: all 0.2s;
         }}
         .chart-bar:hover {{
-            background: linear-gradient(to top, rgba(89, 178, 204, 0.8), var(--accent));
+            background: linear-gradient(to top, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.9));
         }}
         .chart-bar:hover .chart-tooltip {{
             display: block;
@@ -1141,7 +1147,7 @@ def create_dashboard_router(
             bottom: 100%;
             left: 50%;
             transform: translateX(-50%);
-            background: var(--surface);
+            background: var(--surface-elevated);
             border: 1px solid var(--border);
             padding: 4px 8px;
             border-radius: 4px;
@@ -1161,7 +1167,7 @@ def create_dashboard_router(
             display: inline-block;
             width: 10px;
             height: 10px;
-            background: var(--accent);
+            background: var(--text);
             border-radius: 50%;
             animation: pulse 1.5s infinite;
         }}
@@ -1169,7 +1175,7 @@ def create_dashboard_router(
             0%, 100% {{ opacity: 0.4; transform: scale(0.8); }}
             50% {{ opacity: 1; transform: scale(1); }}
         }}
-        #realtime-card .value {{ color: var(--accent); }}
+        #realtime-card .value {{ color: var(--text); }}
         .two-column-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1182,7 +1188,7 @@ def create_dashboard_router(
             width: 100%;
             height: 350px;
             background: var(--bg);
-            border-radius: 8px;
+            border-radius: var(--radius);
             margin-bottom: 1rem;
             position: relative;
         }}
@@ -1199,14 +1205,14 @@ def create_dashboard_router(
         #globe-tooltip {{
             display: none;
             position: absolute;
-            background: var(--surface);
-            border: 1px solid var(--accent);
-            border-radius: 4px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
             padding: 8px 12px;
             font-size: 0.75rem;
             pointer-events: none;
             z-index: 100;
-            box-shadow: 0 0 20px rgba(89, 178, 204, 0.3);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
         }}
         #back-btn {{
             display: none;
@@ -1214,17 +1220,17 @@ def create_dashboard_router(
             top: 1rem;
             right: 1rem;
             background: var(--surface);
-            border: 1px solid var(--accent);
-            color: var(--accent);
+            border: 1px solid var(--border);
+            color: var(--text);
             padding: 0.5rem 1rem;
-            border-radius: 6px;
+            border-radius: var(--radius);
             font-size: 0.75rem;
             cursor: pointer;
             z-index: 10;
             transition: all 0.2s;
         }}
         #back-btn:hover {{
-            background: var(--accent);
+            background: var(--text);
             color: var(--bg);
         }}
         #detail-panel {{
@@ -1232,9 +1238,9 @@ def create_dashboard_router(
             position: absolute;
             bottom: 1rem;
             left: 1rem;
-            background: rgba(18, 22, 29, 0.9);
+            background: rgba(17, 17, 17, 0.9);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: var(--radius);
             padding: 1rem;
             z-index: 10;
             text-align: center;
@@ -1249,7 +1255,7 @@ def create_dashboard_router(
             color: var(--muted);
             width: 32px;
             height: 32px;
-            border-radius: 6px;
+            border-radius: var(--radius);
             font-size: 1rem;
             cursor: pointer;
             z-index: 10;
@@ -1259,8 +1265,8 @@ def create_dashboard_router(
             justify-content: center;
         }}
         #fullscreen-btn:hover {{
-            border-color: var(--accent);
-            color: var(--accent);
+            border-color: var(--text);
+            color: var(--text);
         }}
         /* Fullscreen Modal */
         .globe-modal {{
@@ -1294,7 +1300,7 @@ def create_dashboard_router(
             color: var(--muted);
             width: 40px;
             height: 40px;
-            border-radius: 8px;
+            border-radius: var(--radius);
             font-size: 1.2rem;
             cursor: pointer;
             z-index: 10;
@@ -1346,11 +1352,11 @@ def create_dashboard_router(
             font-size: 0.8rem;
             pointer-events: none;
             z-index: 100;
-            box-shadow: 0 0 25px rgba(89, 178, 204, 0.4);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
         }}
-        /* City markers (same cyan as all markers) */
+        /* City markers */
         .city-marker {{
-            background: #59b2cc;
+            background: rgba(255, 255, 255, 0.8);
         }}
     </style>
 </head>
@@ -1576,11 +1582,11 @@ def create_dashboard_router(
 
         const CONFIG = {{
             globeRadius: 100,
-            backgroundColor: '#0a0d12',
+            backgroundColor: '#000000',
             oceanColor: '#0a0a0a',
-            borderColor: '#59b2cc',
-            pointColor: '#59b2cc',
-            atmosphereColor: '#59b2cc',
+            borderColor: 'rgba(255, 255, 255, 0.3)',
+            pointColor: '#ffffff',
+            atmosphereColor: 'rgba(255, 255, 255, 0.15)',
             animationDuration: 800,
             countriesUrl: 'https://unpkg.com/world-atlas@2.0.2/countries-110m.json'
         }};
@@ -1709,9 +1715,9 @@ def create_dashboard_router(
             canvas.height = 64;
             const ctx = canvas.getContext('2d');
             const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-            gradient.addColorStop(0, 'rgba(89, 178, 204, 1)');
-            gradient.addColorStop(0.3, 'rgba(89, 178, 204, 0.5)');
-            gradient.addColorStop(1, 'rgba(89, 178, 204, 0)');
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.5)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, 64, 64);
             return new THREE.CanvasTexture(canvas);
@@ -2138,7 +2144,7 @@ def create_dashboard_router(
             }}
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
             return new THREE.Points(geometry, new THREE.PointsMaterial({{
-                color: 0x59b2cc, size: 0.5, transparent: true, opacity: 0.6
+                color: 0xffffff, size: 0.5, transparent: true, opacity: 0.4
             }}));
         }}
 
