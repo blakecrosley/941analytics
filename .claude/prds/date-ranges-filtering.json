@@ -23,8 +23,8 @@
         "src/analytics_941/templates/base.html"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1
     },
     {
       "id": "date-2",
@@ -62,8 +62,8 @@
         "src/analytics_941/templates/base.html"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1
     },
     {
       "id": "filter-2",
@@ -82,8 +82,8 @@
         "src/analytics_941/templates/components/_table.html"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1
     },
     {
       "id": "filter-3",

@@ -1,5 +1,5 @@
 {# Date range picker component #}
-<div class="controls" x-data="{ customOpen: false }">
+<div class="controls" x-data="datePickerComponent()" @click.outside="customOpen = false" @keydown.escape.window="customOpen = false">
     <div class="controls__group">
         {% for period in [
             ('24h', '24 hours'),
@@ -9,57 +9,148 @@
             ('year', 'Year'),
             ('all', 'All time')
         ] %}
-        <button class="btn{% if date_range_key == period[0] %} active{% endif %}"
+        <button class="btn{% if date_range_key == period[0] and not (start_date and end_date) %} active{% endif %}"
                 hx-get="./partials/{{ active_tab }}?period={{ period[0] }}"
                 hx-target="#main-content"
-                hx-push-url="?period={{ period[0] }}">
+                hx-push-url="?period={{ period[0] }}"
+                @click="customOpen = false">
             {{ period[1] }}
         </button>
         {% endfor %}
+
+        {# Custom date range button and picker #}
+        <div class="date-picker-container" style="position: relative; display: inline-block;">
+            <button class="btn{% if date_range_key == 'custom' or (start_date and end_date) %} active{% endif %}"
+                    @click.stop="customOpen = !customOpen"
+                    :aria-expanded="customOpen"
+                    aria-haspopup="true"
+                    type="button">
+                {% if start_date and end_date %}
+                    {{ start_date|replace('-', '/')|slice(5,) }} - {{ end_date|replace('-', '/')|slice(5,) }}
+                {% else %}
+                    Custom
+                {% endif %}
+            </button>
+
+            {# Custom date picker popup #}
+            <div class="date-picker-popup"
+                 x-show="customOpen"
+                 x-transition:enter="fade-enter"
+                 x-transition:enter-start="fade-enter-start"
+                 x-transition:enter-end="fade-enter-end"
+                 x-transition:leave="fade-leave"
+                 x-transition:leave-start="fade-leave-start"
+                 x-transition:leave-end="fade-leave-end"
+                 @click.stop
+                 role="dialog"
+                 aria-label="Select custom date range"
+                 style="display: none;">
+
+                <div class="date-picker-popup__content">
+                    <div class="date-picker-popup__row">
+                        <label class="date-picker-popup__label" for="date-start">Start</label>
+                        <input type="date"
+                               id="date-start"
+                               class="date-picker-popup__input"
+                               x-model="startDate"
+                               :max="endDate || today"
+                               @keydown.enter="applyDates"
+                               required>
+                    </div>
+                    <div class="date-picker-popup__row">
+                        <label class="date-picker-popup__label" for="date-end">End</label>
+                        <input type="date"
+                               id="date-end"
+                               class="date-picker-popup__input"
+                               x-model="endDate"
+                               :min="startDate"
+                               :max="today"
+                               @keydown.enter="applyDates"
+                               required>
+                    </div>
+
+                    {# Validation error message #}
+                    <div class="date-picker-popup__error" x-show="error" x-text="error"></div>
+
+                    {# Quick presets within the picker #}
+                    <div class="date-picker-popup__presets">
+                        <button type="button" class="date-picker-popup__preset" @click="setPreset('yesterday')">Yesterday</button>
+                        <button type="button" class="date-picker-popup__preset" @click="setPreset('thisWeek')">This week</button>
+                        <button type="button" class="date-picker-popup__preset" @click="setPreset('lastWeek')">Last week</button>
+                        <button type="button" class="date-picker-popup__preset" @click="setPreset('thisMonth')">This month</button>
+                        <button type="button" class="date-picker-popup__preset" @click="setPreset('lastMonth')">Last month</button>
+                    </div>
+
+                    <div class="date-picker-popup__actions">
+                        <button type="button" class="btn btn--small" @click="customOpen = false">Cancel</button>
+                        <button type="button"
+                                class="btn btn--small btn--primary"
+                                @click="applyDates"
+                                :disabled="!isValid">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     {# Active filters display #}
-    {% if filters and (filters.country or filters.device or filters.browser or filters.source or filters.page) %}
+    {% set active_filter_count = (1 if filters.country else 0) + (1 if filters.device else 0) + (1 if filters.browser else 0) + (1 if filters.source else 0) + (1 if filters.page else 0) %}
+    {% if filters and active_filter_count > 0 %}
     <div class="filters">
         {% if filters.country %}
         <span class="filter-chip">
-            {{ filters.country }}
+            <span class="filter-chip__type">Country:</span> {{ filters.country }}
             <button class="filter-chip__remove"
-                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('country=' ~ filters.country, '')|replace('&&', '&') }}"
-                    hx-target="#main-content">&times;</button>
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('country=' ~ filters.country, '')|replace('&&', '&')|replace('?&', '?') }}"
+                    hx-target="#main-content"
+                    hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.device %}
         <span class="filter-chip">
-            {{ filters.device }}
+            <span class="filter-chip__type">Device:</span> {{ filters.device|capitalize }}
             <button class="filter-chip__remove"
-                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('device=' ~ filters.device, '')|replace('&&', '&') }}"
-                    hx-target="#main-content">&times;</button>
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('device=' ~ filters.device, '')|replace('&&', '&')|replace('?&', '?') }}"
+                    hx-target="#main-content"
+                    hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.browser %}
         <span class="filter-chip">
-            {{ filters.browser }}
+            <span class="filter-chip__type">Browser:</span> {{ filters.browser }}
             <button class="filter-chip__remove"
-                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('browser=' ~ filters.browser, '')|replace('&&', '&') }}"
-                    hx-target="#main-content">&times;</button>
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('browser=' ~ filters.browser, '')|replace('&&', '&')|replace('?&', '?') }}"
+                    hx-target="#main-content"
+                    hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.source %}
         <span class="filter-chip">
-            {{ filters.source }}
+            <span class="filter-chip__type">Source:</span> {{ filters.source or 'Direct' }}
             <button class="filter-chip__remove"
-                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('source=' ~ filters.source, '')|replace('&&', '&') }}"
-                    hx-target="#main-content">&times;</button>
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('source=' ~ filters.source, '')|replace('&&', '&')|replace('?&', '?') }}"
+                    hx-target="#main-content"
+                    hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.page %}
         <span class="filter-chip">
-            {{ filters.page|truncate(30) }}
+            <span class="filter-chip__type">Page:</span> {{ filters.page|truncate(25) }}
             <button class="filter-chip__remove"
-                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('page=' ~ filters.page|urlencode, '')|replace('&&', '&') }}"
-                    hx-target="#main-content">&times;</button>
+                    hx-get="./partials/{{ active_tab }}?{{ current_params|replace('page=' ~ filters.page|urlencode, '')|replace('&&', '&')|replace('?&', '?') }}"
+                    hx-target="#main-content"
+                    hx-push-url="true">&times;</button>
         </span>
+        {% endif %}
+        {% if active_filter_count >= 2 %}
+        <button class="filter-chip filter-chip--clear"
+                hx-get="./partials/{{ active_tab }}?period={{ date_range_key }}{% if start_date and end_date %}&start={{ start_date }}&end={{ end_date }}{% endif %}"
+                hx-target="#main-content"
+                hx-push-url="true">
+            Clear all
+        </button>
         {% endif %}
     </div>
     {% endif %}

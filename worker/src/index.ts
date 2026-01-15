@@ -828,16 +828,21 @@ async function handleStats(
     }
 
     // Calculate date range
+    // Helper to format date as SQLite datetime (YYYY-MM-DD HH:MM:SS)
+    const toSqliteDatetime = (d: Date): string => {
+      return d.toISOString().replace('T', ' ').slice(0, 19);
+    };
+
     const now = new Date();
     let startDate: string;
     if (period === "today") {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      startDate = toSqliteDatetime(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
     } else if (period === "7d") {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      startDate = toSqliteDatetime(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
     } else if (period === "30d") {
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      startDate = toSqliteDatetime(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
     } else {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      startDate = toSqliteDatetime(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
     }
 
     // Query real-time stats from D1

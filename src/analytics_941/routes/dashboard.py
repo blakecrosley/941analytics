@@ -185,6 +185,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
     def _get_common_context(request: Request, active_tab: str, period: str = "30d") -> dict:
         """Build common template context."""
+        # Build current params string for filter chip removal
+        current_params = str(request.query_params)
         return {
             "request": request,
             "site_name": config.site_name,
@@ -193,6 +195,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "active_tab": active_tab,
             "date_range_key": period,
             "format_duration": _format_duration,
+            "current_params": current_params,
         }
 
     def _get_filters(
