@@ -36,10 +36,64 @@ def _verify_auth(auth_cookie: Optional[str], expected_hash: str) -> bool:
     return secrets.compare_digest(auth_cookie, expected_hash)
 
 
-def _parse_date_range(period: str) -> tuple[date, date, Optional[date], Optional[date]]:
-    """Parse period string into date range with comparison period."""
+def _parse_date_range(
+    period: str,
+    custom_start: Optional[str] = None,
+    custom_end: Optional[str] = None,
+) -> tuple[date, date, Optional[date], Optional[date]]:
+    """Parse period string or custom dates into date range with comparison period.
+
+    Args:
+        period: Preset period string (24h, 7d, 30d, 90d, year, all, custom)
+        custom_start: Custom start date in YYYY-MM-DD format
+        custom_end: Custom end date in YYYY-MM-DD format
+
+    Returns:
+        Tuple of (start_date, end_date, compare_start, compare_end)
+
+    Raises:
+        HTTPException: If custom dates are invalid
+    """
     today = date.today()
 
+    # Handle custom date range
+    if period == "custom" or (custom_start and custom_end):
+        if not custom_start or not custom_end:
+            raise HTTPException(
+                status_code=400,
+                detail="Both start and end dates are required for custom date range"
+            )
+
+        try:
+            start = date.fromisoformat(custom_start)
+            end = date.fromisoformat(custom_end)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid date format. Use YYYY-MM-DD (e.g., 2024-01-15)"
+            )
+
+        # Validate date range
+        if end < start:
+            raise HTTPException(
+                status_code=400,
+                detail="End date must be on or after start date"
+            )
+
+        if end > today:
+            raise HTTPException(
+                status_code=400,
+                detail="End date cannot be in the future"
+            )
+
+        # Calculate comparison period (same duration, immediately prior)
+        duration = (end - start).days + 1
+        compare_end = start - timedelta(days=1)
+        compare_start = compare_end - timedelta(days=duration - 1)
+
+        return start, end, compare_start, compare_end
+
+    # Handle preset periods
     if period == "24h":
         start = today - timedelta(days=1)
         end = today
@@ -217,6 +271,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         country: Optional[str] = None,
         region: Optional[str] = None,
         device: Optional[str] = None,
@@ -228,20 +284,20 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             return RedirectResponse(url="./login", status_code=303)
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(
             country=country, region=region, device=device,
             browser=browser, source=source, page=page
         )
 
         # Fetch data
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        time_series = await client.get_time_series(start, end, "day", filters)
-        top_pages = await client.get_top_pages(start, end, 10, filters)
-        sources = await client.get_sources(start, end, 10, filters)
-        countries = await client.get_countries(start, end, 10, filters)
-        devices = await client.get_devices(start, end, filters)
-        browsers = await client.get_browsers(start, end, 10, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        time_series = await client.get_time_series(start_date, end_date, "day", filters)
+        top_pages = await client.get_top_pages(start_date, end_date, 10, filters)
+        sources = await client.get_sources(start_date, end_date, 10, filters)
+        countries = await client.get_countries(start_date, end_date, 10, filters)
+        devices = await client.get_devices(start_date, end_date, filters)
+        browsers = await client.get_browsers(start_date, end_date, 10, filters)
 
         context = _get_common_context(request, "overview", period)
         context.update({
@@ -255,6 +311,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "devices": devices,
             "browsers": browsers,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("pages/overview.html", context)
@@ -264,6 +322,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         country: Optional[str] = None,
         region: Optional[str] = None,
         device: Optional[str] = None,
@@ -275,19 +335,19 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(
             country=country, region=region, device=device,
             browser=browser, source=source, page=page
         )
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        time_series = await client.get_time_series(start, end, "day", filters)
-        top_pages = await client.get_top_pages(start, end, 10, filters)
-        sources = await client.get_sources(start, end, 10, filters)
-        countries = await client.get_countries(start, end, 10, filters)
-        devices = await client.get_devices(start, end, filters)
-        browsers = await client.get_browsers(start, end, 10, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        time_series = await client.get_time_series(start_date, end_date, "day", filters)
+        top_pages = await client.get_top_pages(start_date, end_date, 10, filters)
+        sources = await client.get_sources(start_date, end_date, 10, filters)
+        countries = await client.get_countries(start_date, end_date, 10, filters)
+        devices = await client.get_devices(start_date, end_date, filters)
+        browsers = await client.get_browsers(start_date, end_date, 10, filters)
 
         context = _get_common_context(request, "overview", period)
         context.update({
@@ -301,6 +361,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "devices": devices,
             "browsers": browsers,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("partials/overview_content.html", context)
@@ -310,6 +372,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         source: Optional[str] = None,
         source_type: Optional[str] = None,
         utm_source: Optional[str] = None,
@@ -319,26 +383,28 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             return RedirectResponse(url="./login", status_code=303)
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(
             source=source, source_type=source_type,
             utm_source=utm_source, utm_campaign=utm_campaign
         )
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        sources = await client.get_sources(start, end, 50, filters)
-        source_types = await client.get_source_types(start, end, filters)
-        utm_sources = await client.get_utm_sources(start, end, 20, filters)
-        utm_campaigns = await client.get_utm_campaigns(start, end, 20, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        sources_list = await client.get_sources(start_date, end_date, 50, filters)
+        source_types = await client.get_source_types(start_date, end_date, filters)
+        utm_sources = await client.get_utm_sources(start_date, end_date, 20, filters)
+        utm_campaigns = await client.get_utm_campaigns(start_date, end_date, 20, filters)
 
         context = _get_common_context(request, "sources", period)
         context.update({
             "metrics": metrics,
-            "sources": sources,
+            "sources": sources_list,
             "source_types": source_types,
             "utm_sources": utm_sources,
             "utm_campaigns": utm_campaigns,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("pages/sources.html", context)
@@ -348,6 +414,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         source: Optional[str] = None,
         source_type: Optional[str] = None,
         utm_source: Optional[str] = None,
@@ -357,26 +425,28 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(
             source=source, source_type=source_type,
             utm_source=utm_source, utm_campaign=utm_campaign
         )
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        sources = await client.get_sources(start, end, 50, filters)
-        source_types = await client.get_source_types(start, end, filters)
-        utm_sources = await client.get_utm_sources(start, end, 20, filters)
-        utm_campaigns = await client.get_utm_campaigns(start, end, 20, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        sources_list = await client.get_sources(start_date, end_date, 50, filters)
+        source_types = await client.get_source_types(start_date, end_date, filters)
+        utm_sources = await client.get_utm_sources(start_date, end_date, 20, filters)
+        utm_campaigns = await client.get_utm_campaigns(start_date, end_date, 20, filters)
 
         context = _get_common_context(request, "sources", period)
         context.update({
             "metrics": metrics,
-            "sources": sources,
+            "sources": sources_list,
             "source_types": source_types,
             "utm_sources": utm_sources,
             "utm_campaigns": utm_campaigns,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("partials/sources_content.html", context)
@@ -386,6 +456,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         country: Optional[str] = None,
         region: Optional[str] = None,
     ):
@@ -393,20 +465,20 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             return RedirectResponse(url="./login", status_code=303)
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(country=country, region=region)
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        countries = await client.get_countries(start, end, 50, filters)
-        globe_data = await client.get_globe_data(start, end, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        countries = await client.get_countries(start_date, end_date, 50, filters)
+        globe_data = await client.get_globe_data(start_date, end_date, filters)
 
         # Get regions if country is selected
         regions = []
         cities = []
         if country:
-            regions = await client.get_regions(start, end, country, 30)
+            regions = await client.get_regions(start_date, end_date, country, 30)
             if region:
-                cities = await client.get_cities(start, end, country, region, 30)
+                cities = await client.get_cities(start_date, end_date, country, region, 30)
 
         context = _get_common_context(request, "geography", period)
         context.update({
@@ -416,6 +488,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "cities": cities,
             "globe_data": globe_data.model_dump(),
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("pages/geography.html", context)
@@ -425,6 +499,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         country: Optional[str] = None,
         region: Optional[str] = None,
     ):
@@ -432,19 +508,19 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(country=country, region=region)
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        countries = await client.get_countries(start, end, 50, filters)
-        globe_data = await client.get_globe_data(start, end, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        countries = await client.get_countries(start_date, end_date, 50, filters)
+        globe_data = await client.get_globe_data(start_date, end_date, filters)
 
         regions = []
         cities = []
         if country:
-            regions = await client.get_regions(start, end, country, 30)
+            regions = await client.get_regions(start_date, end_date, country, 30)
             if region:
-                cities = await client.get_cities(start, end, country, region, 30)
+                cities = await client.get_cities(start_date, end_date, country, region, 30)
 
         context = _get_common_context(request, "geography", period)
         context.update({
@@ -454,6 +530,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "cities": cities,
             "globe_data": globe_data.model_dump(),
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("partials/geography_content.html", context)
@@ -463,6 +541,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         device: Optional[str] = None,
         browser: Optional[str] = None,
         os: Optional[str] = None,
@@ -471,25 +551,27 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             return RedirectResponse(url="./login", status_code=303)
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(device=device, browser=browser)
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        devices = await client.get_devices(start, end, filters)
-        browsers = await client.get_browsers(start, end, 20, filters)
-        operating_systems = await client.get_operating_systems(start, end, 20, filters)
-        screen_sizes = await client.get_screen_sizes(start, end, 20, filters)
-        languages = await client.get_languages(start, end, 20, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        devices = await client.get_devices(start_date, end_date, filters)
+        browsers_list = await client.get_browsers(start_date, end_date, 20, filters)
+        operating_systems = await client.get_operating_systems(start_date, end_date, 20, filters)
+        screen_sizes = await client.get_screen_sizes(start_date, end_date, 20, filters)
+        languages = await client.get_languages(start_date, end_date, 20, filters)
 
         context = _get_common_context(request, "technology", period)
         context.update({
             "metrics": metrics,
             "devices": devices,
-            "browsers": browsers,
+            "browsers": browsers_list,
             "operating_systems": operating_systems,
             "screen_sizes": screen_sizes,
             "languages": languages,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("pages/technology.html", context)
@@ -499,6 +581,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         device: Optional[str] = None,
         browser: Optional[str] = None,
         os: Optional[str] = None,
@@ -507,25 +591,27 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(device=device, browser=browser)
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        devices = await client.get_devices(start, end, filters)
-        browsers = await client.get_browsers(start, end, 20, filters)
-        operating_systems = await client.get_operating_systems(start, end, 20, filters)
-        screen_sizes = await client.get_screen_sizes(start, end, 20, filters)
-        languages = await client.get_languages(start, end, 20, filters)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        devices = await client.get_devices(start_date, end_date, filters)
+        browsers_list = await client.get_browsers(start_date, end_date, 20, filters)
+        operating_systems = await client.get_operating_systems(start_date, end_date, 20, filters)
+        screen_sizes = await client.get_screen_sizes(start_date, end_date, 20, filters)
+        languages = await client.get_languages(start_date, end_date, 20, filters)
 
         context = _get_common_context(request, "technology", period)
         context.update({
             "metrics": metrics,
             "devices": devices,
-            "browsers": browsers,
+            "browsers": browsers_list,
             "operating_systems": operating_systems,
             "screen_sizes": screen_sizes,
             "languages": languages,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("partials/technology_content.html", context)
@@ -535,6 +621,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         event: Optional[str] = None,
         event_type: Optional[str] = None,
     ):
@@ -542,21 +630,23 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             return RedirectResponse(url="./login", status_code=303)
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters()
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        events = await client.get_events(start, end, 50, event_type)
-        scroll_depth = await client.get_scroll_depth(start, end)
-        event_types = await client.get_event_types(start, end)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        events = await client.get_events(start_date, end_date, 50, event_type)
+        scroll_depth = await client.get_scroll_depth(start_date, end_date)
+        event_types_list = await client.get_event_types(start_date, end_date)
 
         context = _get_common_context(request, "events", period)
         context.update({
             "metrics": metrics,
             "events": events,
             "scroll_depth": scroll_depth,
-            "event_types": event_types,
+            "event_types": event_types_list,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("pages/events.html", context)
@@ -566,6 +656,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
         event: Optional[str] = None,
         event_type: Optional[str] = None,
     ):
@@ -573,21 +665,23 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start, end, compare_start, compare_end = _parse_date_range(period)
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters()
 
-        metrics = await client.get_core_metrics(start, end, compare_start, compare_end, filters)
-        events = await client.get_events(start, end, 50, event_type)
-        scroll_depth = await client.get_scroll_depth(start, end)
-        event_types = await client.get_event_types(start, end)
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+        events = await client.get_events(start_date, end_date, 50, event_type)
+        scroll_depth = await client.get_scroll_depth(start_date, end_date)
+        event_types_list = await client.get_event_types(start_date, end_date)
 
         context = _get_common_context(request, "events", period)
         context.update({
             "metrics": metrics,
             "events": events,
             "scroll_depth": scroll_depth,
-            "event_types": event_types,
+            "event_types": event_types_list,
             "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         })
 
         return templates.TemplateResponse("partials/events_content.html", context)
@@ -633,19 +727,21 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
     ):
         """Export pageviews as CSV."""
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start, end, _, _ = _parse_date_range(period)
-        csv_data = await client.export_pageviews(start, end)
+        start_date, end_date, _, _ = _parse_date_range(period, start, end)
+        csv_data = await client.export_pageviews(start_date, end_date)
 
         return StreamingResponse(
             iter([csv_data]),
             media_type="text/csv",
             headers={
-                "Content-Disposition": f"attachment; filename=pageviews_{start}_{end}.csv"
+                "Content-Disposition": f"attachment; filename=pageviews_{start_date}_{end_date}.csv"
             },
         )
 
@@ -654,19 +750,21 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         request: Request,
         auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
+        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
     ):
         """Export events as CSV."""
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start, end, _, _ = _parse_date_range(period)
-        csv_data = await client.export_events(start, end)
+        start_date, end_date, _, _ = _parse_date_range(period, start, end)
+        csv_data = await client.export_events(start_date, end_date)
 
         return StreamingResponse(
             iter([csv_data]),
             media_type="text/csv",
             headers={
-                "Content-Disposition": f"attachment; filename=events_{start}_{end}.csv"
+                "Content-Disposition": f"attachment; filename=events_{start_date}_{end_date}.csv"
             },
         )
 

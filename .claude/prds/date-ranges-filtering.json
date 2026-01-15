@@ -42,8 +42,8 @@
         "src/analytics_941/core/client.py"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1
     },
     {
       "id": "filter-1",
