@@ -35,13 +35,13 @@
         container.appendChild(loadingDiv);
         container.dataset.loaded = 'true';
 
-        // Dynamically load Three.js
+        // Dynamically load Three.js (r125 - last version with standalone OrbitControls.js)
         const script = document.createElement('script');
-        script.src = 'https://unpkg.com/three@0.158.0/build/three.min.js';
+        script.src = 'https://unpkg.com/three@0.125.0/build/three.min.js';
         script.onload = function() {
             // Load OrbitControls after Three.js
             const controls = document.createElement('script');
-            controls.src = 'https://unpkg.com/three@0.158.0/examples/js/controls/OrbitControls.js';
+            controls.src = 'https://unpkg.com/three@0.125.0/examples/js/controls/OrbitControls.js';
             controls.onload = initGlobe;
             document.head.appendChild(controls);
         };
