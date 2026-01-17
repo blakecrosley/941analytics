@@ -1,0 +1,48 @@
+{
+  "project": {
+    "name": "941 Infrastructure Improvements",
+    "description": "SEO and analytics data quality improvements across 941 properties",
+    "stack": ["cloudflare", "typescript"],
+    "created_at": "2026-01-16T21:58:00Z"
+  },
+  "stories": [
+    {
+      "id": "www-redirect",
+      "title": "Implement www to non-www redirects",
+      "description": "Add 301 redirects from www.domain.com to domain.com for all zones to consolidate SEO authority",
+      "acceptance_criteria": [
+        "blakecrosley.com: www redirects to non-www with 301",
+        "resumegeni.com: www redirects to non-www with 301",
+        "941apps.com: www redirects to non-www with 301",
+        "acecitizenship.app: www redirects to non-www with 301",
+        "All redirects preserve path and query string"
+      ],
+      "priority": 1,
+      "stack": "cloudflare",
+      "tests_required": false,
+      "passes": false,
+      "attempts": 1,
+      "blocker": "API token lacks Page Rules and Redirect Rules permissions. Requires token update in Cloudflare dashboard.",
+      "created_at": "2026-01-16T21:58:00Z"
+    },
+    {
+      "id": "filter-dev-traffic",
+      "title": "Filter localhost/dev traffic from analytics",
+      "description": "Prevent localhost and 127.0.0.1 URLs from being recorded in the analytics database",
+      "acceptance_criteria": [
+        "Requests with url containing localhost are rejected",
+        "Requests with url containing 127.0.0.1 are rejected",
+        "Requests with url containing 0.0.0.0 are rejected",
+        "Rejection happens early to save DB resources",
+        "Production traffic unaffected"
+      ],
+      "priority": 2,
+      "stack": "typescript",
+      "tests_required": true,
+      "passes": true,
+      "attempts": 1,
+      "blocker": "Awaiting deployment: run 'cd worker && wrangler login && npm run deploy'",
+      "created_at": "2026-01-16T21:58:00Z"
+    }
+  ]
+}

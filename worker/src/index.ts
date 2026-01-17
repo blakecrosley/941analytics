@@ -51,6 +51,49 @@ const CONFIG = {
 };
 
 // =============================================================================
+// DEVELOPMENT TRAFFIC FILTER
+// =============================================================================
+
+const DEV_HOSTNAMES = [
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '[::1]',
+];
+
+const DEV_PATTERNS = [
+  /^https?:\/\/localhost(:\d+)?/i,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?/i,
+  /^https?:\/\/0\.0\.0\.0(:\d+)?/i,
+  /^https?:\/\/\[::1\](:\d+)?/i,
+  /^https?:\/\/.*\.local(:\d+)?/i,
+];
+
+function isDevTraffic(url: string): boolean {
+  if (!url) return false;
+
+  // Check patterns
+  for (const pattern of DEV_PATTERNS) {
+    if (pattern.test(url)) {
+      return true;
+    }
+  }
+
+  // Parse URL and check hostname
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    if (DEV_HOSTNAMES.includes(hostname) || hostname.endsWith('.local')) {
+      return true;
+    }
+  } catch {
+    // Invalid URL
+  }
+
+  return false;
+}
+
+// =============================================================================
 // BOT DETECTION
 // =============================================================================
 
@@ -1009,6 +1052,20 @@ export default {
       // Validate required fields
       if (!data.site || !data.url) {
         return new Response("Missing required fields", { status: 400 });
+      }
+
+      // Filter development/local traffic (don't pollute analytics with dev pageviews)
+      if (isDevTraffic(data.url)) {
+        // Silently accept but don't record - return tracking pixel to not break dev experience
+        return new Response(TRANSPARENT_GIF, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "image/gif",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "X-Dev-Traffic": "filtered",
+          },
+        });
       }
 
       // Origin validation - check if site is in allowed list OR if origin/referer matches
