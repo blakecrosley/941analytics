@@ -18,12 +18,12 @@ Usage:
     # In templates: {{ analytics.tracking_script() }}
 """
 
-from .config import AnalyticsConfig
+from .config import AnalyticsConfig, ThemeColors
 from .core import AnalyticsClient
 from .routes import create_dashboard_router
 
-__version__ = "0.3.0"
-__all__ = ["setup_analytics", "AnalyticsClient", "AnalyticsConfig"]
+__version__ = "0.4.0"
+__all__ = ["setup_analytics", "AnalyticsClient", "AnalyticsConfig", "ThemeColors"]
 
 
 class Analytics:

@@ -1,0 +1,270 @@
+{
+  "project": {
+    "name": "Unified Analytics Dashboard v2",
+    "description": "Transform 941analytics into a polished, enterprise-grade dashboard. Package owns 100% of UI with CSS isolation and enhanced visualizations. Single source of truth - identical appearance across all sites, each showing only its own data.",
+    "priority": 1,
+    "goals": [
+      "Unified UI that looks identical across all sites",
+      "Polished, professional design (Plausible-inspired)",
+      "Enterprise features: funnels, cohorts, goals",
+      "CSS isolation to prevent style conflicts",
+      "Each site shows only its own data (security)"
+    ],
+    "notes": "Multi-site aggregate view deferred - would require separate admin portal with its own auth, not embedded in product dashboards."
+  },
+  "stories": [
+    {
+      "id": "unified-1",
+      "title": "CSS isolation and design tokens",
+      "description": "Namespace all CSS with --941- prefix and .analytics- class names. Create comprehensive design token system for theming.",
+      "acceptance_criteria": [
+        "All CSS variables prefixed with --941-",
+        "All class names prefixed with .analytics-",
+        "Design tokens: colors, spacing, typography, shadows, radii",
+        "No Bootstrap or external CSS dependencies in dashboard",
+        "Dark theme variables defined",
+        "Theme overridable via AnalyticsConfig.theme_colors"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/static/css/dashboard.css",
+        "src/analytics_941/templates/base.html",
+        "src/analytics_941/config.py"
+      ],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1
+    },
+    {
+      "id": "unified-3",
+      "title": "KPI cards redesign",
+      "description": "Redesign stat cards with large numbers, trend indicators, and optional sparklines. Match Plausible aesthetic.",
+      "acceptance_criteria": [
+        "Large primary metric (32-48px font)",
+        "Small caps label above metric",
+        "Trend indicator: arrow + percentage in semantic color",
+        "Green for positive, red for negative, gray for neutral",
+        "4-6 cards in responsive grid (1-2-3-4 columns)",
+        "Optional sparkline below main number",
+        "Comparison period shown (vs last 7d)",
+        "Hover state with subtle shadow"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/components/stats_cards.html",
+        "src/analytics_941/static/css/dashboard.css"
+      ],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1
+    },
+    {
+      "id": "unified-4",
+      "title": "Primary chart redesign",
+      "description": "Full-width area chart as primary visualization with proper styling, tooltips, and responsive behavior.",
+      "acceptance_criteria": [
+        "Full-width area chart (60% dashboard height)",
+        "Gradient fill with subtle opacity",
+        "Smooth curve interpolation",
+        "Tooltips on hover with exact values",
+        "Responsive height (250px mobile, 350px desktop)",
+        "Axis labels clear and readable",
+        "Date formatting appropriate to time range",
+        "Toggle between views: pageviews, visitors, events"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/components/chart.html",
+        "src/analytics_941/templates/components/chart_area.html",
+        "src/analytics_941/static/css/dashboard.css",
+        "src/analytics_941/routes/dashboard.py"
+      ],
+      "priority": 2,
+      "passes": true,
+      "attempts": 1
+    },
+    {
+      "id": "unified-5",
+      "title": "Dashboard layout restructure",
+      "description": "Implement proper information hierarchy: header, KPIs, primary chart, secondary grid, detail tables.",
+      "acceptance_criteria": [
+        "Header: site name, date range, filters, settings",
+        "KPI row directly below header",
+        "Primary chart takes visual focus",
+        "Secondary insights in 2-3 column grid",
+        "Detail tables at bottom with tab navigation",
+        "Consistent 8px grid spacing system",
+        "Proper visual hierarchy (size, weight, color)",
+        "Mobile-responsive (stacked on small screens)"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/base.html",
+        "src/analytics_941/templates/partials/overview_content.html",
+        "src/analytics_941/static/css/dashboard.css"
+      ],
+      "priority": 1,
+      "passes": true,
+      "attempts": 1
+    },
+    {
+      "id": "unified-6",
+      "title": "Date range picker enhancement",
+      "description": "Improve date range picker with presets, custom range, and comparison period selection.",
+      "acceptance_criteria": [
+        "Preset options: Today, 7d, 30d, 90d, Year, All time",
+        "Custom date range with calendar picker",
+        "Compare to previous period toggle",
+        "Compare to same period last year option",
+        "Selected range clearly displayed",
+        "URL reflects date range for bookmarking",
+        "Quick keyboard shortcuts (7, 30, 90)"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/templates/components/date_picker.html",
+        "src/analytics_941/static/css/dashboard.css",
+        "src/analytics_941/static/js/dashboard.js"
+      ],
+      "priority": 2,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Previous period comparison works via existing backend. Same period last year UI added but backend enhancement deferred."
+    },
+    {
+      "id": "unified-7",
+      "title": "Real-time activity feed",
+      "description": "Live activity stream showing recent pageviews and events in real-time.",
+      "acceptance_criteria": [
+        "Live visitor count badge in header",
+        "Activity feed showing last 20 events",
+        "Auto-updates via SSE or polling (5s)",
+        "Shows: page, location, device, timestamp",
+        "Subtle animation for new items",
+        "Pause/resume toggle",
+        "Filter by event type"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/templates/partials/realtime_content.html",
+        "src/analytics_941/templates/components/activity_feed.html",
+        "src/analytics_941/core/client.py",
+        "src/analytics_941/core/models.py",
+        "src/analytics_941/static/js/dashboard.js",
+        "src/analytics_941/static/css/dashboard.css"
+      ],
+      "priority": 2,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Activity feed shows last 20 pageviews with auto-polling (5s). Pause/resume toggle, event type filter, slide-in animations. Live badge in header nav shows active visitor count on realtime page. Worker changes deferred - using existing pageviews data."
+    },
+    {
+      "id": "unified-8",
+      "title": "Funnel analysis",
+      "description": "Define and visualize conversion funnels to understand where users drop off.",
+      "acceptance_criteria": [
+        "Define funnels: name + ordered list of events/pages",
+        "Store funnel definitions in config or D1",
+        "Horizontal funnel visualization",
+        "Shows count and % at each step",
+        "Drop-off highlighted between steps",
+        "Time to convert metric",
+        "Filter funnel by date range",
+        "3 preset funnels + custom funnel builder"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/core/client.py",
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/templates/partials/funnels_content.html",
+        "schema.sql"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "unified-9",
+      "title": "Goal tracking",
+      "description": "Define conversion goals and track completion rates over time.",
+      "acceptance_criteria": [
+        "Define goals: event-based or page-based",
+        "Goal completion count and rate",
+        "Goal trend over time chart",
+        "Goals shown on overview dashboard",
+        "Goal comparison across time periods",
+        "Notify on goal milestone (optional)",
+        "3-5 preset goals per site"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/core/client.py",
+        "src/analytics_941/core/models.py",
+        "src/analytics_941/routes/dashboard.py",
+        "schema.sql"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "unified-10",
+      "title": "Saved filters and views",
+      "description": "Save frequently used filter combinations and custom dashboard views.",
+      "acceptance_criteria": [
+        "Save current filter state as named view",
+        "List saved views in dropdown",
+        "Quick apply saved view",
+        "Edit/delete saved views",
+        "Views stored per user (or shared)",
+        "Default view option",
+        "URL shareable views"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/templates/components/saved_views.html",
+        "schema.sql"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "unified-11",
+      "title": "Export capabilities",
+      "description": "Export data to CSV, PDF reports, and API access.",
+      "acceptance_criteria": [
+        "Export current view to CSV",
+        "Export filtered data to CSV",
+        "PDF report generation (summary)",
+        "Scheduled email reports (weekly digest)",
+        "API endpoint for programmatic access",
+        "Export includes all visible columns",
+        "Date range included in filename"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/routes/api.py"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "unified-12",
+      "title": "Polish and accessibility",
+      "description": "Final polish pass: animations, loading states, keyboard nav, WCAG compliance.",
+      "acceptance_criteria": [
+        "Loading skeletons for all async content",
+        "Smooth transitions (200ms) on interactions",
+        "Keyboard navigation works (Tab, Enter, Escape)",
+        "Focus states visible on all interactive elements",
+        "Color contrast meets WCAG AA (4.5:1)",
+        "Screen reader labels on charts",
+        "Mobile touch targets 44px minimum",
+        "No layout shift on data load"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/static/css/dashboard.css",
+        "src/analytics_941/templates/**/*.html"
+      ],
+      "priority": 2,
+      "passes": true,
+      "attempts": 1,
+      "notes": "Added focus-visible states for all interactive elements (buttons, nav links, chart toggles, filter chips, date picker presets). Skip-link for keyboard users. Mobile touch targets 44px min. Reduced motion preference support. High contrast mode support. Screen reader labels on charts (role=img, aria-label). Global keyboard handlers (Escape, Enter, Space, Tab trap). Existing skeleton loaders handle layout shift."
+    }
+  ]
+}
