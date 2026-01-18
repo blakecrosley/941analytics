@@ -1,0 +1,52 @@
+{# Saved Views List - Returns just the list items for HTMX swap #}
+{% if saved_views %}
+    {% for view in saved_views %}
+    <a href="./?{{ view.to_query_params() }}"
+       class="analytics-saved-views__item {% if view.is_default %}analytics-saved-views__item--default{% endif %}">
+        <div class="analytics-saved-views__item-main">
+            <span class="analytics-saved-views__name">
+                {{ view.name }}
+                {% if view.is_default %}
+                <span class="analytics-saved-views__badge">Default</span>
+                {% endif %}
+            </span>
+            {% if view.description %}
+            <span class="analytics-saved-views__desc">{{ view.description }}</span>
+            {% endif %}
+        </div>
+        <div class="analytics-saved-views__actions" onclick="event.stopPropagation(); event.preventDefault();">
+            {% if not view.is_default %}
+            <button class="analytics-saved-views__action"
+                    hx-post="./views/{{ view.id }}/default"
+                    hx-swap="none"
+                    hx-on::after-request="htmx.ajax('GET', './views', '#saved-views-list')"
+                    title="Set as default"
+                    type="button">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+            </button>
+            {% endif %}
+            <button class="analytics-saved-views__action analytics-saved-views__action--danger"
+                    hx-delete="./views/{{ view.id }}"
+                    hx-confirm="Delete '{{ view.name }}'?"
+                    hx-swap="none"
+                    hx-on::after-request="htmx.ajax('GET', './views', '#saved-views-list')"
+                    title="Delete view"
+                    type="button">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+            </button>
+        </div>
+    </a>
+    {% endfor %}
+{% else %}
+<div class="analytics-saved-views__empty">
+    <p class="analytics-text-muted">No saved views yet</p>
+    <p class="analytics-text-muted" style="font-size: 0.6875rem; margin-top: 0.25rem;">
+        Save your current filters as a view for quick access
+    </p>
+</div>
+{% endif %}

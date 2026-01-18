@@ -1,12 +1,14 @@
-{# Date range picker component #}
-<div class="controls"
+{# Date range picker component with keyboard shortcuts and comparison #}
+<div class="analytics-controls"
      x-data="datePickerComponent()"
      data-start="{{ start_date or '' }}"
      data-end="{{ end_date or '' }}"
      data-active-tab="{{ active_tab }}"
-     @click.outside="customOpen = false"
-     @keydown.escape.window="customOpen = false">
-    <div class="controls__group">
+     data-compare="{{ compare|default('previous')|default('') }}"
+     @click.outside="customOpen = false; compareOpen = false"
+     @keydown.escape.window="customOpen = false; compareOpen = false"
+     @keydown.window="handleKeyboard($event)">
+    <div class="analytics-controls__group">
         {% for period in [
             ('24h', '24 hours'),
             ('7d', '7 days'),
@@ -15,7 +17,7 @@
             ('year', 'Year'),
             ('all', 'All time')
         ] %}
-        <button class="btn{% if date_range_key == period[0] and not (start_date and end_date) %} active{% endif %}"
+        <button class="analytics-btn{% if date_range_key == period[0] and not (start_date and end_date) %} active{% endif %}"
                 hx-get="./partials/{{ active_tab }}?period={{ period[0] }}"
                 hx-target="#main-content"
                 hx-push-url="?period={{ period[0] }}"
@@ -25,9 +27,9 @@
         {% endfor %}
 
         {# Custom date range button and picker #}
-        <div class="date-picker-container" style="position: relative; display: inline-block;">
-            <button class="btn{% if date_range_key == 'custom' or (start_date and end_date) %} active{% endif %}"
-                    @click.stop="customOpen = !customOpen"
+        <div class="analytics-date-picker-container" style="position: relative; display: inline-block;">
+            <button class="analytics-btn{% if date_range_key == 'custom' or (start_date and end_date) %} active{% endif %}"
+                    @click.stop="customOpen = !customOpen; compareOpen = false"
                     :aria-expanded="customOpen"
                     aria-haspopup="true"
                     type="button">
@@ -39,7 +41,7 @@
             </button>
 
             {# Custom date picker popup #}
-            <div class="date-picker-popup"
+            <div class="analytics-date-picker-popup"
                  x-show="customOpen"
                  x-transition:enter="fade-enter"
                  x-transition:enter-start="fade-enter-start"
@@ -52,22 +54,22 @@
                  aria-label="Select custom date range"
                  style="display: none;">
 
-                <div class="date-picker-popup__content">
-                    <div class="date-picker-popup__row">
-                        <label class="date-picker-popup__label" for="date-start">Start</label>
+                <div class="analytics-date-picker-popup__content">
+                    <div class="analytics-date-picker-popup__row">
+                        <label class="analytics-date-picker-popup__label" for="date-start">Start</label>
                         <input type="date"
                                id="date-start"
-                               class="date-picker-popup__input"
+                               class="analytics-date-picker-popup__input"
                                x-model="startDate"
                                :max="endDate || today"
                                @keydown.enter="applyDates"
                                required>
                     </div>
-                    <div class="date-picker-popup__row">
-                        <label class="date-picker-popup__label" for="date-end">End</label>
+                    <div class="analytics-date-picker-popup__row">
+                        <label class="analytics-date-picker-popup__label" for="date-end">End</label>
                         <input type="date"
                                id="date-end"
-                               class="date-picker-popup__input"
+                               class="analytics-date-picker-popup__input"
                                x-model="endDate"
                                :min="startDate"
                                :max="today"
@@ -76,21 +78,21 @@
                     </div>
 
                     {# Validation error message #}
-                    <div class="date-picker-popup__error" x-show="error" x-text="error"></div>
+                    <div class="analytics-date-picker-popup__error" x-show="error" x-text="error"></div>
 
                     {# Quick presets within the picker #}
-                    <div class="date-picker-popup__presets">
-                        <button type="button" class="date-picker-popup__preset" @click="setPreset('yesterday')">Yesterday</button>
-                        <button type="button" class="date-picker-popup__preset" @click="setPreset('thisWeek')">This week</button>
-                        <button type="button" class="date-picker-popup__preset" @click="setPreset('lastWeek')">Last week</button>
-                        <button type="button" class="date-picker-popup__preset" @click="setPreset('thisMonth')">This month</button>
-                        <button type="button" class="date-picker-popup__preset" @click="setPreset('lastMonth')">Last month</button>
+                    <div class="analytics-date-picker-popup__presets">
+                        <button type="button" class="analytics-date-picker-popup__preset" @click="setPreset('yesterday')">Yesterday</button>
+                        <button type="button" class="analytics-date-picker-popup__preset" @click="setPreset('thisWeek')">This week</button>
+                        <button type="button" class="analytics-date-picker-popup__preset" @click="setPreset('lastWeek')">Last week</button>
+                        <button type="button" class="analytics-date-picker-popup__preset" @click="setPreset('thisMonth')">This month</button>
+                        <button type="button" class="analytics-date-picker-popup__preset" @click="setPreset('lastMonth')">Last month</button>
                     </div>
 
-                    <div class="date-picker-popup__actions">
-                        <button type="button" class="btn btn--small" @click="customOpen = false">Cancel</button>
+                    <div class="analytics-date-picker-popup__actions">
+                        <button type="button" class="analytics-btn analytics-btn--small" @click="customOpen = false">Cancel</button>
                         <button type="button"
-                                class="btn btn--small btn--primary"
+                                class="analytics-btn analytics-btn--small analytics-btn--primary"
                                 @click="applyDates"
                                 :disabled="!isValid">
                             Apply
@@ -99,59 +101,174 @@
                 </div>
             </div>
         </div>
+
+        {# Comparison period toggle #}
+        <div class="analytics-compare-container" style="position: relative; display: inline-block;">
+            <button class="analytics-btn analytics-btn--icon"
+                    :class="{ 'active': compareMode !== 'none' }"
+                    @click.stop="compareOpen = !compareOpen; customOpen = false"
+                    :aria-expanded="compareOpen"
+                    aria-haspopup="true"
+                    type="button"
+                    title="Compare periods">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+                </svg>
+                <span x-show="compareMode !== 'none'" class="analytics-compare-indicator"></span>
+            </button>
+
+            {# Compare options popup #}
+            <div class="analytics-date-picker-popup analytics-compare-popup"
+                 x-show="compareOpen"
+                 x-transition
+                 @click.stop
+                 style="display: none; right: 0; left: auto;">
+                <div class="analytics-compare-popup__content">
+                    <div class="analytics-compare-popup__title">Compare to</div>
+                    <label class="analytics-compare-option">
+                        <input type="radio" name="compare" value="none" x-model="compareMode" @change="applyCompare">
+                        <span>No comparison</span>
+                    </label>
+                    <label class="analytics-compare-option">
+                        <input type="radio" name="compare" value="previous" x-model="compareMode" @change="applyCompare">
+                        <span>Previous period</span>
+                    </label>
+                    <label class="analytics-compare-option">
+                        <input type="radio" name="compare" value="year" x-model="compareMode" @change="applyCompare">
+                        <span>Same period last year</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        {# Saved Views dropdown #}
+        <div class="analytics-saved-views-container" x-data="{ viewsOpen: false, showSave: false }" @click.outside="viewsOpen = false; showSave = false">
+            <button class="analytics-btn analytics-btn--small analytics-btn--secondary"
+                    @click="viewsOpen = !viewsOpen; if(viewsOpen) htmx.trigger('#saved-views-list', 'load')"
+                    :aria-expanded="viewsOpen"
+                    type="button"
+                    title="Saved views">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                Views
+            </button>
+
+            {# Dropdown content #}
+            <div class="analytics-saved-views__dropdown" x-show="viewsOpen" x-transition @click.stop>
+                {# Saved views list (loaded via HTMX) #}
+                <div class="analytics-saved-views__list" id="saved-views-list"
+                     hx-get="./views"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="analytics-saved-views__loading">Loading...</div>
+                </div>
+
+                <div class="analytics-saved-views__divider"></div>
+
+                {# Save current button #}
+                <button class="analytics-saved-views__save-btn" @click="showSave = !showSave" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Save Current View
+                </button>
+
+                {# Save form #}
+                <form x-show="showSave" x-transition
+                      class="analytics-saved-views__form"
+                      hx-post="./views/create?{{ current_params }}"
+                      hx-target="#saved-views-list"
+                      hx-swap="innerHTML"
+                      @htmx:after-request="showSave = false">
+                    <div class="analytics-form-group">
+                        <input type="text" name="name" required
+                               class="analytics-form-input analytics-form-input--small"
+                               placeholder="View name...">
+                    </div>
+                    <div class="analytics-form-group">
+                        <input type="text" name="description"
+                               class="analytics-form-input analytics-form-input--small"
+                               placeholder="Description (optional)">
+                    </div>
+                    <input type="hidden" name="date_preset" value="{{ date_range_key }}">
+                    <div class="analytics-form-group analytics-form-group--inline">
+                        <label class="analytics-checkbox">
+                            <input type="checkbox" name="is_default" value="true">
+                            <span>Set as default</span>
+                        </label>
+                    </div>
+                    <div class="analytics-form-group analytics-form-group--actions">
+                        <button type="button" class="analytics-btn analytics-btn--small analytics-btn--secondary" @click="showSave = false">Cancel</button>
+                        <button type="submit" class="analytics-btn analytics-btn--small">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {# Keyboard shortcuts hint #}
+    <div class="analytics-keyboard-hints" x-show="showKeyboardHints" x-transition>
+        <span class="analytics-keyboard-hint"><kbd>7</kbd> 7 days</span>
+        <span class="analytics-keyboard-hint"><kbd>3</kbd> 30 days</span>
+        <span class="analytics-keyboard-hint"><kbd>9</kbd> 90 days</span>
+        <span class="analytics-keyboard-hint"><kbd>?</kbd> Toggle hints</span>
     </div>
 
     {# Active filters display #}
     {% set active_filter_count = (1 if filters.country else 0) + (1 if filters.device else 0) + (1 if filters.browser else 0) + (1 if filters.source else 0) + (1 if filters.page else 0) %}
     {% if filters and active_filter_count > 0 %}
-    <div class="filters">
+    <div class="analytics-filters">
         {% if filters.country %}
-        <span class="filter-chip">
-            <span class="filter-chip__type">Country:</span> {{ filters.country }}
-            <button class="filter-chip__remove"
+        <span class="analytics-filter-chip">
+            <span class="analytics-filter-chip__type">Country:</span> {{ filters.country }}
+            <button class="analytics-filter-chip__remove"
                     hx-get="./partials/{{ active_tab }}?{{ current_params|replace('country=' ~ filters.country, '')|replace('&&', '&')|replace('?&', '?') }}"
                     hx-target="#main-content"
                     hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.device %}
-        <span class="filter-chip">
-            <span class="filter-chip__type">Device:</span> {{ filters.device|capitalize }}
-            <button class="filter-chip__remove"
+        <span class="analytics-filter-chip">
+            <span class="analytics-filter-chip__type">Device:</span> {{ filters.device|capitalize }}
+            <button class="analytics-filter-chip__remove"
                     hx-get="./partials/{{ active_tab }}?{{ current_params|replace('device=' ~ filters.device, '')|replace('&&', '&')|replace('?&', '?') }}"
                     hx-target="#main-content"
                     hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.browser %}
-        <span class="filter-chip">
-            <span class="filter-chip__type">Browser:</span> {{ filters.browser }}
-            <button class="filter-chip__remove"
+        <span class="analytics-filter-chip">
+            <span class="analytics-filter-chip__type">Browser:</span> {{ filters.browser }}
+            <button class="analytics-filter-chip__remove"
                     hx-get="./partials/{{ active_tab }}?{{ current_params|replace('browser=' ~ filters.browser, '')|replace('&&', '&')|replace('?&', '?') }}"
                     hx-target="#main-content"
                     hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.source %}
-        <span class="filter-chip">
-            <span class="filter-chip__type">Source:</span> {{ filters.source or 'Direct' }}
-            <button class="filter-chip__remove"
+        <span class="analytics-filter-chip">
+            <span class="analytics-filter-chip__type">Source:</span> {{ filters.source or 'Direct' }}
+            <button class="analytics-filter-chip__remove"
                     hx-get="./partials/{{ active_tab }}?{{ current_params|replace('source=' ~ filters.source, '')|replace('&&', '&')|replace('?&', '?') }}"
                     hx-target="#main-content"
                     hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if filters.page %}
-        <span class="filter-chip">
-            <span class="filter-chip__type">Page:</span> {{ filters.page|truncate(25) }}
-            <button class="filter-chip__remove"
+        <span class="analytics-filter-chip">
+            <span class="analytics-filter-chip__type">Page:</span> {{ filters.page|truncate(25) }}
+            <button class="analytics-filter-chip__remove"
                     hx-get="./partials/{{ active_tab }}?{{ current_params|replace('page=' ~ filters.page|urlencode, '')|replace('&&', '&')|replace('?&', '?') }}"
                     hx-target="#main-content"
                     hx-push-url="true">&times;</button>
         </span>
         {% endif %}
         {% if active_filter_count >= 2 %}
-        <button class="filter-chip filter-chip--clear"
+        <button class="analytics-filter-chip analytics-filter-chip--clear"
                 hx-get="./partials/{{ active_tab }}?period={{ date_range_key }}{% if start_date and end_date %}&start={{ start_date }}&end={{ end_date }}{% endif %}"
                 hx-target="#main-content"
                 hx-push-url="true">

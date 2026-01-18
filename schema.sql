@@ -232,3 +232,60 @@ CREATE TABLE IF NOT EXISTS site_settings (
 
 CREATE INDEX IF NOT EXISTS idx_site_settings_site ON site_settings(site_id);
 CREATE INDEX IF NOT EXISTS idx_site_settings_key ON site_settings(key);
+
+-- =============================================================================
+-- FUNNELS TABLE
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS funnels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    steps TEXT NOT NULL,  -- JSON array of funnel steps [{type: 'page'|'event', value: '/path' or 'event_name'}]
+    is_preset INTEGER DEFAULT 0,  -- 1 for system presets, 0 for custom
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(site, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_funnels_site ON funnels(site);
+
+-- =============================================================================
+-- GOALS TABLE
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    goal_type TEXT NOT NULL,  -- 'page' or 'event'
+    goal_value TEXT NOT NULL,  -- URL path for page, event_name for event
+    target_count INTEGER,  -- Optional target number
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(site, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goals_site ON goals(site);
+CREATE INDEX IF NOT EXISTS idx_goals_active ON goals(site, is_active);
+
+-- =============================================================================
+-- SAVED VIEWS TABLE
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS saved_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    filters TEXT NOT NULL,  -- JSON object of filter key-value pairs
+    date_preset TEXT,  -- 'today', '7d', '30d', '90d', 'custom'
+    is_default INTEGER DEFAULT 0,  -- 1 if this is the default view for the site
+    is_shared INTEGER DEFAULT 0,  -- 1 if visible to all users
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(site, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_views_site ON saved_views(site);
+CREATE INDEX IF NOT EXISTS idx_saved_views_default ON saved_views(site, is_default);

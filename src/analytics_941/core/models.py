@@ -269,6 +269,17 @@ class DashboardData(BaseModel):
     utm_campaigns: list[dict[str, Any]]
 
 
+class ActivityEvent(BaseModel):
+    """A single real-time activity event."""
+    id: str  # Unique event ID for deduplication
+    event_type: str  # 'pageview' or custom event name
+    page: str
+    country: str | None = None
+    device: str | None = None
+    browser: str | None = None
+    timestamp: str  # ISO format
+
+
 class RealtimeData(BaseModel):
     """Real-time visitor data."""
     active_visitors: int
@@ -276,6 +287,7 @@ class RealtimeData(BaseModel):
     pages: list[dict[str, Any]]  # [{url, count}]
     countries: list[dict[str, Any]]  # [{code, count}]
     sources: list[dict[str, Any]]  # [{source, count}]
+    recent_activity: list[ActivityEvent] = []  # Last 20 events for activity feed
 
 
 class GlobeData(BaseModel):
@@ -283,3 +295,106 @@ class GlobeData(BaseModel):
     countries: list[dict[str, Any]]  # [{code, name, lat, lon, visits}]
     regions: list[dict[str, Any]] | None = None  # For drill-down
     cities: list[dict[str, Any]] | None = None  # For drill-down
+
+
+# =============================================================================
+# Funnel Models
+# =============================================================================
+
+class FunnelStep(BaseModel):
+    """A single step in a conversion funnel."""
+    type: str  # 'page' or 'event'
+    value: str  # URL path for page, event_name for event
+    label: str | None = None  # Optional display label
+
+
+class FunnelDefinition(BaseModel):
+    """A funnel definition."""
+    id: int | None = None
+    site: str
+    name: str
+    description: str | None = None
+    steps: list[FunnelStep]
+    is_preset: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class FunnelStepResult(BaseModel):
+    """Result for a single funnel step."""
+    step_number: int
+    label: str
+    type: str
+    value: str
+    visitors: int
+    sessions: int
+    conversion_rate: float  # Percentage from previous step (100 for first step)
+    drop_off_rate: float  # Percentage who didn't continue
+    drop_off_count: int  # Absolute number who dropped off
+
+
+class FunnelResult(BaseModel):
+    """Complete funnel analysis result."""
+    funnel: FunnelDefinition
+    date_range: DateRange
+    steps: list[FunnelStepResult]
+    total_entered: int  # Visitors who entered step 1
+    total_converted: int  # Visitors who completed all steps
+    overall_conversion_rate: float  # total_converted / total_entered * 100
+    avg_time_to_convert: float | None = None  # In seconds, if available
+
+
+# =============================================================================
+# Goal Models
+# =============================================================================
+
+class GoalDefinition(BaseModel):
+    """A goal definition."""
+    id: int | None = None
+    site: str
+    name: str
+    description: str | None = None
+    goal_type: str  # 'page' or 'event'
+    goal_value: str  # URL path or event_name
+    target_count: int | None = None
+    is_active: bool = True
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class GoalResult(BaseModel):
+    """Goal completion result."""
+    goal: GoalDefinition
+    date_range: DateRange
+    completions: int
+    unique_visitors: int
+    conversion_rate: float  # Percentage of total visitors
+    trend: list[dict[str, Any]]  # [{date, completions}] for sparkline
+
+
+# =============================================================================
+# Saved View Models
+# =============================================================================
+
+class SavedView(BaseModel):
+    """A saved filter/view configuration."""
+    id: int | None = None
+    site: str
+    name: str
+    description: str | None = None
+    filters: dict[str, str]  # Key-value pairs of filter settings
+    date_preset: str | None = None  # 'today', '7d', '30d', '90d', 'custom'
+    is_default: bool = False
+    is_shared: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    def to_query_params(self) -> str:
+        """Convert filters to URL query parameters."""
+        params = []
+        for key, value in self.filters.items():
+            if value:
+                params.append(f"{key}={value}")
+        if self.date_preset:
+            params.append(f"range={self.date_preset}")
+        return "&".join(params)

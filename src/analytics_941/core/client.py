@@ -10,13 +10,21 @@ from typing import Any
 import httpx
 
 from .models import (
+    ActivityEvent,
     BrowserStats,
     CoreMetrics,
     CountryStats,
     DashboardFilters,
+    DateRange,
     DeviceStats,
     EventStats,
+    FunnelDefinition,
+    FunnelResult,
+    FunnelStep,
+    FunnelStepResult,
     GlobeData,
+    GoalDefinition,
+    GoalResult,
     MetricChange,
     PageStats,
     RealtimeData,
@@ -1784,18 +1792,108 @@ class AnalyticsClient:
             [self.site_name, cutoff],
         )
 
+        # Recent individual activity events for activity feed
+        activity_rows = await self._query(
+            """
+            SELECT
+                id,
+                url,
+                country,
+                device_type,
+                browser,
+                timestamp
+            FROM page_views
+            WHERE site = ? AND timestamp >= ? AND is_bot = 0
+            ORDER BY timestamp DESC
+            LIMIT 20
+            """,
+            [self.site_name, cutoff],
+        )
+
+        recent_activity = [
+            ActivityEvent(
+                id=str(row.get("id", "")),
+                event_type="pageview",
+                page=row.get("url", ""),
+                country=row.get("country"),
+                device=row.get("device_type"),
+                browser=row.get("browser"),
+                timestamp=row.get("timestamp", ""),
+            )
+            for row in activity_rows
+        ]
+
         return RealtimeData(
             active_visitors=visitors[0]["count"] if visitors else 0,
             active_sessions=sessions,
             pages=pages,
             countries=countries,
             sources=sources,
+            recent_activity=recent_activity,
         )
 
     async def get_realtime_count(self) -> int:
         """Get count of human visitors in the last 5 minutes."""
         data = await self.get_realtime_data(minutes=5)
         return data.active_visitors
+
+    async def get_activity_feed(
+        self, minutes: int = 5, event_type: str | None = None
+    ) -> tuple[int, list[ActivityEvent]]:
+        """
+        Get recent activity events for live feed.
+
+        Returns tuple of (active_visitor_count, activity_events).
+        Optionally filter by event_type.
+        """
+        cutoff = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
+
+        # Get visitor count
+        visitors = await self._query(
+            """
+            SELECT COUNT(DISTINCT visitor_hash) as count
+            FROM page_views
+            WHERE site = ? AND timestamp >= ? AND is_bot = 0
+            """,
+            [self.site_name, cutoff],
+        )
+
+        # Get recent activity
+        activity_rows = await self._query(
+            """
+            SELECT
+                id,
+                url,
+                country,
+                device_type,
+                browser,
+                timestamp
+            FROM page_views
+            WHERE site = ? AND timestamp >= ? AND is_bot = 0
+            ORDER BY timestamp DESC
+            LIMIT 20
+            """,
+            [self.site_name, cutoff],
+        )
+
+        recent_activity = [
+            ActivityEvent(
+                id=str(row.get("id", "")),
+                event_type="pageview",
+                page=row.get("url", ""),
+                country=row.get("country"),
+                device=row.get("device_type"),
+                browser=row.get("browser"),
+                timestamp=row.get("timestamp", ""),
+            )
+            for row in activity_rows
+        ]
+
+        # Filter by event type if specified
+        if event_type and event_type != "all":
+            recent_activity = [e for e in recent_activity if e.event_type == event_type]
+
+        return (visitors[0]["count"] if visitors else 0, recent_activity)
 
     # =========================================================================
     # EXPORT
@@ -2088,3 +2186,613 @@ class AnalyticsClient:
             [challenge_id],
         )
         return challenge
+
+    # =========================================================================
+    # FUNNEL ANALYSIS
+    # =========================================================================
+
+    async def get_funnels(self) -> list[FunnelDefinition]:
+        """Get all funnels for this site."""
+        result = await self._query(
+            """
+            SELECT id, site, name, description, steps, is_preset, created_at, updated_at
+            FROM funnels
+            WHERE site = ?
+            ORDER BY is_preset DESC, name ASC
+            """,
+            [self.site_name],
+        )
+
+        funnels = []
+        for row in result:
+            steps = json.loads(row["steps"]) if row["steps"] else []
+            funnels.append(FunnelDefinition(
+                id=row["id"],
+                site=row["site"],
+                name=row["name"],
+                description=row.get("description"),
+                steps=[FunnelStep(**s) for s in steps],
+                is_preset=bool(row.get("is_preset", 0)),
+                created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+                updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
+            ))
+
+        return funnels
+
+    async def get_funnel(self, funnel_id: int) -> FunnelDefinition | None:
+        """Get a single funnel by ID."""
+        result = await self._query(
+            """
+            SELECT id, site, name, description, steps, is_preset, created_at, updated_at
+            FROM funnels
+            WHERE site = ? AND id = ?
+            """,
+            [self.site_name, funnel_id],
+        )
+
+        if not result:
+            return None
+
+        row = result[0]
+        steps = json.loads(row["steps"]) if row["steps"] else []
+        return FunnelDefinition(
+            id=row["id"],
+            site=row["site"],
+            name=row["name"],
+            description=row.get("description"),
+            steps=[FunnelStep(**s) for s in steps],
+            is_preset=bool(row.get("is_preset", 0)),
+            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+            updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
+        )
+
+    async def create_funnel(self, funnel: FunnelDefinition) -> int:
+        """Create a new funnel. Returns the new funnel ID."""
+        steps_json = json.dumps([s.model_dump() for s in funnel.steps])
+        await self._query(
+            """
+            INSERT INTO funnels (site, name, description, steps, is_preset)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [self.site_name, funnel.name, funnel.description, steps_json, int(funnel.is_preset)],
+        )
+
+        # Get the inserted ID
+        result = await self._query(
+            "SELECT id FROM funnels WHERE site = ? AND name = ?",
+            [self.site_name, funnel.name],
+        )
+        return result[0]["id"] if result else 0
+
+    async def delete_funnel(self, funnel_id: int) -> bool:
+        """Delete a funnel. Returns True if deleted."""
+        await self._query(
+            "DELETE FROM funnels WHERE site = ? AND id = ? AND is_preset = 0",
+            [self.site_name, funnel_id],
+        )
+        return True
+
+    async def analyze_funnel(
+        self,
+        funnel: FunnelDefinition,
+        start_date: date,
+        end_date: date,
+    ) -> FunnelResult:
+        """
+        Analyze a funnel for the given date range.
+
+        This uses a sequential approach: for each step, we find visitors
+        who completed that step AND all previous steps in order.
+        """
+        date_range = DateRange(start=start_date, end=end_date)
+        start_str = start_date.isoformat()
+        end_str = (end_date + timedelta(days=1)).isoformat()
+
+        step_results: list[FunnelStepResult] = []
+        previous_visitors: set[str] | None = None
+
+        for i, step in enumerate(funnel.steps):
+            step_num = i + 1
+            label = step.label or step.value
+
+            # Build query based on step type
+            if step.type == "page":
+                query = """
+                    SELECT DISTINCT visitor_hash
+                    FROM page_views
+                    WHERE site = ?
+                      AND timestamp >= ? AND timestamp < ?
+                      AND url LIKE ?
+                      AND is_bot = 0
+                """
+                params = [self.site_name, start_str, end_str, f"%{step.value}%"]
+            else:  # event
+                query = """
+                    SELECT DISTINCT visitor_hash
+                    FROM events
+                    WHERE site = ?
+                      AND timestamp >= ? AND timestamp < ?
+                      AND event_name = ?
+                """
+                params = [self.site_name, start_str, end_str, step.value]
+
+            result = await self._query(query, params)
+            current_visitors = {row["visitor_hash"] for row in result}
+
+            # For steps after the first, only count visitors who completed all previous steps
+            if previous_visitors is not None:
+                current_visitors = current_visitors.intersection(previous_visitors)
+
+            visitors_count = len(current_visitors)
+
+            # Calculate conversion from previous step
+            if i == 0:
+                conversion_rate = 100.0
+                drop_off_rate = 0.0
+                drop_off_count = 0
+            else:
+                prev_count = step_results[i - 1].visitors
+                conversion_rate = (visitors_count / prev_count * 100) if prev_count > 0 else 0
+                drop_off_rate = 100 - conversion_rate
+                drop_off_count = prev_count - visitors_count
+
+            step_results.append(FunnelStepResult(
+                step_number=step_num,
+                label=label,
+                type=step.type,
+                value=step.value,
+                visitors=visitors_count,
+                sessions=visitors_count,  # Simplified: treat visitors as sessions for now
+                conversion_rate=round(conversion_rate, 1),
+                drop_off_rate=round(drop_off_rate, 1),
+                drop_off_count=drop_off_count,
+            ))
+
+            previous_visitors = current_visitors
+
+        # Calculate overall metrics
+        total_entered = step_results[0].visitors if step_results else 0
+        total_converted = step_results[-1].visitors if step_results else 0
+        overall_rate = (total_converted / total_entered * 100) if total_entered > 0 else 0
+
+        return FunnelResult(
+            funnel=funnel,
+            date_range=date_range,
+            steps=step_results,
+            total_entered=total_entered,
+            total_converted=total_converted,
+            overall_conversion_rate=round(overall_rate, 1),
+            avg_time_to_convert=None,  # TODO: Calculate from timestamps
+        )
+
+    async def ensure_preset_funnels(self) -> None:
+        """Create preset funnels if they don't exist."""
+        existing = await self.get_funnels()
+        existing_names = {f.name for f in existing}
+
+        presets = [
+            FunnelDefinition(
+                site=self.site_name,
+                name="Landing to Signup",
+                description="Track visitors from landing page to signup completion",
+                steps=[
+                    FunnelStep(type="page", value="/", label="Landing Page"),
+                    FunnelStep(type="page", value="/signup", label="Signup Page"),
+                    FunnelStep(type="event", value="signup_complete", label="Signup Complete"),
+                ],
+                is_preset=True,
+            ),
+            FunnelDefinition(
+                site=self.site_name,
+                name="Blog to Conversion",
+                description="Track blog readers who convert",
+                steps=[
+                    FunnelStep(type="page", value="/blog", label="Blog"),
+                    FunnelStep(type="page", value="/pricing", label="Pricing"),
+                    FunnelStep(type="event", value="checkout_start", label="Start Checkout"),
+                ],
+                is_preset=True,
+            ),
+            FunnelDefinition(
+                site=self.site_name,
+                name="Product Journey",
+                description="Track the product page to purchase flow",
+                steps=[
+                    FunnelStep(type="page", value="/products", label="Products"),
+                    FunnelStep(type="page", value="/cart", label="Cart"),
+                    FunnelStep(type="page", value="/checkout", label="Checkout"),
+                    FunnelStep(type="event", value="purchase", label="Purchase"),
+                ],
+                is_preset=True,
+            ),
+        ]
+
+        for preset in presets:
+            if preset.name not in existing_names:
+                await self.create_funnel(preset)
+
+    # =========================================================================
+    # GOAL TRACKING
+    # =========================================================================
+
+    async def get_goals(self, active_only: bool = True) -> list[GoalDefinition]:
+        """Get all goals for this site."""
+        query = """
+            SELECT id, site, name, description, goal_type, goal_value,
+                   target_count, is_active, created_at, updated_at
+            FROM goals
+            WHERE site = ?
+        """
+        params = [self.site_name]
+
+        if active_only:
+            query += " AND is_active = 1"
+
+        query += " ORDER BY name ASC"
+
+        result = await self._query(query, params)
+
+        return [
+            GoalDefinition(
+                id=row["id"],
+                site=row["site"],
+                name=row["name"],
+                description=row.get("description"),
+                goal_type=row["goal_type"],
+                goal_value=row["goal_value"],
+                target_count=row.get("target_count"),
+                is_active=bool(row.get("is_active", 1)),
+                created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+                updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
+            )
+            for row in result
+        ]
+
+    async def create_goal(self, goal: GoalDefinition) -> int:
+        """Create a new goal. Returns the new goal ID."""
+        await self._query(
+            """
+            INSERT INTO goals (site, name, description, goal_type, goal_value, target_count, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                self.site_name,
+                goal.name,
+                goal.description,
+                goal.goal_type,
+                goal.goal_value,
+                goal.target_count,
+                int(goal.is_active),
+            ],
+        )
+
+        result = await self._query(
+            "SELECT id FROM goals WHERE site = ? AND name = ?",
+            [self.site_name, goal.name],
+        )
+        return result[0]["id"] if result else 0
+
+    async def delete_goal(self, goal_id: int) -> bool:
+        """Delete a goal."""
+        await self._query(
+            "DELETE FROM goals WHERE site = ? AND id = ?",
+            [self.site_name, goal_id],
+        )
+        return True
+
+    async def analyze_goal(
+        self,
+        goal: GoalDefinition,
+        start_date: date,
+        end_date: date,
+    ) -> GoalResult:
+        """Analyze goal completions for the given date range."""
+        date_range = DateRange(start=start_date, end=end_date)
+        start_str = start_date.isoformat()
+        end_str = (end_date + timedelta(days=1)).isoformat()
+
+        # Get completions based on goal type
+        if goal.goal_type == "page":
+            query = """
+                SELECT
+                    COUNT(*) as completions,
+                    COUNT(DISTINCT visitor_hash) as unique_visitors
+                FROM page_views
+                WHERE site = ?
+                  AND timestamp >= ? AND timestamp < ?
+                  AND url LIKE ?
+                  AND is_bot = 0
+            """
+            params = [self.site_name, start_str, end_str, f"%{goal.goal_value}%"]
+        else:  # event
+            query = """
+                SELECT
+                    COUNT(*) as completions,
+                    COUNT(DISTINCT visitor_hash) as unique_visitors
+                FROM events
+                WHERE site = ?
+                  AND timestamp >= ? AND timestamp < ?
+                  AND event_name = ?
+            """
+            params = [self.site_name, start_str, end_str, goal.goal_value]
+
+        result = await self._query(query, params)
+        completions = result[0]["completions"] if result else 0
+        unique_visitors = result[0]["unique_visitors"] if result else 0
+
+        # Get total visitors for conversion rate
+        total_query = """
+            SELECT COUNT(DISTINCT visitor_hash) as total
+            FROM page_views
+            WHERE site = ? AND timestamp >= ? AND timestamp < ? AND is_bot = 0
+        """
+        total_result = await self._query(total_query, [self.site_name, start_str, end_str])
+        total_visitors = total_result[0]["total"] if total_result else 0
+
+        conversion_rate = (unique_visitors / total_visitors * 100) if total_visitors > 0 else 0
+
+        # Get daily trend
+        if goal.goal_type == "page":
+            trend_query = """
+                SELECT date(timestamp) as day, COUNT(*) as completions
+                FROM page_views
+                WHERE site = ? AND timestamp >= ? AND timestamp < ? AND url LIKE ? AND is_bot = 0
+                GROUP BY date(timestamp)
+                ORDER BY day
+            """
+            trend_params = [self.site_name, start_str, end_str, f"%{goal.goal_value}%"]
+        else:
+            trend_query = """
+                SELECT date(timestamp) as day, COUNT(*) as completions
+                FROM events
+                WHERE site = ? AND timestamp >= ? AND timestamp < ? AND event_name = ?
+                GROUP BY date(timestamp)
+                ORDER BY day
+            """
+            trend_params = [self.site_name, start_str, end_str, goal.goal_value]
+
+        trend_result = await self._query(trend_query, trend_params)
+        trend = [{"date": row["day"], "completions": row["completions"]} for row in trend_result]
+
+        return GoalResult(
+            goal=goal,
+            date_range=date_range,
+            completions=completions,
+            unique_visitors=unique_visitors,
+            conversion_rate=round(conversion_rate, 2),
+            trend=trend,
+        )
+
+    async def ensure_preset_goals(self) -> None:
+        """Create default preset goals if none exist."""
+        existing = await self.get_goals(active_only=False)
+        if existing:
+            return  # Already has goals
+
+        preset_goals = [
+            GoalDefinition(
+                site=self.site_name,
+                name="Contact Form Submitted",
+                description="Track visitors who submit the contact form",
+                goal_type="event",
+                goal_value="form_submit",
+                is_active=True,
+            ),
+            GoalDefinition(
+                site=self.site_name,
+                name="Pricing Page Viewed",
+                description="Track visitors who view the pricing page",
+                goal_type="page",
+                goal_value="/pricing",
+                is_active=True,
+            ),
+            GoalDefinition(
+                site=self.site_name,
+                name="Signup Completed",
+                description="Track visitors who complete signup",
+                goal_type="event",
+                goal_value="signup",
+                is_active=True,
+            ),
+            GoalDefinition(
+                site=self.site_name,
+                name="Blog Post Read",
+                description="Track visitors who read blog content",
+                goal_type="page",
+                goal_value="/blog/",
+                is_active=True,
+            ),
+        ]
+
+        for goal in preset_goals:
+            try:
+                await self.create_goal(goal)
+            except Exception:
+                # Goal may already exist (race condition)
+                pass
+
+    # =========================================================================
+    # Saved Views
+    # =========================================================================
+
+    async def get_saved_views(self) -> list["SavedView"]:
+        """Get all saved views for this site."""
+        from analytics_941.core.models import SavedView
+
+        result = await self._query(
+            """
+            SELECT id, site, name, description, filters, date_preset,
+                   is_default, is_shared, created_at, updated_at
+            FROM saved_views
+            WHERE site = ?
+            ORDER BY is_default DESC, name ASC
+            """,
+            [self.site_name],
+        )
+
+        views = []
+        for row in result:
+            import json
+            filters = json.loads(row["filters"]) if row["filters"] else {}
+            views.append(SavedView(
+                id=row["id"],
+                site=row["site"],
+                name=row["name"],
+                description=row["description"],
+                filters=filters,
+                date_preset=row["date_preset"],
+                is_default=bool(row["is_default"]),
+                is_shared=bool(row["is_shared"]),
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            ))
+        return views
+
+    async def get_saved_view(self, view_id: int) -> "SavedView | None":
+        """Get a specific saved view by ID."""
+        from analytics_941.core.models import SavedView
+
+        result = await self._query(
+            """
+            SELECT id, site, name, description, filters, date_preset,
+                   is_default, is_shared, created_at, updated_at
+            FROM saved_views
+            WHERE id = ? AND site = ?
+            """,
+            [view_id, self.site_name],
+        )
+
+        if not result:
+            return None
+
+        row = result[0]
+        import json
+        filters = json.loads(row["filters"]) if row["filters"] else {}
+        return SavedView(
+            id=row["id"],
+            site=row["site"],
+            name=row["name"],
+            description=row["description"],
+            filters=filters,
+            date_preset=row["date_preset"],
+            is_default=bool(row["is_default"]),
+            is_shared=bool(row["is_shared"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    async def get_default_view(self) -> "SavedView | None":
+        """Get the default saved view for this site."""
+        from analytics_941.core.models import SavedView
+
+        result = await self._query(
+            """
+            SELECT id, site, name, description, filters, date_preset,
+                   is_default, is_shared, created_at, updated_at
+            FROM saved_views
+            WHERE site = ? AND is_default = 1
+            LIMIT 1
+            """,
+            [self.site_name],
+        )
+
+        if not result:
+            return None
+
+        row = result[0]
+        import json
+        filters = json.loads(row["filters"]) if row["filters"] else {}
+        return SavedView(
+            id=row["id"],
+            site=row["site"],
+            name=row["name"],
+            description=row["description"],
+            filters=filters,
+            date_preset=row["date_preset"],
+            is_default=True,
+            is_shared=bool(row["is_shared"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    async def create_saved_view(self, view: "SavedView") -> int:
+        """Create a new saved view and return its ID."""
+        import json
+
+        # If setting as default, clear other defaults first
+        if view.is_default:
+            await self._execute(
+                "UPDATE saved_views SET is_default = 0 WHERE site = ?",
+                [self.site_name],
+            )
+
+        result = await self._execute(
+            """
+            INSERT INTO saved_views (site, name, description, filters, date_preset, is_default, is_shared)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                self.site_name,
+                view.name,
+                view.description,
+                json.dumps(view.filters),
+                view.date_preset,
+                1 if view.is_default else 0,
+                1 if view.is_shared else 0,
+            ],
+        )
+        return result.get("meta", {}).get("last_row_id", 0)
+
+    async def update_saved_view(self, view_id: int, view: "SavedView") -> bool:
+        """Update an existing saved view."""
+        import json
+
+        # If setting as default, clear other defaults first
+        if view.is_default:
+            await self._execute(
+                "UPDATE saved_views SET is_default = 0 WHERE site = ? AND id != ?",
+                [self.site_name, view_id],
+            )
+
+        result = await self._execute(
+            """
+            UPDATE saved_views
+            SET name = ?, description = ?, filters = ?, date_preset = ?,
+                is_default = ?, is_shared = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND site = ?
+            """,
+            [
+                view.name,
+                view.description,
+                json.dumps(view.filters),
+                view.date_preset,
+                1 if view.is_default else 0,
+                1 if view.is_shared else 0,
+                view_id,
+                self.site_name,
+            ],
+        )
+        return result.get("meta", {}).get("changes", 0) > 0
+
+    async def delete_saved_view(self, view_id: int) -> bool:
+        """Delete a saved view."""
+        result = await self._execute(
+            "DELETE FROM saved_views WHERE id = ? AND site = ?",
+            [view_id, self.site_name],
+        )
+        return result.get("meta", {}).get("changes", 0) > 0
+
+    async def set_default_view(self, view_id: int) -> bool:
+        """Set a view as the default, clearing any existing default."""
+        # Clear existing default
+        await self._execute(
+            "UPDATE saved_views SET is_default = 0 WHERE site = ?",
+            [self.site_name],
+        )
+
+        # Set new default
+        result = await self._execute(
+            "UPDATE saved_views SET is_default = 1 WHERE id = ? AND site = ?",
+            [view_id, self.site_name],
+        )
+        return result.get("meta", {}).get("changes", 0) > 0
