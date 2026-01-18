@@ -13,8 +13,7 @@ from pathlib import Path
 from threading import Lock
 
 from fastapi import APIRouter, Cookie, Form, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from ..config import MIN_PASSKEY_LENGTH, AnalyticsConfig, verify_passkey
@@ -232,6 +231,24 @@ def _pydantic_json(value):
     return value
 
 
+def _substr(value, start: int, end: int | None = None):
+    """Get a substring from a string value.
+
+    Args:
+        value: The string to slice
+        start: Start index
+        end: Optional end index
+
+    Returns:
+        Substring from start to end (or end of string if end is None)
+    """
+    if not isinstance(value, str):
+        value = str(value)
+    if end is None:
+        return value[start:]
+    return value[start:end]
+
+
 def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     """Create dashboard router with Jinja2 templates.
 
@@ -247,11 +264,35 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     # Add custom filters
     templates.env.filters["format_duration"] = _format_duration
     templates.env.filters["pydantic_json"] = _pydantic_json
+    templates.env.filters["substr"] = _substr
 
-    # Mount static files with cache headers
+    # Static files directory
     static_dir = Path(__file__).parent.parent / "static"
-    if static_dir.exists():
-        router.mount("/static", StaticFiles(directory=str(static_dir)), name="analytics_static")
+
+    # Explicit routes for static files (mount() doesn't work with include_router prefix)
+    @router.get("/static/css/{filename}")
+    async def serve_css(filename: str):
+        """Serve CSS files with caching."""
+        file_path = static_dir / "css" / filename
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(
+            file_path,
+            media_type="text/css",
+            headers={"Cache-Control": "public, max-age=31536000"},
+        )
+
+    @router.get("/static/js/{filename}")
+    async def serve_js(filename: str):
+        """Serve JavaScript files with caching."""
+        file_path = static_dir / "js" / filename
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(
+            file_path,
+            media_type="application/javascript",
+            headers={"Cache-Control": "public, max-age=31536000"},
+        )
 
     # Pre-compute expected hash if passkey is set
     expected_hash = _hash_passkey(config.passkey, config.site_name) if config.passkey else None

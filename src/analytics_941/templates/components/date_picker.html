@@ -34,7 +34,7 @@
                     aria-haspopup="true"
                     type="button">
                 {% if start_date and end_date %}
-                    {{ start_date|replace('-', '/')|slice(5,) }} - {{ end_date|replace('-', '/')|slice(5,) }}
+                    {{ start_date|replace('-', '/')|substr(5) }} - {{ end_date|replace('-', '/')|substr(5) }}
                 {% else %}
                     Custom
                 {% endif %}
