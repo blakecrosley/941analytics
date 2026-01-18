@@ -215,6 +215,23 @@ def _format_duration(seconds: int) -> str:
         return f"{hours}h {minutes}m"
 
 
+def _pydantic_json(value):
+    """Convert Pydantic models to JSON-serializable dicts.
+
+    Handles single models, lists of models, and nested structures.
+    Uses mode='json' to convert datetime to ISO strings.
+    """
+    from pydantic import BaseModel
+
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    elif isinstance(value, list):
+        return [_pydantic_json(item) for item in value]
+    elif isinstance(value, dict):
+        return {k: _pydantic_json(v) for k, v in value.items()}
+    return value
+
+
 def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     """Create dashboard router with Jinja2 templates.
 
@@ -229,6 +246,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
     # Add custom filters
     templates.env.filters["format_duration"] = _format_duration
+    templates.env.filters["pydantic_json"] = _pydantic_json
 
     # Mount static files with cache headers
     static_dir = Path(__file__).parent.parent / "static"

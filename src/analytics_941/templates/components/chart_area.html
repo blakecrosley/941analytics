@@ -10,7 +10,7 @@
 {% set y_step = y_step if y_step > 0 else 1 %}
 
 <div class="analytics-chart-primary"
-     data-chart-data="{{ data|tojson|e }}"
+     data-chart-data="{{ data|pydantic_json|tojson|e }}"
      data-chart-metric="{{ metric }}"
      data-chart-max="{{ max_value }}"
      data-chart-granularity="{{ granularity|default('day') }}"
