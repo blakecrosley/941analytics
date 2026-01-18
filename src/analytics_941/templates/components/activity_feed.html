@@ -1,0 +1,60 @@
+{# Activity feed component - shows recent pageviews/events in real-time #}
+<div class="analytics-activity-feed__header">
+    <div class="analytics-activity-feed__count">
+        <span class="analytics-live"><span class="analytics-live__dot"></span></span>
+        <span class="analytics-activity-feed__count-value">{{ active_count }}</span>
+        <span class="analytics-activity-feed__count-label">active now</span>
+    </div>
+</div>
+
+<ul class="analytics-activity-list" role="log" aria-live="polite" aria-label="Recent activity">
+    {% for event in activity %}
+    <li class="analytics-activity-item analytics-activity-item--new"
+        data-event-id="{{ event.id }}"
+        data-event-type="{{ event.event_type }}">
+        <div class="analytics-activity-item__icon">
+            {% if event.device == 'desktop' %}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+                </svg>
+            {% elif event.device == 'mobile' %}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>
+                </svg>
+            {% elif event.device == 'tablet' %}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="4" y="2" width="16" height="20" rx="2"/><path d="M12 18h.01"/>
+                </svg>
+            {% else %}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+            {% endif %}
+        </div>
+        <div class="analytics-activity-item__content">
+            <div class="analytics-activity-item__page">{{ event.page|truncate(50) }}</div>
+            <div class="analytics-activity-item__meta">
+                {% if event.country %}
+                    <span class="analytics-activity-item__location">{{ event.country }}</span>
+                {% endif %}
+                {% if event.browser %}
+                    <span class="analytics-activity-item__browser">{{ event.browser }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="analytics-activity-item__time" data-timestamp="{{ event.timestamp }}">
+            {% set ts = event.timestamp %}
+            {% if ts %}
+                <span class="analytics-relative-time">just now</span>
+            {% endif %}
+        </div>
+    </li>
+    {% else %}
+    <li class="analytics-activity-item analytics-activity-item--empty">
+        <div class="analytics-empty analytics-empty--compact">
+            <div class="analytics-empty__icon">👤</div>
+            <p>No recent activity</p>
+        </div>
+    </li>
+    {% endfor %}
+</ul>

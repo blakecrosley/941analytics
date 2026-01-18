@@ -7,12 +7,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-    // Auto-refresh realtime data every 5 seconds
-    document.addEventListener('DOMContentLoaded', function() {
-        setInterval(function() {
-            htmx.ajax('GET', './partials/realtime', {target: '#main-content', swap: 'innerHTML'});
-        }, 5000);
-    });
-</script>
+{# Activity feed component handles its own polling via HTMX #}
 {% endblock %}
