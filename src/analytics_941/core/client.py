@@ -692,7 +692,7 @@ class AnalyticsClient:
             SELECT
                 url,
                 COUNT(*) as views
-            FROM pageviews
+            FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
                 AND url IN ({placeholders}) AND is_bot = 0 {pv_filter_sql}
             GROUP BY url
