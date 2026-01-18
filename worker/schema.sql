@@ -137,3 +137,43 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
 );
 
 CREATE INDEX IF NOT EXISTS idx_challenges_site_type ON webauthn_challenges(site, challenge_type);
+
+-- =============================================================================
+-- GOALS TABLE
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    goal_type TEXT NOT NULL,  -- 'page' or 'event'
+    goal_value TEXT NOT NULL,  -- URL path for page, event_name for event
+    target_count INTEGER,  -- Optional target number
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(site, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goals_site ON goals(site);
+CREATE INDEX IF NOT EXISTS idx_goals_active ON goals(site, is_active);
+
+-- =============================================================================
+-- SAVED VIEWS TABLE
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS saved_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    filters TEXT NOT NULL,  -- JSON object of filter key-value pairs
+    date_preset TEXT,  -- 'today', '7d', '30d', '90d', 'custom'
+    is_default INTEGER DEFAULT 0,  -- 1 if this is the default view for the site
+    is_shared INTEGER DEFAULT 0,  -- 1 if visible to all users
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(site, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_views_site ON saved_views(site);
+CREATE INDEX IF NOT EXISTS idx_saved_views_default ON saved_views(site, is_default);
