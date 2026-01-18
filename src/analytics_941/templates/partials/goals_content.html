@@ -1,0 +1,311 @@
+{# Goals tab content - conversion goal tracking #}
+{# Layout: Primary (controls + goal cards) -> Secondary (goal details + trend chart) #}
+
+{# ===== PRIMARY ZONE: Controls & Goal Cards ===== #}
+<div class="analytics-zone-primary">
+    {% include "components/date_picker.html" %}
+
+    {% include "components/stats_cards.html" %}
+
+    {# Goals Grid Header #}
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Conversion Goals</span>
+        <button class="analytics-btn analytics-btn--small" onclick="document.getElementById('create-goal-modal').style.display='flex'">
+            + Create Goal
+        </button>
+    </div>
+</div>{# End analytics-zone-primary #}
+
+{# ===== SECONDARY ZONE: Goal Cards & Details ===== #}
+<div class="analytics-zone-secondary">
+
+{% if goal_results %}
+{# Goal Cards Grid #}
+<div class="analytics-section">
+    <div class="analytics-section__content">
+        <div class="analytics-goals-grid">
+            {% for result in goal_results %}
+            <div class="analytics-goal-card {% if selected_goal and selected_goal.id == result.goal.id %}analytics-goal-card--selected{% endif %}"
+                 onclick="window.location.href='?goal_id={{ result.goal.id }}'">
+                <div class="analytics-goal-card__header">
+                    <span class="analytics-goal-card__type">
+                        {% if result.goal.goal_type == 'page' %}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        Page
+                        {% else %}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                        Event
+                        {% endif %}
+                    </span>
+                    <span class="analytics-goal-card__status {% if result.goal.is_active %}analytics-goal-card__status--active{% else %}analytics-goal-card__status--inactive{% endif %}">
+                        {{ "Active" if result.goal.is_active else "Paused" }}
+                    </span>
+                </div>
+                <h3 class="analytics-goal-card__name">{{ result.goal.name }}</h3>
+                {% if result.goal.description %}
+                <p class="analytics-goal-card__desc">{{ result.goal.description }}</p>
+                {% endif %}
+                <div class="analytics-goal-card__metrics">
+                    <div class="analytics-goal-card__metric">
+                        <span class="analytics-goal-card__metric-value">{{ "{:,}".format(result.completions) }}</span>
+                        <span class="analytics-goal-card__metric-label">Completions</span>
+                    </div>
+                    <div class="analytics-goal-card__metric">
+                        <span class="analytics-goal-card__metric-value">{{ "{:,}".format(result.unique_visitors) }}</span>
+                        <span class="analytics-goal-card__metric-label">Unique</span>
+                    </div>
+                    <div class="analytics-goal-card__metric analytics-goal-card__metric--primary">
+                        <span class="analytics-goal-card__metric-value">{{ "{:.1f}".format(result.conversion_rate) }}%</span>
+                        <span class="analytics-goal-card__metric-label">Conv. Rate</span>
+                    </div>
+                </div>
+                {# Mini sparkline using CSS #}
+                {% if result.trend %}
+                <div class="analytics-goal-card__sparkline">
+                    {% set max_val = result.trend|map(attribute='completions')|max if result.trend else 1 %}
+                    {% for point in result.trend[-14:] %}
+                    <div class="analytics-goal-card__spark-bar"
+                         style="height: {{ (point.completions / max_val * 100)|int if max_val > 0 else 0 }}%;"
+                         title="{{ point.date }}: {{ point.completions }}">
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{# Selected Goal Details #}
+{% if selected_goal %}
+{% set selected_result = goal_results[0] if goal_results|length == 1 else goal_results|selectattr('goal.id', 'equalto', selected_goal.id)|first %}
+{% if selected_result %}
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">{{ selected_goal.name }} - Trend</span>
+        <div class="analytics-section__actions">
+            <button class="analytics-btn analytics-btn--small {% if selected_result.goal.is_active %}analytics-btn--secondary{% else %}analytics-btn--primary{% endif %}"
+                    hx-post="./goals/{{ selected_goal.id }}/toggle"
+                    hx-swap="none"
+                    hx-on::after-request="window.location.reload()">
+                {{ "Pause" if selected_result.goal.is_active else "Activate" }}
+            </button>
+            <button class="analytics-btn analytics-btn--small analytics-btn--danger"
+                    hx-delete="./goals/{{ selected_goal.id }}"
+                    hx-confirm="Delete goal '{{ selected_goal.name }}'?"
+                    hx-target="#main-content"
+                    hx-swap="innerHTML">
+                Delete
+            </button>
+        </div>
+    </div>
+    <div class="analytics-section__content">
+        {# Goal Trend Chart #}
+        <div class="analytics-goal-trend">
+            <div class="analytics-goal-trend__chart">
+                {% if selected_result.trend %}
+                {% set max_val = selected_result.trend|map(attribute='completions')|max if selected_result.trend else 1 %}
+                <div class="analytics-goal-trend__bars">
+                    {% for point in selected_result.trend %}
+                    <div class="analytics-goal-trend__bar-wrapper">
+                        <div class="analytics-goal-trend__bar"
+                             style="height: {{ (point.completions / max_val * 100)|int if max_val > 0 else 0 }}%;">
+                        </div>
+                        <span class="analytics-goal-trend__label">{{ point.date[-5:] }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="analytics-empty" style="padding: var(--941-space-8);">
+                    <p class="analytics-text-muted">No data for this period</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Goal Configuration #}
+        <div class="analytics-goal-config">
+            <div class="analytics-goal-config__item">
+                <span class="analytics-goal-config__label">Type</span>
+                <span class="analytics-goal-config__value">
+                    {{ "Page visit" if selected_goal.goal_type == "page" else "Event trigger" }}
+                </span>
+            </div>
+            <div class="analytics-goal-config__item">
+                <span class="analytics-goal-config__label">Target</span>
+                <span class="analytics-goal-config__value analytics-truncate" title="{{ selected_goal.goal_value }}">
+                    {{ selected_goal.goal_value }}
+                </span>
+            </div>
+            {% if selected_goal.target_count %}
+            <div class="analytics-goal-config__item">
+                <span class="analytics-goal-config__label">Target Count</span>
+                <span class="analytics-goal-config__value">
+                    {{ "{:,}".format(selected_goal.target_count) }}
+                    <span class="analytics-text-muted">({{ "{:.0f}".format(selected_result.completions / selected_goal.target_count * 100) }}% achieved)</span>
+                </span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+{% else %}
+{# No goals configured #}
+<div class="analytics-section">
+    <div class="analytics-section__content">
+        <div class="analytics-empty">
+            <div class="analytics-empty__icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="6"/>
+                    <circle cx="12" cy="12" r="2"/>
+                </svg>
+            </div>
+            <p>No goals configured yet</p>
+            <p class="analytics-text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;">
+                Create goals to track specific conversions like form submissions, page visits, or custom events
+            </p>
+            <button class="analytics-btn" style="margin-top: 1rem;" onclick="document.getElementById('create-goal-modal').style.display='flex'">
+                + Create Your First Goal
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# All Goals List #}
+{% if goals|length > 1 %}
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">All Goals</span>
+    </div>
+    <div class="analytics-section__content analytics-section__content--flush">
+        <table class="analytics-table">
+            <thead>
+                <tr>
+                    <th>Goal</th>
+                    <th>Type</th>
+                    <th>Target</th>
+                    <th class="analytics-text-center">Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for goal in goals %}
+                <tr>
+                    <td>
+                        <a href="?goal_id={{ goal.id }}"
+                           hx-get="./partials/goals?goal_id={{ goal.id }}"
+                           hx-target="#main-content"
+                           hx-push-url="?goal_id={{ goal.id }}"
+                           style="text-decoration: none; color: var(--941-color-text);">
+                            <strong>{{ goal.name }}</strong>
+                        </a>
+                        {% if goal.description %}
+                        <span class="analytics-text-muted" style="display: block; font-size: 0.75rem;">{{ goal.description }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="analytics-filter-chip" style="font-size: 0.6875rem;">
+                            {% if goal.goal_type == 'page' %}Page{% else %}Event{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="analytics-truncate" style="display: block; max-width: 180px; font-size: 0.75rem;">
+                            {{ goal.goal_value }}
+                        </span>
+                    </td>
+                    <td class="analytics-text-center">
+                        <span class="analytics-goal-status {% if goal.is_active %}analytics-goal-status--active{% else %}analytics-goal-status--paused{% endif %}">
+                            {{ "Active" if goal.is_active else "Paused" }}
+                        </span>
+                    </td>
+                    <td class="analytics-text-right">
+                        <button class="analytics-btn analytics-btn--small analytics-btn--danger"
+                                hx-delete="./goals/{{ goal.id }}"
+                                hx-confirm="Delete goal '{{ goal.name }}'?"
+                                hx-target="#main-content"
+                                hx-swap="innerHTML">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+</div>{# End analytics-zone-secondary #}
+
+{# Create Goal Modal #}
+<div id="create-goal-modal" class="analytics-modal" style="display: none;" onclick="if(event.target===this)this.style.display='none'">
+    <div class="analytics-modal__content">
+        <div class="analytics-modal__header">
+            <h3 class="analytics-modal__title">Create Conversion Goal</h3>
+            <button class="analytics-modal__close" onclick="this.closest('.analytics-modal').style.display='none'">&times;</button>
+        </div>
+        <form action="./goals/create" method="POST" class="analytics-modal__body">
+            <div class="analytics-form-group">
+                <label for="goal-name" class="analytics-form-label">Goal Name</label>
+                <input type="text" id="goal-name" name="name" required
+                       class="analytics-form-input"
+                       placeholder="e.g., Newsletter Signup">
+            </div>
+            <div class="analytics-form-group">
+                <label for="goal-description" class="analytics-form-label">Description (optional)</label>
+                <input type="text" id="goal-description" name="description"
+                       class="analytics-form-input"
+                       placeholder="Track visitors who subscribe to the newsletter">
+            </div>
+            <div class="analytics-form-group">
+                <label for="goal-type" class="analytics-form-label">Goal Type</label>
+                <select id="goal-type" name="goal_type" class="analytics-form-select" required>
+                    <option value="page">Page Visit</option>
+                    <option value="event">Event Trigger</option>
+                </select>
+                <p class="analytics-text-muted" style="font-size: 0.75rem; margin-top: 0.25rem;">
+                    Page: Track when visitors view a specific URL. Event: Track when a specific event fires.
+                </p>
+            </div>
+            <div class="analytics-form-group">
+                <label for="goal-value" class="analytics-form-label">Target Value</label>
+                <input type="text" id="goal-value" name="goal_value" required
+                       class="analytics-form-input"
+                       placeholder="/thank-you or signup_complete">
+                <p class="analytics-text-muted" style="font-size: 0.75rem; margin-top: 0.25rem;">
+                    For pages: URL path (e.g., /pricing). For events: event name (e.g., form_submit).
+                </p>
+            </div>
+            <div class="analytics-form-group">
+                <label for="goal-target" class="analytics-form-label">Target Count (optional)</label>
+                <input type="number" id="goal-target" name="target_count"
+                       class="analytics-form-input"
+                       placeholder="e.g., 100"
+                       min="1">
+                <p class="analytics-text-muted" style="font-size: 0.75rem; margin-top: 0.25rem;">
+                    Set a target to track progress toward a goal.
+                </p>
+            </div>
+            <div class="analytics-modal__footer">
+                <button type="button" class="analytics-btn analytics-btn--secondary"
+                        onclick="this.closest('.analytics-modal').style.display='none'">
+                    Cancel
+                </button>
+                <button type="submit" class="analytics-btn">
+                    Create Goal
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
