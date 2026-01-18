@@ -87,16 +87,82 @@ window._941tz = {
 
 document.addEventListener('alpine:init', () => {
     /**
+     * Activity Feed Component
+     * Handles real-time activity polling with pause/resume and event filtering
+     */
+    Alpine.data('activityFeedComponent', () => ({
+        paused: false,
+        eventTypeFilter: 'all',
+        pollInterval: null,
+        seenEventIds: new Set(),
+
+        startPolling() {
+            // HTMX handles the actual polling via hx-trigger
+            // This component just manages the paused state
+            this.setupPollingControl();
+        },
+
+        setupPollingControl() {
+            // Listen for HTMX config request to enable/disable polling
+            const container = this.$refs.feedContainer;
+            if (container) {
+                // Update hx-trigger based on paused state
+                this.$watch('paused', (paused) => {
+                    if (paused) {
+                        // Stop HTMX polling
+                        htmx.off(container, 'htmx:configRequest');
+                    } else {
+                        // Trigger immediate refresh when resuming
+                        this.refresh();
+                    }
+                });
+            }
+        },
+
+        togglePause() {
+            this.paused = !this.paused;
+            if (!this.paused) {
+                this.refresh();
+            }
+        },
+
+        refresh() {
+            if (this.paused) return;
+
+            const container = document.getElementById('activity-feed-container');
+            if (container) {
+                let url = './partials/activity-feed';
+                if (this.eventTypeFilter && this.eventTypeFilter !== 'all') {
+                    url += `?event_type=${encodeURIComponent(this.eventTypeFilter)}`;
+                }
+                htmx.ajax('GET', url, {
+                    target: container,
+                    swap: 'innerHTML'
+                });
+            }
+        },
+
+        destroy() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+            }
+        }
+    }));
+
+    /**
      * Date Picker Component
-     * Handles custom date range selection with presets
+     * Handles custom date range selection with presets, comparison, and keyboard shortcuts
      */
     Alpine.data('datePickerComponent', () => ({
         customOpen: false,
+        compareOpen: false,
         startDate: '',
         endDate: '',
         error: '',
         today: new Date().toISOString().split('T')[0],
         activeTab: 'overview',
+        compareMode: 'previous',
+        showKeyboardHints: false,
 
         init() {
             // Initialize from URL params or data attributes
@@ -104,6 +170,7 @@ document.addEventListener('alpine:init', () => {
             this.startDate = urlParams.get('start') || this.$el.dataset.start || '';
             this.endDate = urlParams.get('end') || this.$el.dataset.end || '';
             this.activeTab = this.$el.dataset.activeTab || 'overview';
+            this.compareMode = urlParams.get('compare') || this.$el.dataset.compare || 'previous';
         },
 
         get isValid() {
@@ -165,14 +232,22 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            // Build URL with custom dates
-            const url = `./partials/${this.activeTab}?period=custom&start=${this.startDate}&end=${this.endDate}`;
+            // Build URL with custom dates and compare mode
+            let url = `./partials/${this.activeTab}?period=custom&start=${this.startDate}&end=${this.endDate}`;
+            if (this.compareMode !== 'none') {
+                url += `&compare=${this.compareMode}`;
+            }
 
             // Update browser URL
             const browserUrl = new URL(window.location.href);
             browserUrl.searchParams.set('period', 'custom');
             browserUrl.searchParams.set('start', this.startDate);
             browserUrl.searchParams.set('end', this.endDate);
+            if (this.compareMode !== 'none') {
+                browserUrl.searchParams.set('compare', this.compareMode);
+            } else {
+                browserUrl.searchParams.delete('compare');
+            }
             window.history.pushState({}, '', browserUrl);
 
             // Trigger HTMX request programmatically
@@ -182,6 +257,185 @@ document.addEventListener('alpine:init', () => {
             });
 
             this.customOpen = false;
+        },
+
+        applyCompare() {
+            // Update URL with compare mode
+            const browserUrl = new URL(window.location.href);
+            if (this.compareMode !== 'none') {
+                browserUrl.searchParams.set('compare', this.compareMode);
+            } else {
+                browserUrl.searchParams.delete('compare');
+            }
+            window.history.pushState({}, '', browserUrl);
+
+            // Build partial URL from current params
+            const period = browserUrl.searchParams.get('period') || '30d';
+            let url = `./partials/${this.activeTab}?period=${period}`;
+            if (this.startDate && this.endDate) {
+                url += `&start=${this.startDate}&end=${this.endDate}`;
+            }
+            if (this.compareMode !== 'none') {
+                url += `&compare=${this.compareMode}`;
+            }
+
+            // Trigger HTMX request
+            htmx.ajax('GET', url, {
+                target: '#main-content',
+                swap: 'innerHTML'
+            });
+
+            this.compareOpen = false;
+        },
+
+        handleKeyboard(event) {
+            const key = event.key;
+
+            // Escape key always closes popups
+            if (key === 'Escape') {
+                if (this.customOpen || this.compareOpen || this.showKeyboardHints) {
+                    event.preventDefault();
+                    this.customOpen = false;
+                    this.compareOpen = false;
+                    this.showKeyboardHints = false;
+                    return;
+                }
+            }
+
+            // Don't trigger shortcuts if user is typing in an input
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            // Don't trigger with modifier keys (except for ?)
+            if (event.ctrlKey || event.altKey || event.metaKey) {
+                return;
+            }
+
+            // Toggle keyboard hints with ?
+            if (key === '?' || (event.shiftKey && key === '/')) {
+                event.preventDefault();
+                this.showKeyboardHints = !this.showKeyboardHints;
+                return;
+            }
+
+            // Quick period shortcuts
+            let period = null;
+            switch (key) {
+                case '7':
+                    period = '7d';
+                    break;
+                case '3':
+                    period = '30d';
+                    break;
+                case '9':
+                    period = '90d';
+                    break;
+                case '1':
+                    period = '24h';
+                    break;
+                case 'y':
+                case 'Y':
+                    period = 'year';
+                    break;
+                case 'a':
+                case 'A':
+                    period = 'all';
+                    break;
+            }
+
+            if (period) {
+                event.preventDefault();
+                this.customOpen = false;
+                this.compareOpen = false;
+
+                // Build URL with period
+                let url = `./partials/${this.activeTab}?period=${period}`;
+                if (this.compareMode !== 'none') {
+                    url += `&compare=${this.compareMode}`;
+                }
+
+                // Update browser URL
+                const browserUrl = new URL(window.location.href);
+                browserUrl.searchParams.set('period', period);
+                browserUrl.searchParams.delete('start');
+                browserUrl.searchParams.delete('end');
+                window.history.pushState({}, '', browserUrl);
+
+                // Trigger HTMX request
+                htmx.ajax('GET', url, {
+                    target: '#main-content',
+                    swap: 'innerHTML'
+                });
+            }
         }
     }));
+});
+
+// =============================================================================
+// GLOBAL KEYBOARD NAVIGATION
+// =============================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Global Escape key handler to close any open dropdowns/modals
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            // Find and click any visible close buttons or close dropdown triggers
+            const openDropdowns = document.querySelectorAll('.analytics-dropdown.open, [x-show="true"]');
+            openDropdowns.forEach(dropdown => {
+                // Attempt to close via Alpine.js
+                if (dropdown._x_dataStack) {
+                    const data = dropdown._x_dataStack[0];
+                    if (data && typeof data.customOpen !== 'undefined') {
+                        data.customOpen = false;
+                    }
+                    if (data && typeof data.compareOpen !== 'undefined') {
+                        data.compareOpen = false;
+                    }
+                }
+            });
+        }
+    });
+
+    // Make buttons activatable with Enter and Space keys
+    document.addEventListener('keydown', (event) => {
+        const target = event.target;
+
+        // Check if target is a button-like element
+        if (target.classList.contains('analytics-btn') ||
+            target.classList.contains('analytics-nav__link') ||
+            target.classList.contains('analytics-chart-toggle') ||
+            target.classList.contains('analytics-date-picker-popup__preset')) {
+
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                target.click();
+            }
+        }
+    });
+
+    // Trap focus within modals/popups when open
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Tab') return;
+
+        const activePopup = document.querySelector('.analytics-date-picker-popup:not([style*="display: none"])');
+        if (!activePopup) return;
+
+        const focusableElements = activePopup.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+        } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+        }
+    });
 });

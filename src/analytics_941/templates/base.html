@@ -8,8 +8,17 @@
     <!-- Preload critical assets -->
     <link rel="preconnect" href="https://unpkg.com">
 
-    <!-- Dashboard styles (cacheable) -->
+    <!-- Dashboard styles (cacheable) - CSS isolated with .analytics- prefix -->
     <link rel="stylesheet" href="./static/css/dashboard.css">
+
+    <!-- Theme overrides from config.theme_colors -->
+    {% if theme_css %}
+    <style>
+        .analytics-root {
+            {{ theme_css }}
+        }
+    </style>
+    {% endif %}
 
     <!-- HTMX for server-driven interactivity -->
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
@@ -22,25 +31,26 @@
 
     {% block head %}{% endblock %}
 </head>
-<body data-timezone="{{ site_timezone | default('America/New_York') }}">
-    <div class="layout">
+<body class="analytics-root" data-timezone="{{ site_timezone | default('America/New_York') }}">
+    <a href="#main-content" class="analytics-skip-link">Skip to main content</a>
+    <div class="analytics-layout">
         <!-- Header -->
-        <header class="header">
-            <h1 class="header__title">
-                Analytics <span class="header__site">· {{ site_name }}</span>
+        <header class="analytics-header">
+            <h1 class="analytics-header__title">
+                Analytics <span class="analytics-header__site">· {{ site_name }}</span>
             </h1>
-            <div class="header__actions">
+            <div class="analytics-header__actions">
                 {% if has_auth %}
-                <a href="./logout" class="header__link">Logout</a>
+                <a href="./logout" class="analytics-header__link">Logout</a>
                 {% endif %}
             </div>
         </header>
 
         <!-- Navigation -->
         {% set filter_params = current_params if current_params else '' %}
-        <nav class="nav" role="tablist" x-data="{ active: '{{ active_tab }}' }">
+        <nav class="analytics-nav" role="tablist" x-data="{ active: '{{ active_tab }}' }">
             <a href="./?{{ filter_params }}"
-               class="nav__link"
+               class="analytics-nav__link"
                :class="{ 'active': active === 'overview' }"
                @click="active = 'overview'"
                hx-get="./partials/overview?{{ filter_params }}"
@@ -51,7 +61,7 @@
                 Overview
             </a>
             <a href="./realtime?{{ filter_params }}"
-               class="nav__link"
+               class="analytics-nav__link"
                :class="{ 'active': active === 'realtime' }"
                @click="active = 'realtime'"
                hx-get="./partials/realtime?{{ filter_params }}"
@@ -59,11 +69,14 @@
                hx-indicator="#loading-skeleton"
                hx-push-url="./realtime?{{ filter_params }}"
                role="tab">
-                <span class="live"><span class="live__dot"></span></span>
+                <span class="analytics-live"><span class="analytics-live__dot"></span></span>
                 Realtime
+                {% if realtime_count is defined and realtime_count > 0 %}
+                <span class="analytics-nav__badge" id="realtime-badge">{{ realtime_count }}</span>
+                {% endif %}
             </a>
             <a href="./sources?{{ filter_params }}"
-               class="nav__link"
+               class="analytics-nav__link"
                :class="{ 'active': active === 'sources' }"
                @click="active = 'sources'"
                hx-get="./partials/sources?{{ filter_params }}"
@@ -74,7 +87,7 @@
                 Sources
             </a>
             <a href="./geography?{{ filter_params }}"
-               class="nav__link"
+               class="analytics-nav__link"
                :class="{ 'active': active === 'geography' }"
                @click="active = 'geography'"
                hx-get="./partials/geography?{{ filter_params }}"
@@ -85,7 +98,7 @@
                 Geography
             </a>
             <a href="./technology?{{ filter_params }}"
-               class="nav__link"
+               class="analytics-nav__link"
                :class="{ 'active': active === 'technology' }"
                @click="active = 'technology'"
                hx-get="./partials/technology?{{ filter_params }}"
@@ -96,7 +109,7 @@
                 Technology
             </a>
             <a href="./events?{{ filter_params }}"
-               class="nav__link"
+               class="analytics-nav__link"
                :class="{ 'active': active === 'events' }"
                @click="active = 'events'"
                hx-get="./partials/events?{{ filter_params }}"
@@ -106,27 +119,49 @@
                role="tab">
                 Events
             </a>
+            <a href="./funnels?{{ filter_params }}"
+               class="analytics-nav__link"
+               :class="{ 'active': active === 'funnels' }"
+               @click="active = 'funnels'"
+               hx-get="./partials/funnels?{{ filter_params }}"
+               hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
+               hx-push-url="./funnels?{{ filter_params }}"
+               role="tab">
+                Funnels
+            </a>
+            <a href="./goals?{{ filter_params }}"
+               class="analytics-nav__link"
+               :class="{ 'active': active === 'goals' }"
+               @click="active = 'goals'"
+               hx-get="./partials/goals?{{ filter_params }}"
+               hx-target="#main-content"
+               hx-indicator="#loading-skeleton"
+               hx-push-url="./goals?{{ filter_params }}"
+               role="tab">
+                Goals
+            </a>
         </nav>
 
         <!-- Main content -->
-        <main class="main" role="tabpanel">
+        <main class="analytics-main" role="tabpanel">
             <!-- Skeleton loader shown via hx-indicator -->
-            <div class="skeleton" id="loading-skeleton">
-                <div class="skeleton__stats">
-                    <div class="skeleton__stat skeleton__pulse"></div>
-                    <div class="skeleton__stat skeleton__pulse"></div>
-                    <div class="skeleton__stat skeleton__pulse"></div>
-                    <div class="skeleton__stat skeleton__pulse"></div>
-                    <div class="skeleton__stat skeleton__pulse"></div>
+            <div class="analytics-skeleton" id="loading-skeleton">
+                <div class="analytics-skeleton__stats">
+                    <div class="analytics-skeleton__stat analytics-skeleton__pulse"></div>
+                    <div class="analytics-skeleton__stat analytics-skeleton__pulse"></div>
+                    <div class="analytics-skeleton__stat analytics-skeleton__pulse"></div>
+                    <div class="analytics-skeleton__stat analytics-skeleton__pulse"></div>
+                    <div class="analytics-skeleton__stat analytics-skeleton__pulse"></div>
                 </div>
-                <div class="skeleton__section skeleton__pulse"></div>
-                <div class="skeleton__grid">
-                    <div class="skeleton__section skeleton__pulse"></div>
-                    <div class="skeleton__section skeleton__pulse"></div>
+                <div class="analytics-skeleton__section analytics-skeleton__pulse"></div>
+                <div class="analytics-skeleton__grid">
+                    <div class="analytics-skeleton__section analytics-skeleton__pulse"></div>
+                    <div class="analytics-skeleton__section analytics-skeleton__pulse"></div>
                 </div>
             </div>
             <!-- Actual page content - this is the swap target -->
-            <div class="main-content-inner" id="main-content">
+            <div class="analytics-main-content-inner" id="main-content">
                 {% block content %}{% endblock %}
             </div>
         </main>
