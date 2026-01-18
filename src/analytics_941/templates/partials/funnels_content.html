@@ -1,0 +1,363 @@
+{# Funnels tab content - conversion funnel analysis #}
+{# Layout: Primary (controls + funnel selector) -> Secondary (funnel visualization + details) #}
+
+{# ===== PRIMARY ZONE: Controls & Funnel Selector ===== #}
+<div class="analytics-zone-primary">
+    {% include "components/date_picker.html" %}
+
+    {% include "components/stats_cards.html" %}
+
+    {# Funnel Selector #}
+    <div class="analytics-section__header">
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <span class="analytics-text-muted" style="font-size: 0.875rem;">Funnel:</span>
+            {% for funnel in funnels %}
+            <a href="?funnel_id={{ funnel.id }}"
+               hx-get="./partials/funnels?funnel_id={{ funnel.id }}"
+               hx-target="#main-content"
+               hx-push-url="?funnel_id={{ funnel.id }}"
+               class="analytics-filter-chip {% if selected_funnel and selected_funnel.id == funnel.id %}analytics-filter-chip--active{% endif %}">
+                {% if funnel.is_preset %}📊{% else %}⚙️{% endif %}
+                {{ funnel.name }}
+            </a>
+            {% endfor %}
+        </div>
+        <button class="analytics-btn analytics-btn--small" onclick="document.getElementById('create-funnel-modal').style.display='flex'">
+            + Create Funnel
+        </button>
+    </div>
+</div>{# End analytics-zone-primary #}
+
+{# ===== SECONDARY ZONE: Funnel Visualization ===== #}
+<div class="analytics-zone-secondary">
+
+{% if funnel_result %}
+{# Funnel Visualization #}
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">{{ selected_funnel.name }}</span>
+        {% if selected_funnel.description %}
+        <span class="analytics-text-muted" style="font-size: 0.75rem;">{{ selected_funnel.description }}</span>
+        {% endif %}
+    </div>
+    <div class="analytics-section__content">
+        {# Horizontal Funnel Visualization #}
+        <div class="analytics-funnel">
+            {% for step in funnel_result.steps %}
+            <div class="analytics-funnel__step">
+                {# Step bar #}
+                <div class="analytics-funnel__bar" style="height: {{ (step.visitors / funnel_result.total_entered * 100)|int if funnel_result.total_entered > 0 else 0 }}%;">
+                    <span class="analytics-funnel__count">{{ "{:,}".format(step.visitors) }}</span>
+                </div>
+                {# Step label #}
+                <div class="analytics-funnel__label">
+                    <span class="analytics-funnel__step-number">{{ step.step_number }}</span>
+                    <span class="analytics-funnel__step-name analytics-truncate" title="{{ step.value }}">
+                        {{ step.label or step.value }}
+                    </span>
+                    <span class="analytics-funnel__step-type">{{ step.type }}</span>
+                </div>
+                {# Conversion rate to next step #}
+                {% if not loop.last %}
+                <div class="analytics-funnel__arrow">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                    <span class="analytics-funnel__conversion">
+                        {% set next_step = funnel_result.steps[loop.index] %}
+                        {{ "{:.1f}".format(next_step.conversion_rate) }}%
+                    </span>
+                    <span class="analytics-funnel__dropoff">
+                        -{{ "{:,}".format(step.drop_off_count) }}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {# Overall Stats #}
+        <div class="analytics-funnel__summary">
+            <div class="analytics-funnel__stat">
+                <span class="analytics-funnel__stat-value">{{ "{:,}".format(funnel_result.total_entered) }}</span>
+                <span class="analytics-funnel__stat-label">Entered</span>
+            </div>
+            <div class="analytics-funnel__stat">
+                <span class="analytics-funnel__stat-value">{{ "{:,}".format(funnel_result.total_converted) }}</span>
+                <span class="analytics-funnel__stat-label">Converted</span>
+            </div>
+            <div class="analytics-funnel__stat analytics-funnel__stat--primary">
+                <span class="analytics-funnel__stat-value">{{ "{:.1f}".format(funnel_result.overall_conversion_rate) }}%</span>
+                <span class="analytics-funnel__stat-label">Overall Rate</span>
+            </div>
+            {% if funnel_result.avg_time_to_convert %}
+            <div class="analytics-funnel__stat">
+                <span class="analytics-funnel__stat-value">{{ format_duration(funnel_result.avg_time_to_convert|int) }}</span>
+                <span class="analytics-funnel__stat-label">Avg Time</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{# Step Details Table #}
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Step Details</span>
+    </div>
+    <div class="analytics-section__content analytics-section__content--flush">
+        <table class="analytics-table">
+            <thead>
+                <tr>
+                    <th>Step</th>
+                    <th>Type</th>
+                    <th>Target</th>
+                    <th class="analytics-text-right">Visitors</th>
+                    <th class="analytics-text-right">Conversion</th>
+                    <th class="analytics-text-right">Drop-off</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for step in funnel_result.steps %}
+                <tr>
+                    <td>
+                        <span class="analytics-funnel__step-badge">{{ step.step_number }}</span>
+                        {{ step.label or step.value }}
+                    </td>
+                    <td>
+                        <span class="analytics-filter-chip" style="font-size: 0.6875rem;">
+                            {% if step.type == 'page' %}📄{% else %}⚡{% endif %}
+                            {{ step.type }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="analytics-truncate" style="display: block; max-width: 200px; font-size: 0.75rem; color: var(--941-color-text-muted);">
+                            {{ step.value }}
+                        </span>
+                    </td>
+                    <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(step.visitors) }}</td>
+                    <td class="analytics-text-right analytics-table__number">
+                        {% if step.step_number == 1 %}
+                        <span class="analytics-text-muted">Entry</span>
+                        {% else %}
+                        <span class="analytics-trend analytics-trend--{{ 'up' if step.conversion_rate >= 50 else 'down' }}">
+                            {{ "{:.1f}".format(step.conversion_rate) }}%
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="analytics-text-right analytics-table__number">
+                        {% if not loop.last %}
+                        <span style="color: var(--941-color-danger, #dc3545);">
+                            {{ "{:.1f}".format(step.drop_off_rate) }}%
+                            <small>({{ "{:,}".format(step.drop_off_count) }})</small>
+                        </span>
+                        {% else %}
+                        <span class="analytics-text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% else %}
+{# No funnels configured #}
+<div class="analytics-section">
+    <div class="analytics-section__content">
+        <div class="analytics-empty">
+            <div class="analytics-empty__icon">🔄</div>
+            <p>No funnels configured yet</p>
+            <p class="analytics-text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;">
+                Create a funnel to track conversion paths through your site
+            </p>
+            <button class="analytics-btn" style="margin-top: 1rem;" onclick="document.getElementById('create-funnel-modal').style.display='flex'">
+                + Create Your First Funnel
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# Available Funnels List #}
+{% if funnels|length > 1 %}
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">All Funnels</span>
+    </div>
+    <div class="analytics-section__content analytics-section__content--flush">
+        <table class="analytics-table">
+            <thead>
+                <tr>
+                    <th>Funnel</th>
+                    <th>Steps</th>
+                    <th>Type</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for funnel in funnels %}
+                <tr>
+                    <td>
+                        <a href="?funnel_id={{ funnel.id }}"
+                           hx-get="./partials/funnels?funnel_id={{ funnel.id }}"
+                           hx-target="#main-content"
+                           hx-push-url="?funnel_id={{ funnel.id }}"
+                           style="text-decoration: none; color: var(--941-color-text);">
+                            <strong>{{ funnel.name }}</strong>
+                        </a>
+                        {% if funnel.description %}
+                        <span class="analytics-text-muted" style="display: block; font-size: 0.75rem;">{{ funnel.description }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="analytics-table__number">{{ funnel.steps|length }}</td>
+                    <td>
+                        <span class="analytics-filter-chip" style="font-size: 0.6875rem;">
+                            {% if funnel.is_preset %}📊 Preset{% else %}⚙️ Custom{% endif %}
+                        </span>
+                    </td>
+                    <td class="analytics-text-right">
+                        {% if not funnel.is_preset %}
+                        <button class="analytics-btn analytics-btn--small analytics-btn--danger"
+                                hx-delete="./funnels/{{ funnel.id }}"
+                                hx-confirm="Delete funnel '{{ funnel.name }}'?"
+                                hx-target="#main-content"
+                                hx-swap="innerHTML">
+                            Delete
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+</div>{# End analytics-zone-secondary #}
+
+{# Create Funnel Modal #}
+<div id="create-funnel-modal" class="analytics-modal" style="display: none;" onclick="if(event.target===this)this.style.display='none'">
+    <div class="analytics-modal__content">
+        <div class="analytics-modal__header">
+            <h3 class="analytics-modal__title">Create Custom Funnel</h3>
+            <button class="analytics-modal__close" onclick="this.closest('.analytics-modal').style.display='none'">&times;</button>
+        </div>
+        <form action="./funnels/create" method="POST" class="analytics-modal__body">
+            <div class="analytics-form-group">
+                <label for="funnel-name" class="analytics-form-label">Funnel Name</label>
+                <input type="text" id="funnel-name" name="name" required
+                       class="analytics-form-input"
+                       placeholder="e.g., Newsletter Signup">
+            </div>
+            <div class="analytics-form-group">
+                <label for="funnel-description" class="analytics-form-label">Description (optional)</label>
+                <input type="text" id="funnel-description" name="description"
+                       class="analytics-form-input"
+                       placeholder="Track visitors who sign up for the newsletter">
+            </div>
+            <div class="analytics-form-group">
+                <label class="analytics-form-label">Funnel Steps</label>
+                <p class="analytics-text-muted" style="font-size: 0.75rem; margin-bottom: 0.5rem;">
+                    Add steps in order. Each step is a page URL or event name.
+                </p>
+                <div id="funnel-steps-container">
+                    <div class="analytics-funnel-step-input">
+                        <select name="step_type_1" class="analytics-form-select" style="width: 100px;">
+                            <option value="page">Page</option>
+                            <option value="event">Event</option>
+                        </select>
+                        <input type="text" name="step_value_1" required
+                               class="analytics-form-input"
+                               placeholder="/pricing or signup_click"
+                               style="flex: 1;">
+                        <input type="text" name="step_label_1"
+                               class="analytics-form-input"
+                               placeholder="Label (optional)"
+                               style="width: 150px;">
+                    </div>
+                    <div class="analytics-funnel-step-input">
+                        <select name="step_type_2" class="analytics-form-select" style="width: 100px;">
+                            <option value="page">Page</option>
+                            <option value="event">Event</option>
+                        </select>
+                        <input type="text" name="step_value_2" required
+                               class="analytics-form-input"
+                               placeholder="/signup or form_submit"
+                               style="flex: 1;">
+                        <input type="text" name="step_label_2"
+                               class="analytics-form-input"
+                               placeholder="Label (optional)"
+                               style="width: 150px;">
+                    </div>
+                </div>
+                <button type="button" class="analytics-btn analytics-btn--small" style="margin-top: 0.5rem;"
+                        onclick="addFunnelStep()">
+                    + Add Step
+                </button>
+            </div>
+            <input type="hidden" name="steps" id="funnel-steps-json">
+            <div class="analytics-modal__footer">
+                <button type="button" class="analytics-btn analytics-btn--secondary"
+                        onclick="this.closest('.analytics-modal').style.display='none'">
+                    Cancel
+                </button>
+                <button type="submit" class="analytics-btn" onclick="prepareFunnelSubmit()">
+                    Create Funnel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let stepCount = 2;
+
+function addFunnelStep() {
+    stepCount++;
+    const container = document.getElementById('funnel-steps-container');
+    const stepHtml = `
+        <div class="analytics-funnel-step-input">
+            <select name="step_type_${stepCount}" class="analytics-form-select" style="width: 100px;">
+                <option value="page">Page</option>
+                <option value="event">Event</option>
+            </select>
+            <input type="text" name="step_value_${stepCount}"
+                   class="analytics-form-input"
+                   placeholder="Page URL or event name"
+                   style="flex: 1;">
+            <input type="text" name="step_label_${stepCount}"
+                   class="analytics-form-input"
+                   placeholder="Label (optional)"
+                   style="width: 150px;">
+            <button type="button" class="analytics-btn analytics-btn--small analytics-btn--danger"
+                    onclick="this.parentElement.remove()">×</button>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', stepHtml);
+}
+
+function prepareFunnelSubmit() {
+    const steps = [];
+    const container = document.getElementById('funnel-steps-container');
+    const stepInputs = container.querySelectorAll('.analytics-funnel-step-input');
+
+    stepInputs.forEach((stepDiv, index) => {
+        const type = stepDiv.querySelector('select').value;
+        const value = stepDiv.querySelectorAll('input')[0].value;
+        const label = stepDiv.querySelectorAll('input')[1].value;
+
+        if (value) {
+            steps.push({
+                type: type,
+                value: value,
+                label: label || null
+            });
+        }
+    });
+
+    document.getElementById('funnel-steps-json').value = JSON.stringify(steps);
+}
+</script>
