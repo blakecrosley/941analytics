@@ -1,13 +1,13 @@
 """Tests for custom date range support in dashboard routes."""
 
-import pytest
 from datetime import date, timedelta
+
+import pytest
 from fastapi import HTTPException
 
 # Import the _parse_date_range function by importing the module
 # Note: Since _parse_date_range is inside create_dashboard_router,
 # we'll test it indirectly or create a testable version
-
 from analytics_941.routes.dashboard import _parse_date_range
 
 

@@ -15,7 +15,6 @@ Understanding traffic sources is fundamental to marketing analytics.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 from urllib.parse import urlparse
 
 
@@ -43,8 +42,8 @@ class ReferrerInfo:
         is_search: Whether this is a search engine
     """
     type: ReferrerType
-    domain: Optional[str] = None
-    source_name: Optional[str] = None
+    domain: str | None = None
+    source_name: str | None = None
     is_search: bool = False
 
 
@@ -245,7 +244,7 @@ def _normalize_domain(domain: str) -> str:
     return domain
 
 
-def _extract_domain(referrer: str) -> Optional[str]:
+def _extract_domain(referrer: str) -> str | None:
     """
     Extract and normalize domain from referrer URL.
 
@@ -272,7 +271,7 @@ def _extract_domain(referrer: str) -> Optional[str]:
 
 def classify_referrer(
     referrer: str,
-    current_domain: Optional[str] = None
+    current_domain: str | None = None
 ) -> ReferrerInfo:
     """
     Classify a referrer URL into a traffic source category.

@@ -1,14 +1,14 @@
 """Pydantic models for analytics data."""
 
-from datetime import datetime, date
-from typing import Optional
+from datetime import date, datetime
+
 from pydantic import BaseModel, Field
 
 
 class PageView(BaseModel):
     """A single page view event."""
 
-    id: Optional[int] = None
+    id: int | None = None
     site: str
     timestamp: datetime
     url: str
@@ -23,8 +23,8 @@ class PageView(BaseModel):
     country: str = ""
     region: str = ""  # State/province code (e.g., "CA")
     city: str = ""
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    latitude: float | None = None
+    longitude: float | None = None
 
     # Device & browser
     device_type: str = ""  # mobile, tablet, desktop

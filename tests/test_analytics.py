@@ -1,10 +1,11 @@
 """Tests for 941 Analytics detection modules."""
 
 import pytest
-from analytics_941.bots import detect_bot, BotCategory
-from analytics_941.referrer import classify_referrer, ReferrerType
+
+from analytics_941.bots import BotCategory, detect_bot
+from analytics_941.referrer import ReferrerType, classify_referrer
+from analytics_941.user_agent import DeviceType, parse_user_agent
 from analytics_941.utm import parse_utm
-from analytics_941.user_agent import parse_user_agent, DeviceType
 
 
 class TestBotDetection:

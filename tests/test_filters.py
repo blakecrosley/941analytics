@@ -1,8 +1,9 @@
 """Tests for DashboardFilters model and query builders."""
 
 import pytest
-from analytics_941.core.models import DashboardFilters
+
 from analytics_941.core.client import AnalyticsClient
+from analytics_941.core.models import DashboardFilters
 
 
 class TestDashboardFilters:

@@ -8,20 +8,18 @@ import hashlib
 import secrets
 import time
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from threading import Lock
-from typing import Optional
 
-from fastapi import APIRouter, Request, Response, Cookie, Query, Form, HTTPException
+from fastapi import APIRouter, Cookie, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from ..config import AnalyticsConfig, verify_passkey, MIN_PASSKEY_LENGTH
+from ..config import MIN_PASSKEY_LENGTH, AnalyticsConfig, verify_passkey
 from ..core.client import AnalyticsClient
-from ..core.models import DashboardFilters, DateRange
-
+from ..core.models import DashboardFilters
 
 # Auth constants
 AUTH_COOKIE_NAME = "analytics_auth"
@@ -97,7 +95,7 @@ def _hash_passkey(passkey: str, site_name: str) -> str:
     return hashlib.sha256(f"{site_name}:{passkey}".encode()).hexdigest()
 
 
-def _verify_auth(auth_cookie: Optional[str], expected_hash: str) -> bool:
+def _verify_auth(auth_cookie: str | None, expected_hash: str) -> bool:
     """Verify the auth cookie matches the expected hash."""
     if not auth_cookie:
         return False
@@ -106,9 +104,9 @@ def _verify_auth(auth_cookie: Optional[str], expected_hash: str) -> bool:
 
 def _parse_date_range(
     period: str,
-    custom_start: Optional[str] = None,
-    custom_end: Optional[str] = None,
-) -> tuple[date, date, Optional[date], Optional[date]]:
+    custom_start: str | None = None,
+    custom_end: str | None = None,
+) -> tuple[date, date, date | None, date | None]:
     """Parse period string or custom dates into date range with comparison period.
 
     Args:
@@ -139,7 +137,7 @@ def _parse_date_range(
             raise HTTPException(
                 status_code=400,
                 detail="Invalid date format. Use YYYY-MM-DD (e.g., 2024-01-15)"
-            )
+            ) from None
 
         # Validate date range
         if end < start:
@@ -248,7 +246,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         site_name=config.site_name,
     )
 
-    def _check_auth(auth_cookie: Optional[str]) -> bool:
+    def _check_auth(auth_cookie: str | None) -> bool:
         """Check if authentication is valid."""
         if not config.has_auth:
             return True
@@ -274,15 +272,15 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         }
 
     def _get_filters(
-        country: Optional[str] = None,
-        region: Optional[str] = None,
-        device: Optional[str] = None,
-        browser: Optional[str] = None,
-        source: Optional[str] = None,
-        source_type: Optional[str] = None,
-        page: Optional[str] = None,
-        utm_source: Optional[str] = None,
-        utm_campaign: Optional[str] = None,
+        country: str | None = None,
+        region: str | None = None,
+        device: str | None = None,
+        browser: str | None = None,
+        source: str | None = None,
+        source_type: str | None = None,
+        page: str | None = None,
+        utm_source: str | None = None,
+        utm_campaign: str | None = None,
     ) -> DashboardFilters:
         """Parse query parameters into DashboardFilters."""
         return DashboardFilters(
@@ -372,16 +370,16 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/", response_class=HTMLResponse)
     async def overview_page(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        country: Optional[str] = None,
-        region: Optional[str] = None,
-        device: Optional[str] = None,
-        browser: Optional[str] = None,
-        source: Optional[str] = None,
-        page: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        country: str | None = None,
+        region: str | None = None,
+        device: str | None = None,
+        browser: str | None = None,
+        source: str | None = None,
+        page: str | None = None,
     ):
         """Render overview dashboard page."""
         if not _check_auth(auth):
@@ -429,16 +427,16 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/overview", response_class=HTMLResponse)
     async def overview_partial(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        country: Optional[str] = None,
-        region: Optional[str] = None,
-        device: Optional[str] = None,
-        browser: Optional[str] = None,
-        source: Optional[str] = None,
-        page: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        country: str | None = None,
+        region: str | None = None,
+        device: str | None = None,
+        browser: str | None = None,
+        source: str | None = None,
+        page: str | None = None,
     ):
         """HTMX partial for overview tab."""
         if not _check_auth(auth):
@@ -485,14 +483,14 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/sources", response_class=HTMLResponse)
     async def sources_page(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        source: Optional[str] = None,
-        source_type: Optional[str] = None,
-        utm_source: Optional[str] = None,
-        utm_campaign: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        source: str | None = None,
+        source_type: str | None = None,
+        utm_source: str | None = None,
+        utm_campaign: str | None = None,
     ):
         """Render sources page."""
         if not _check_auth(auth):
@@ -527,14 +525,14 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/sources", response_class=HTMLResponse)
     async def sources_partial(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        source: Optional[str] = None,
-        source_type: Optional[str] = None,
-        utm_source: Optional[str] = None,
-        utm_campaign: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        source: str | None = None,
+        source_type: str | None = None,
+        utm_source: str | None = None,
+        utm_campaign: str | None = None,
     ):
         """HTMX partial for sources tab."""
         if not _check_auth(auth):
@@ -569,12 +567,12 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/geography", response_class=HTMLResponse)
     async def geography_page(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        country: Optional[str] = None,
-        region: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        country: str | None = None,
+        region: str | None = None,
     ):
         """Render geography page with lazy-loaded globe."""
         if not _check_auth(auth):
@@ -612,12 +610,12 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/geography", response_class=HTMLResponse)
     async def geography_partial(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        country: Optional[str] = None,
-        region: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        country: str | None = None,
+        region: str | None = None,
     ):
         """HTMX partial for geography tab."""
         if not _check_auth(auth):
@@ -654,13 +652,13 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/technology", response_class=HTMLResponse)
     async def technology_page(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        device: Optional[str] = None,
-        browser: Optional[str] = None,
-        os: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        device: str | None = None,
+        browser: str | None = None,
+        os: str | None = None,
     ):
         """Render technology page."""
         if not _check_auth(auth):
@@ -694,13 +692,13 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/technology", response_class=HTMLResponse)
     async def technology_partial(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        device: Optional[str] = None,
-        browser: Optional[str] = None,
-        os: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        device: str | None = None,
+        browser: str | None = None,
+        os: str | None = None,
     ):
         """HTMX partial for technology tab."""
         if not _check_auth(auth):
@@ -734,12 +732,12 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/events", response_class=HTMLResponse)
     async def events_page(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        event: Optional[str] = None,
-        event_type: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        event: str | None = None,
+        event_type: str | None = None,
     ):
         """Render events page."""
         if not _check_auth(auth):
@@ -791,12 +789,12 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/events", response_class=HTMLResponse)
     async def events_partial(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
-        event: Optional[str] = None,
-        event_type: Optional[str] = None,
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        event: str | None = None,
+        event_type: str | None = None,
     ):
         """HTMX partial for events tab."""
         if not _check_auth(auth):
@@ -848,7 +846,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/realtime", response_class=HTMLResponse)
     async def realtime_page(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
     ):
         """Render realtime page."""
         if not _check_auth(auth):
@@ -864,7 +862,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/realtime", response_class=HTMLResponse)
     async def realtime_partial(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
     ):
         """HTMX partial for realtime tab (auto-refreshes)."""
         if not _check_auth(auth):
@@ -884,10 +882,10 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/export/pageviews.csv")
     async def export_pageviews(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
     ):
         """Export pageviews as CSV."""
         if not _check_auth(auth):
@@ -907,10 +905,10 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/export/events.csv")
     async def export_events(
         request: Request,
-        auth: Optional[str] = Cookie(None, alias=AUTH_COOKIE_NAME),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
-        start: Optional[str] = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
-        end: Optional[str] = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
     ):
         """Export events as CSV."""
         if not _check_auth(auth):

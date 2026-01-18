@@ -4,8 +4,8 @@ import asyncio
 from datetime import date
 from unittest.mock import AsyncMock
 
-from analytics_941.core.models import DashboardFilters, MetricChange
 from analytics_941.core.client import AnalyticsClient
+from analytics_941.core.models import DashboardFilters, MetricChange
 
 
 def run_async(coro):

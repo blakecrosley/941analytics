@@ -20,7 +20,6 @@ privacy-invasive.
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class DeviceType(str, Enum):
@@ -47,9 +46,9 @@ class UserAgentInfo:
         is_mobile: Convenience flag for mobile/tablet
     """
     browser: str = "Unknown"
-    browser_version: Optional[str] = None
+    browser_version: str | None = None
     os: str = "Unknown"
-    os_version: Optional[str] = None
+    os_version: str | None = None
     device_type: DeviceType = DeviceType.UNKNOWN
 
     @property
@@ -233,7 +232,7 @@ def _detect_device_type(ua: str) -> DeviceType:
     return DeviceType.UNKNOWN
 
 
-def _detect_browser(ua: str) -> tuple[str, Optional[str]]:
+def _detect_browser(ua: str) -> tuple[str, str | None]:
     """
     Detect browser and version from user-agent.
 
@@ -251,7 +250,7 @@ def _detect_browser(ua: str) -> tuple[str, Optional[str]]:
     return ("Unknown", None)
 
 
-def _detect_os(ua: str) -> tuple[str, Optional[str]]:
+def _detect_os(ua: str) -> tuple[str, str | None]:
     """
     Detect OS and version from user-agent.
 

@@ -1,10 +1,10 @@
 """
 Pydantic models for analytics data.
 """
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from datetime import date, datetime
+from typing import Any
 
+from pydantic import BaseModel
 
 # =============================================================================
 # Raw Data Models
@@ -16,45 +16,45 @@ class PageView(BaseModel):
     site: str
     timestamp: datetime
     url: str
-    page_title: Optional[str] = None
+    page_title: str | None = None
 
     # Session
     session_id: str
     visitor_hash: str
 
     # Referrer
-    referrer: Optional[str] = None
-    referrer_type: Optional[str] = None
-    referrer_domain: Optional[str] = None
+    referrer: str | None = None
+    referrer_type: str | None = None
+    referrer_domain: str | None = None
 
     # UTM
-    utm_source: Optional[str] = None
-    utm_medium: Optional[str] = None
-    utm_campaign: Optional[str] = None
-    utm_term: Optional[str] = None
-    utm_content: Optional[str] = None
+    utm_source: str | None = None
+    utm_medium: str | None = None
+    utm_campaign: str | None = None
+    utm_term: str | None = None
+    utm_content: str | None = None
 
     # Geography
-    country: Optional[str] = None
-    region: Optional[str] = None
-    city: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    country: str | None = None
+    region: str | None = None
+    city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
     # Technology
-    device_type: Optional[str] = None
-    browser: Optional[str] = None
-    browser_version: Optional[str] = None
-    os: Optional[str] = None
-    os_version: Optional[str] = None
-    screen_width: Optional[int] = None
-    screen_height: Optional[int] = None
-    language: Optional[str] = None
+    device_type: str | None = None
+    browser: str | None = None
+    browser_version: str | None = None
+    os: str | None = None
+    os_version: str | None = None
+    screen_width: int | None = None
+    screen_height: int | None = None
+    language: str | None = None
 
     # Bot
     is_bot: bool = False
-    bot_name: Optional[str] = None
-    bot_category: Optional[str] = None
+    bot_name: str | None = None
+    bot_category: str | None = None
 
 
 class Session(BaseModel):
@@ -66,28 +66,28 @@ class Session(BaseModel):
 
     started_at: datetime
     last_activity_at: datetime
-    ended_at: Optional[datetime] = None
+    ended_at: datetime | None = None
 
     duration_seconds: int = 0
     pageview_count: int = 1
     event_count: int = 0
     is_bounce: bool = True
 
-    entry_page: Optional[str] = None
-    exit_page: Optional[str] = None
+    entry_page: str | None = None
+    exit_page: str | None = None
 
     # Attribution
-    referrer_type: Optional[str] = None
-    referrer_domain: Optional[str] = None
-    utm_source: Optional[str] = None
-    utm_campaign: Optional[str] = None
+    referrer_type: str | None = None
+    referrer_domain: str | None = None
+    utm_source: str | None = None
+    utm_campaign: str | None = None
 
     # Demographics
-    country: Optional[str] = None
-    region: Optional[str] = None
-    device_type: Optional[str] = None
-    browser: Optional[str] = None
-    os: Optional[str] = None
+    country: str | None = None
+    region: str | None = None
+    device_type: str | None = None
+    browser: str | None = None
+    os: str | None = None
 
 
 class Event(BaseModel):
@@ -100,11 +100,11 @@ class Event(BaseModel):
 
     event_type: str  # click, scroll, form, video, error
     event_name: str  # outbound_click, scroll_50, form_submit
-    event_data: Optional[Dict[str, Any]] = None
+    event_data: dict[str, Any] | None = None
 
-    page_url: Optional[str] = None
-    country: Optional[str] = None
-    device_type: Optional[str] = None
+    page_url: str | None = None
+    country: str | None = None
+    device_type: str | None = None
 
 
 # =============================================================================
@@ -114,9 +114,9 @@ class Event(BaseModel):
 class MetricChange(BaseModel):
     """A metric with its change from comparison period."""
     value: float  # Can be int or float (e.g., bounce_rate, avg_duration)
-    previous: Optional[float] = None
-    change_percent: Optional[float] = None
-    change_direction: Optional[str] = None  # up, down, same
+    previous: float | None = None
+    change_percent: float | None = None
+    change_direction: str | None = None  # up, down, same
 
 
 class CoreMetrics(BaseModel):
@@ -135,9 +135,9 @@ class PageStats(BaseModel):
     url: str
     views: int
     visitors: int
-    avg_time: Optional[float] = None  # seconds
-    bounce_rate: Optional[float] = None
-    exit_rate: Optional[float] = None  # percentage of pageviews that resulted in exit
+    avg_time: float | None = None  # seconds
+    bounce_rate: float | None = None
+    exit_rate: float | None = None  # percentage of pageviews that resulted in exit
     entries: int = 0
     exits: int = 0
 
@@ -148,7 +148,7 @@ class SourceStats(BaseModel):
     source_type: str  # direct, organic, social, email, referral
     visits: int
     visitors: int
-    bounce_rate: Optional[float] = None
+    bounce_rate: float | None = None
 
 
 class CountryStats(BaseModel):
@@ -157,7 +157,7 @@ class CountryStats(BaseModel):
     country_name: str
     visits: int
     visitors: int
-    regions: Optional[List[Dict[str, Any]]] = None
+    regions: list[dict[str, Any]] | None = None
 
 
 class DeviceStats(BaseModel):
@@ -198,8 +198,8 @@ class DateRange(BaseModel):
     """Date range for queries."""
     start: date
     end: date
-    compare_start: Optional[date] = None
-    compare_end: Optional[date] = None
+    compare_start: date | None = None
+    compare_end: date | None = None
 
 
 class DashboardFilters(BaseModel):
@@ -208,18 +208,18 @@ class DashboardFilters(BaseModel):
     All filters use parameterized queries to prevent SQL injection.
     Multiple filters are AND'd together.
     """
-    country: Optional[str] = None
-    region: Optional[str] = None
-    city: Optional[str] = None
-    device: Optional[str] = None
-    browser: Optional[str] = None
-    os: Optional[str] = None
-    source: Optional[str] = None
-    source_type: Optional[str] = None
-    page: Optional[str] = None
-    utm_source: Optional[str] = None
-    utm_medium: Optional[str] = None
-    utm_campaign: Optional[str] = None
+    country: str | None = None
+    region: str | None = None
+    city: str | None = None
+    device: str | None = None
+    browser: str | None = None
+    os: str | None = None
+    source: str | None = None
+    source_type: str | None = None
+    page: str | None = None
+    utm_source: str | None = None
+    utm_medium: str | None = None
+    utm_campaign: str | None = None
 
     def is_empty(self) -> bool:
         """Check if all filters are None/empty."""
@@ -246,40 +246,40 @@ class DashboardData(BaseModel):
     metrics: CoreMetrics
 
     # Time series for chart
-    time_series: List[TimeSeriesPoint]
+    time_series: list[TimeSeriesPoint]
     granularity: str = "day"  # hour, day
 
     # Breakdowns
-    top_pages: List[PageStats]
-    entry_pages: List[PageStats]
-    exit_pages: List[PageStats]
-    sources: List[SourceStats]
-    countries: List[CountryStats]
-    devices: List[DeviceStats]
-    browsers: List[BrowserStats]
-    operating_systems: List[Dict[str, Any]]
-    languages: List[Dict[str, Any]]
+    top_pages: list[PageStats]
+    entry_pages: list[PageStats]
+    exit_pages: list[PageStats]
+    sources: list[SourceStats]
+    countries: list[CountryStats]
+    devices: list[DeviceStats]
+    browsers: list[BrowserStats]
+    operating_systems: list[dict[str, Any]]
+    languages: list[dict[str, Any]]
 
     # Events (if enabled)
-    events: Optional[List[EventStats]] = None
-    scroll_depth: Optional[Dict[str, int]] = None  # {25: n, 50: n, 75: n, 100: n}
+    events: list[EventStats] | None = None
+    scroll_depth: dict[str, int] | None = None  # {25: n, 50: n, 75: n, 100: n}
 
     # UTM
-    utm_sources: List[Dict[str, Any]]
-    utm_campaigns: List[Dict[str, Any]]
+    utm_sources: list[dict[str, Any]]
+    utm_campaigns: list[dict[str, Any]]
 
 
 class RealtimeData(BaseModel):
     """Real-time visitor data."""
     active_visitors: int
-    active_sessions: List[Dict[str, Any]]  # [{page, country, device, started}]
-    pages: List[Dict[str, Any]]  # [{url, count}]
-    countries: List[Dict[str, Any]]  # [{code, count}]
-    sources: List[Dict[str, Any]]  # [{source, count}]
+    active_sessions: list[dict[str, Any]]  # [{page, country, device, started}]
+    pages: list[dict[str, Any]]  # [{url, count}]
+    countries: list[dict[str, Any]]  # [{code, count}]
+    sources: list[dict[str, Any]]  # [{source, count}]
 
 
 class GlobeData(BaseModel):
     """Data for the 3D globe visualization."""
-    countries: List[Dict[str, Any]]  # [{code, name, lat, lon, visits}]
-    regions: Optional[List[Dict[str, Any]]] = None  # For drill-down
-    cities: Optional[List[Dict[str, Any]]] = None  # For drill-down
+    countries: list[dict[str, Any]]  # [{code, name, lat, lon, visits}]
+    regions: list[dict[str, Any]] | None = None  # For drill-down
+    cities: list[dict[str, Any]] | None = None  # For drill-down

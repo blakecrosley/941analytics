@@ -1,37 +1,31 @@
 """FastAPI routes for the analytics dashboard."""
 
-import base64
 import hashlib
 import json
-import os
 import secrets
-from datetime import datetime, timedelta
-from typing import Optional
 
-from fastapi import APIRouter, Request, Form, Response, Cookie
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-
+from fastapi import APIRouter, Cookie, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from webauthn import (
-    generate_registration_options,
-    verify_registration_response,
     generate_authentication_options,
-    verify_authentication_response,
+    generate_registration_options,
     options_to_json,
+    verify_authentication_response,
+    verify_registration_response,
 )
 from webauthn.helpers import (
-    bytes_to_base64url,
     base64url_to_bytes,
+    bytes_to_base64url,
 )
 from webauthn.helpers.structs import (
     AuthenticatorSelectionCriteria,
+    AuthenticatorTransport,
+    PublicKeyCredentialDescriptor,
     ResidentKeyRequirement,
     UserVerificationRequirement,
-    PublicKeyCredentialDescriptor,
-    AuthenticatorTransport,
 )
 
 from .client import AnalyticsClient
-
 
 # Simple token-based auth
 AUTH_COOKIE_NAME = "analytics_auth"
@@ -43,7 +37,7 @@ def _hash_passkey(passkey: str, site_name: str) -> str:
     return hashlib.sha256(f"{site_name}:{passkey}".encode()).hexdigest()
 
 
-def _verify_auth(auth_cookie: Optional[str], expected_hash: str) -> bool:
+def _verify_auth(auth_cookie: str | None, expected_hash: str) -> bool:
     """Verify the auth cookie matches the expected hash."""
     if not auth_cookie:
         return False
@@ -53,9 +47,9 @@ def _verify_auth(auth_cookie: Optional[str], expected_hash: str) -> bool:
 def create_dashboard_router(
     client: AnalyticsClient,
     site_name: str,
-    passkey: Optional[str] = None,
-    rp_id: Optional[str] = None,
-    rp_origin: Optional[str] = None,
+    passkey: str | None = None,
+    rp_id: str | None = None,
+    rp_origin: str | None = None,
 ) -> APIRouter:
     """Create a FastAPI router for the analytics dashboard.
 
@@ -654,7 +648,7 @@ def create_dashboard_router(
     @router.post("/auth/register/options")
     async def webauthn_register_options(
         request: Request,
-        analytics_auth: Optional[str] = Cookie(None)
+        analytics_auth: str | None = Cookie(None)
     ):
         """Generate WebAuthn registration options.
 
@@ -862,7 +856,7 @@ def create_dashboard_router(
             )
 
     @router.get("/auth/passkeys")
-    async def list_passkeys(analytics_auth: Optional[str] = Cookie(None)):
+    async def list_passkeys(analytics_auth: str | None = Cookie(None)):
         """List registered passkeys for management."""
         # Must be authenticated
         if passkey and not _verify_auth(analytics_auth, expected_hash):
@@ -886,7 +880,7 @@ def create_dashboard_router(
     @router.delete("/auth/passkeys/{passkey_id}")
     async def delete_passkey_endpoint(
         passkey_id: int,
-        analytics_auth: Optional[str] = Cookie(None)
+        analytics_auth: str | None = Cookie(None)
     ):
         """Delete a registered passkey."""
         # Must be authenticated
@@ -908,7 +902,7 @@ def create_dashboard_router(
             return JSONResponse({"status": "ok"})
         return JSONResponse({"error": "Passkey not found"}, status_code=404)
 
-    async def _check_auth(analytics_auth: Optional[str]) -> bool:
+    async def _check_auth(analytics_auth: str | None) -> bool:
         """Check if the user is authenticated via simple passkey or WebAuthn session."""
         if not passkey:
             return True  # No auth configured
@@ -930,7 +924,7 @@ def create_dashboard_router(
     async def dashboard(
         request: Request,
         period: str = "7d",
-        analytics_auth: Optional[str] = Cookie(None)
+        analytics_auth: str | None = Cookie(None)
     ):
         """Render the analytics dashboard."""
         # Check auth if passkey is configured
@@ -2573,7 +2567,7 @@ def create_dashboard_router(
     @router.get("/api/stats")
     async def api_stats(
         period: str = "7d",
-        analytics_auth: Optional[str] = Cookie(None)
+        analytics_auth: str | None = Cookie(None)
     ):
         """API endpoint for dashboard data."""
         if not await _check_auth(analytics_auth):
@@ -2583,7 +2577,7 @@ def create_dashboard_router(
         return data.model_dump()
 
     @router.get("/api/realtime", response_class=HTMLResponse)
-    async def api_realtime(analytics_auth: Optional[str] = Cookie(None)):
+    async def api_realtime(analytics_auth: str | None = Cookie(None)):
         """Get realtime visitor count (last 5 minutes) - returns HTML for HTMX."""
         if not await _check_auth(analytics_auth):
             return HTMLResponse(content="<span>-</span>", status_code=401)

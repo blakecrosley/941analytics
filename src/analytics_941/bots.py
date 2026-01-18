@@ -17,7 +17,6 @@ Design Principles:
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class BotCategory(str, Enum):
@@ -48,8 +47,8 @@ class BotInfo:
         confidence: How confident we are (1.0 = exact match, 0.7 = generic pattern)
     """
     is_bot: bool
-    name: Optional[str] = None
-    category: Optional[BotCategory] = None
+    name: str | None = None
+    category: BotCategory | None = None
     confidence: float = 1.0
 
     def __bool__(self) -> bool:

@@ -2,10 +2,10 @@
 
 import json
 from datetime import date, datetime, timedelta
-from typing import Optional
+
 import httpx
 
-from .models import DashboardData, DailyStats
+from .models import DailyStats, DashboardData
 
 
 class AnalyticsClient:
@@ -24,7 +24,7 @@ class AnalyticsClient:
         self.site_name = site_name
         self.base_url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account_id}/d1/database/{d1_database_id}"
 
-    async def _query(self, sql: str, params: Optional[list] = None) -> list[dict]:
+    async def _query(self, sql: str, params: list | None = None) -> list[dict]:
         """Execute a SQL query against D1."""
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -337,7 +337,7 @@ class AnalyticsClient:
         return result[0]["count"] if result else 0
 
     async def get_campaign_performance(
-        self, campaign: str, start_date: Optional[date] = None, end_date: Optional[date] = None
+        self, campaign: str, start_date: date | None = None, end_date: date | None = None
     ) -> dict:
         """
         Get performance metrics for a specific UTM campaign.
@@ -622,7 +622,7 @@ class AnalyticsClient:
             [self.site_name],
         )
 
-    async def get_passkey_by_credential_id(self, credential_id: str) -> Optional[dict]:
+    async def get_passkey_by_credential_id(self, credential_id: str) -> dict | None:
         """Get a passkey by its credential ID."""
         result = await self._query(
             """
@@ -694,7 +694,7 @@ class AnalyticsClient:
     async def create_session(
         self,
         token_hash: str,
-        passkey_id: Optional[int] = None,
+        passkey_id: int | None = None,
         user_agent: str = "",
         ip_address: str = "",
         expires_hours: int = 168,  # 7 days
@@ -708,7 +708,7 @@ class AnalyticsClient:
             [self.site_name, token_hash, passkey_id, expires_hours, user_agent, ip_address],
         )
 
-    async def validate_session(self, token_hash: str) -> Optional[dict]:
+    async def validate_session(self, token_hash: str) -> dict | None:
         """Validate a session token. Returns session data if valid."""
         result = await self._query(
             """
@@ -756,7 +756,7 @@ class AnalyticsClient:
             [self.site_name, challenge, challenge_type],
         )
 
-    async def consume_challenge(self, challenge_type: str) -> Optional[str]:
+    async def consume_challenge(self, challenge_type: str) -> str | None:
         """Get and delete the most recent valid challenge. Returns challenge string or None."""
         result = await self._query(
             """

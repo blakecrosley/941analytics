@@ -5,14 +5,23 @@ Enhanced version with session tracking, events, and filtering support.
 """
 import json
 from datetime import date, datetime, timedelta
-from typing import Optional, Dict, List, Any
+from typing import Any
+
 import httpx
 
 from .models import (
-    DashboardData, DashboardFilters, DateRange,
-    CoreMetrics, MetricChange, TimeSeriesPoint,
-    PageStats, SourceStats, CountryStats, DeviceStats, BrowserStats, EventStats,
-    RealtimeData, GlobeData, Session, Event
+    BrowserStats,
+    CoreMetrics,
+    CountryStats,
+    DashboardFilters,
+    DeviceStats,
+    EventStats,
+    GlobeData,
+    MetricChange,
+    PageStats,
+    RealtimeData,
+    SourceStats,
+    TimeSeriesPoint,
 )
 
 
@@ -32,7 +41,7 @@ class AnalyticsClient:
         self.site_name = site_name
         self.base_url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account_id}/d1/database/{d1_database_id}"
 
-    async def _query(self, sql: str, params: Optional[list] = None) -> list[dict]:
+    async def _query(self, sql: str, params: list | None = None) -> list[dict]:
         """Execute a SQL query against D1."""
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -54,7 +63,7 @@ class AnalyticsClient:
                 return results[0].get("results", [])
             return []
 
-    async def _execute(self, sql: str, params: Optional[list] = None) -> None:
+    async def _execute(self, sql: str, params: list | None = None) -> None:
         """Execute a SQL statement without returning results."""
         await self._query(sql, params)
 
@@ -66,9 +75,9 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        compare_start: Optional[date] = None,
-        compare_end: Optional[date] = None,
-        filters: Optional[DashboardFilters] = None,
+        compare_start: date | None = None,
+        compare_end: date | None = None,
+        filters: DashboardFilters | None = None,
     ) -> CoreMetrics:
         """Get core dashboard metrics with optional comparison period."""
 
@@ -161,7 +170,7 @@ class AnalyticsClient:
             bot_views=bot_views,
         )
 
-    def _metric_with_change(self, current: int, previous: Optional[int]) -> MetricChange:
+    def _metric_with_change(self, current: int, previous: int | None) -> MetricChange:
         """Create a MetricChange object with percentage change."""
         if previous is None:
             return MetricChange(value=current)
@@ -179,7 +188,7 @@ class AnalyticsClient:
             change_direction=direction,
         )
 
-    def _build_filter_sql(self, filters: Optional[DashboardFilters]) -> tuple[str, list]:
+    def _build_filter_sql(self, filters: DashboardFilters | None) -> tuple[str, list]:
         """Build SQL WHERE clauses from filters.
 
         Uses parameterized queries to prevent SQL injection.
@@ -239,7 +248,7 @@ class AnalyticsClient:
 
         return " ".join(clauses), params
 
-    def _build_session_filter_sql(self, filters: Optional[DashboardFilters]) -> tuple[str, list]:
+    def _build_session_filter_sql(self, filters: DashboardFilters | None) -> tuple[str, list]:
         """Build session table filter SQL with parameterized queries.
 
         Sessions table has fewer columns than page_views, so only
@@ -288,7 +297,7 @@ class AnalyticsClient:
 
         return " ".join(clauses), params
 
-    def _build_event_filter_sql(self, filters: Optional[DashboardFilters]) -> tuple[str, list]:
+    def _build_event_filter_sql(self, filters: DashboardFilters | None) -> tuple[str, list]:
         """Build event table filter SQL with parameterized queries.
 
         Events table has limited columns: country, device_type, page_url.
@@ -319,9 +328,9 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-        compare_start: Optional[date] = None,
-        compare_end: Optional[date] = None,
+        filters: DashboardFilters | None = None,
+        compare_start: date | None = None,
+        compare_end: date | None = None,
     ) -> MetricChange:
         """Get bounce rate as percentage (0-100).
 
@@ -362,9 +371,9 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-        compare_start: Optional[date] = None,
-        compare_end: Optional[date] = None,
+        filters: DashboardFilters | None = None,
+        compare_start: date | None = None,
+        compare_end: date | None = None,
     ) -> MetricChange:
         """Get average session duration in seconds.
 
@@ -407,9 +416,9 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-        compare_start: Optional[date] = None,
-        compare_end: Optional[date] = None,
+        filters: DashboardFilters | None = None,
+        compare_start: date | None = None,
+        compare_end: date | None = None,
     ) -> MetricChange:
         """Get total number of sessions.
 
@@ -449,9 +458,9 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-        compare_start: Optional[date] = None,
-        compare_end: Optional[date] = None,
+        filters: DashboardFilters | None = None,
+        compare_start: date | None = None,
+        compare_end: date | None = None,
     ) -> MetricChange:
         """Get average pages per session.
 
@@ -496,8 +505,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         granularity: str = "day",
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[TimeSeriesPoint]:
+        filters: DashboardFilters | None = None,
+    ) -> list[TimeSeriesPoint]:
         """Get views/visitors/sessions over time."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -542,8 +551,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[PageStats]:
+        filters: DashboardFilters | None = None,
+    ) -> list[PageStats]:
         """Get top pages by views with bounce rate per page."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -598,8 +607,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[PageStats]:
+        filters: DashboardFilters | None = None,
+    ) -> list[PageStats]:
         """Get top entry pages (first page of sessions) with bounce rate."""
 
         filter_sql, filter_params = self._build_session_filter_sql(filters)
@@ -637,8 +646,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[PageStats]:
+        filters: DashboardFilters | None = None,
+    ) -> list[PageStats]:
         """Get top exit pages (last page of sessions) with exit rate.
 
         Exit rate = exits from this page / total pageviews of this page * 100
@@ -702,8 +711,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get entry→exit page flow data for visualization.
 
         Returns top entry→exit page combinations with session counts.
@@ -746,8 +755,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[SourceStats]:
+        filters: DashboardFilters | None = None,
+    ) -> list[SourceStats]:
         """Get top traffic sources."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -783,8 +792,8 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get traffic breakdown by source type."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -814,8 +823,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 20,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[CountryStats]:
+        filters: DashboardFilters | None = None,
+    ) -> list[CountryStats]:
         """Get traffic by country."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -857,8 +866,8 @@ class AnalyticsClient:
         end_date: date,
         country: str,
         limit: int = 20,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get regions/states for a specific country."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -888,10 +897,10 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         country: str,
-        region: Optional[str] = None,
+        region: str | None = None,
         limit: int = 30,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get cities for a specific country/region."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -940,7 +949,7 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
+        filters: DashboardFilters | None = None,
     ) -> GlobeData:
         """Get data for the 3D globe visualization."""
 
@@ -977,7 +986,7 @@ class AnalyticsClient:
             ]
         )
 
-    def _get_country_names(self) -> Dict[str, str]:
+    def _get_country_names(self) -> dict[str, str]:
         """Country code to name mapping."""
         return {
             'US': 'United States', 'CN': 'China', 'CA': 'Canada', 'SG': 'Singapore',
@@ -1004,8 +1013,8 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[DeviceStats]:
+        filters: DashboardFilters | None = None,
+    ) -> list[DeviceStats]:
         """Get device type breakdown."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -1040,8 +1049,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[BrowserStats]:
+        filters: DashboardFilters | None = None,
+    ) -> list[BrowserStats]:
         """Get browser breakdown."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -1077,8 +1086,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get OS breakdown."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -1114,8 +1123,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get language breakdown."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -1143,8 +1152,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get screen size breakdown."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -1177,9 +1186,9 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 20,
-        event_type: Optional[str] = None,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[EventStats]:
+        event_type: str | None = None,
+        filters: DashboardFilters | None = None,
+    ) -> list[EventStats]:
         """Get event statistics, optionally filtered by event type."""
 
         filter_sql, filter_params = self._build_event_filter_sql(filters)
@@ -1222,8 +1231,8 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-    ) -> Dict[str, int]:
+        filters: DashboardFilters | None = None,
+    ) -> dict[str, int]:
         """Get scroll depth breakdown."""
 
         filter_sql, filter_params = self._build_event_filter_sql(filters)
@@ -1255,8 +1264,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get average scroll depth per page.
 
         Returns pages with their average maximum scroll depth reached.
@@ -1302,8 +1311,8 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get event type breakdown."""
 
         filter_sql, filter_params = self._build_event_filter_sql(filters)
@@ -1328,9 +1337,9 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        event_type: Optional[str] = None,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        event_type: str | None = None,
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get events count over time for charting.
 
         Returns daily event counts, optionally filtered by event type.
@@ -1363,12 +1372,12 @@ class AnalyticsClient:
         self,
         start_date: date,
         end_date: date,
-        compare_start: Optional[date] = None,
-        compare_end: Optional[date] = None,
+        compare_start: date | None = None,
+        compare_end: date | None = None,
         limit: int = 20,
-        event_type: Optional[str] = None,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        event_type: str | None = None,
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get top events with trend comparison to previous period.
 
         Returns events with current count and percentage change vs comparison period.
@@ -1469,8 +1478,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 100,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get property breakdowns for a specific event.
 
         Returns event_data properties with their frequency counts.
@@ -1498,7 +1507,7 @@ class AnalyticsClient:
         )
 
         # Parse and aggregate properties
-        property_counts: Dict[str, Dict[str, int]] = {}
+        property_counts: dict[str, dict[str, int]] = {}
 
         for r in results:
             try:
@@ -1532,8 +1541,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 20,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get top outbound link destinations.
 
         Returns outbound click events with destination URL, click count, and link text.
@@ -1572,8 +1581,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 20,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get top file downloads.
 
         Returns download events with filename, extension, click count.
@@ -1612,8 +1621,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 20,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get form submission events.
 
         Returns form submissions with form id, name, action, and counts.
@@ -1657,8 +1666,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 20,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get JavaScript errors grouped by normalized message.
 
         Returns error events with message, source, count, and unique sessions.
@@ -1797,9 +1806,9 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10000,
-        filters: Optional[DashboardFilters] = None,
+        filters: DashboardFilters | None = None,
         include_bots: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Export raw pageview data for CSV.
 
         Args:
@@ -1836,8 +1845,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10000,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Export event data for CSV."""
 
         filter_sql, filter_params = self._build_event_filter_sql(filters)
@@ -1867,8 +1876,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get UTM source breakdown."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -1898,8 +1907,8 @@ class AnalyticsClient:
         start_date: date,
         end_date: date,
         limit: int = 10,
-        filters: Optional[DashboardFilters] = None,
-    ) -> List[Dict[str, Any]]:
+        filters: DashboardFilters | None = None,
+    ) -> list[dict[str, Any]]:
         """Get UTM campaign breakdown."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
@@ -1947,7 +1956,7 @@ class AnalyticsClient:
             [self.site_name],
         )
 
-    async def get_passkey_by_credential_id(self, credential_id: str) -> Optional[dict]:
+    async def get_passkey_by_credential_id(self, credential_id: str) -> dict | None:
         """Get a passkey by its credential ID."""
         result = await self._query(
             """
@@ -2011,7 +2020,7 @@ class AnalyticsClient:
     async def create_session(
         self,
         token_hash: str,
-        passkey_id: Optional[int] = None,
+        passkey_id: int | None = None,
         user_agent: str = "",
         ip_address: str = "",
         expires_hours: int = 168,
@@ -2025,7 +2034,7 @@ class AnalyticsClient:
             [self.site_name, token_hash, passkey_id, expires_hours, user_agent, ip_address],
         )
 
-    async def validate_session(self, token_hash: str) -> Optional[dict]:
+    async def validate_session(self, token_hash: str) -> dict | None:
         """Validate a session token. Returns session data if valid."""
         result = await self._query(
             """
@@ -2058,7 +2067,7 @@ class AnalyticsClient:
             [self.site_name, challenge, challenge_type],
         )
 
-    async def consume_challenge(self, challenge_type: str) -> Optional[str]:
+    async def consume_challenge(self, challenge_type: str) -> str | None:
         """Get and delete the most recent valid challenge."""
         result = await self._query(
             """

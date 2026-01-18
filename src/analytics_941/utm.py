@@ -22,9 +22,8 @@ UTM parameters are intentionally added by marketers and do not reveal
 personal information. They're safe to store for analytics.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
-from urllib.parse import urlparse, parse_qs
+from dataclasses import dataclass
+from urllib.parse import parse_qs, urlparse
 
 
 @dataclass(frozen=True)
@@ -43,12 +42,12 @@ class UTMParams:
         campaign_id: Campaign ID (utm_id)
         has_utm: Whether any UTM parameters were present
     """
-    source: Optional[str] = None
-    medium: Optional[str] = None
-    campaign: Optional[str] = None
-    term: Optional[str] = None
-    content: Optional[str] = None
-    campaign_id: Optional[str] = None
+    source: str | None = None
+    medium: str | None = None
+    campaign: str | None = None
+    term: str | None = None
+    content: str | None = None
+    campaign_id: str | None = None
 
     @property
     def has_utm(self) -> bool:
@@ -62,7 +61,7 @@ class UTMParams:
             self.campaign_id
         ])
 
-    def to_dict(self) -> dict[str, Optional[str]]:
+    def to_dict(self) -> dict[str, str | None]:
         """Convert to dictionary, excluding None values."""
         result = {}
         if self.source:
@@ -141,7 +140,7 @@ KNOWN_MEDIUMS = {
 }
 
 
-def _clean_param(value: Optional[str]) -> Optional[str]:
+def _clean_param(value: str | None) -> str | None:
     """
     Clean and validate a UTM parameter value.
 
@@ -161,7 +160,7 @@ def _clean_param(value: Optional[str]) -> Optional[str]:
     return cleaned if cleaned else None
 
 
-def _get_first_param(params: dict, *keys: str) -> Optional[str]:
+def _get_first_param(params: dict, *keys: str) -> str | None:
     """Get the first non-empty value from multiple possible parameter names."""
     for key in keys:
         values = params.get(key, [])
@@ -259,7 +258,7 @@ def parse_utm(url: str) -> UTMParams:
         return UTMParams()
 
 
-def classify_medium(medium: Optional[str]) -> Optional[str]:
+def classify_medium(medium: str | None) -> str | None:
     """
     Classify a utm_medium value into a standard category.
 
@@ -321,8 +320,8 @@ def build_utm_url(
     source: str,
     medium: str,
     campaign: str,
-    term: Optional[str] = None,
-    content: Optional[str] = None
+    term: str | None = None,
+    content: str | None = None
 ) -> str:
     """
     Build a URL with UTM parameters.
@@ -340,7 +339,7 @@ def build_utm_url(
     Returns:
         URL with UTM parameters appended
     """
-    from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+    from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
     parsed = urlparse(base_url)
     existing_params = parse_qs(parsed.query)

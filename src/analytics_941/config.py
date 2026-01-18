@@ -6,8 +6,7 @@ import logging
 import os
 import secrets
 import warnings
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +102,13 @@ class AnalyticsConfig:
     cf_api_token: str
 
     # Display settings
-    display_name: Optional[str] = None  # Friendly name (e.g., "Blake Crosley")
+    display_name: str | None = None  # Friendly name (e.g., "Blake Crosley")
     timezone: str = "America/New_York"  # Site timezone for aggregation
 
     # Optional authentication
-    passkey: Optional[str] = None
-    rp_id: Optional[str] = None  # WebAuthn Relying Party ID (domain)
-    rp_origin: Optional[str] = None  # WebAuthn origin (https://domain)
+    passkey: str | None = None
+    rp_id: str | None = None  # WebAuthn Relying Party ID (domain)
+    rp_origin: str | None = None  # WebAuthn origin (https://domain)
 
     # Data retention
     retention_days: int = 90
