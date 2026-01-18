@@ -199,3 +199,36 @@ SELECT
 FROM page_views
 WHERE is_bot = 0
 GROUP BY site, referrer_domain, referrer_type;
+
+-- =============================================================================
+-- SITES CONFIGURATION TABLE
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS sites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL UNIQUE,
+    display_name TEXT,
+    timezone TEXT DEFAULT 'America/New_York',
+    passkey_hash TEXT,  -- PBKDF2 hash of site-specific passkey
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sites_domain ON sites(domain);
+CREATE INDEX IF NOT EXISTS idx_sites_active ON sites(is_active);
+
+-- =============================================================================
+-- SITE SETTINGS TABLE (Key-Value Overrides)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS site_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    UNIQUE(site_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_settings_site ON site_settings(site_id);
+CREATE INDEX IF NOT EXISTS idx_site_settings_key ON site_settings(key);

@@ -89,13 +89,14 @@ class AnalyticsClient:
             [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
         )
 
-        # Session metrics (bounce rate, avg duration)
+        # Session metrics (bounce rate, avg duration, pages per session)
         session_filter_sql, session_filter_params = self._build_session_filter_sql(filters)
         session_stats = await self._query(
             f"""
             SELECT
                 AVG(CASE WHEN is_bounce = 1 THEN 1 ELSE 0 END) * 100 as bounce_rate,
-                AVG(duration_seconds) as avg_duration
+                AVG(duration_seconds) as avg_duration,
+                AVG(pageview_count) as pages_per_session
             FROM sessions
             WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
                 {session_filter_sql}
@@ -111,10 +112,11 @@ class AnalyticsClient:
         sessions = current_data.get("sessions") or 0
         bounce_rate = round(session_data.get("bounce_rate", 0) or 0, 1)
         avg_duration = round(session_data.get("avg_duration", 0) or 0)
+        pages_per_session = round(session_data.get("pages_per_session", 0) or 0, 1)
         bot_views = current_data.get("bot_views") or 0
 
         # Comparison period
-        prev_views = prev_visitors = prev_sessions = prev_bounce = prev_duration = None
+        prev_views = prev_visitors = prev_sessions = prev_bounce = prev_duration = prev_pps = None
         if compare_start and compare_end:
             prev = await self._query(
                 f"""
@@ -132,7 +134,8 @@ class AnalyticsClient:
                 f"""
                 SELECT
                     AVG(CASE WHEN is_bounce = 1 THEN 1 ELSE 0 END) * 100 as bounce_rate,
-                    AVG(duration_seconds) as avg_duration
+                    AVG(duration_seconds) as avg_duration,
+                    AVG(pageview_count) as pages_per_session
                 FROM sessions
                 WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
                     {session_filter_sql}
@@ -146,6 +149,7 @@ class AnalyticsClient:
             if prev_sess:
                 prev_bounce = round(prev_sess[0].get("bounce_rate", 0) or 0, 1)
                 prev_duration = round(prev_sess[0].get("avg_duration", 0) or 0)
+                prev_pps = round(prev_sess[0].get("pages_per_session", 0) or 0, 1)
 
         return CoreMetrics(
             views=self._metric_with_change(views, prev_views),
@@ -153,6 +157,7 @@ class AnalyticsClient:
             sessions=self._metric_with_change(sessions, prev_sessions),
             bounce_rate=self._metric_with_change(bounce_rate, prev_bounce),
             avg_duration=self._metric_with_change(avg_duration, prev_duration),
+            pages_per_session=self._metric_with_change(pages_per_session, prev_pps),
             bot_views=bot_views,
         )
 
@@ -307,6 +312,182 @@ class AnalyticsClient:
         return " ".join(clauses), params
 
     # =========================================================================
+    # SESSION METRICS (Standalone)
+    # =========================================================================
+
+    async def get_bounce_rate(
+        self,
+        start_date: date,
+        end_date: date,
+        filters: Optional[DashboardFilters] = None,
+        compare_start: Optional[date] = None,
+        compare_end: Optional[date] = None,
+    ) -> MetricChange:
+        """Get bounce rate as percentage (0-100).
+
+        Bounce rate = percentage of single-pageview sessions.
+        Returns 0 if no session data exists (handles zero-data gracefully).
+        """
+        filter_sql, filter_params = self._build_session_filter_sql(filters)
+
+        result = await self._query(
+            f"""
+            SELECT AVG(CASE WHEN is_bounce = 1 THEN 1.0 ELSE 0.0 END) * 100 as bounce_rate
+            FROM sessions
+            WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                {filter_sql}
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
+        )
+
+        current = round(result[0].get("bounce_rate", 0) or 0, 1) if result else 0
+
+        # Comparison period
+        previous = None
+        if compare_start and compare_end:
+            prev_result = await self._query(
+                f"""
+                SELECT AVG(CASE WHEN is_bounce = 1 THEN 1.0 ELSE 0.0 END) * 100 as bounce_rate
+                FROM sessions
+                WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                    {filter_sql}
+                """,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+            )
+            previous = round(prev_result[0].get("bounce_rate", 0) or 0, 1) if prev_result else 0
+
+        return self._metric_with_change(current, previous)
+
+    async def get_avg_session_duration(
+        self,
+        start_date: date,
+        end_date: date,
+        filters: Optional[DashboardFilters] = None,
+        compare_start: Optional[date] = None,
+        compare_end: Optional[date] = None,
+    ) -> MetricChange:
+        """Get average session duration in seconds.
+
+        Only includes sessions that have ended (duration_seconds IS NOT NULL).
+        Returns 0 if no completed sessions exist (handles zero-data gracefully).
+        """
+        filter_sql, filter_params = self._build_session_filter_sql(filters)
+
+        result = await self._query(
+            f"""
+            SELECT AVG(duration_seconds) as avg_duration
+            FROM sessions
+            WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                AND duration_seconds IS NOT NULL
+                {filter_sql}
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
+        )
+
+        current = round(result[0].get("avg_duration", 0) or 0) if result else 0
+
+        # Comparison period
+        previous = None
+        if compare_start and compare_end:
+            prev_result = await self._query(
+                f"""
+                SELECT AVG(duration_seconds) as avg_duration
+                FROM sessions
+                WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                    AND duration_seconds IS NOT NULL
+                    {filter_sql}
+                """,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+            )
+            previous = round(prev_result[0].get("avg_duration", 0) or 0) if prev_result else 0
+
+        return self._metric_with_change(current, previous)
+
+    async def get_sessions_count(
+        self,
+        start_date: date,
+        end_date: date,
+        filters: Optional[DashboardFilters] = None,
+        compare_start: Optional[date] = None,
+        compare_end: Optional[date] = None,
+    ) -> MetricChange:
+        """Get total number of sessions.
+
+        Returns 0 if no sessions exist (handles zero-data gracefully).
+        """
+        filter_sql, filter_params = self._build_session_filter_sql(filters)
+
+        result = await self._query(
+            f"""
+            SELECT COUNT(*) as session_count
+            FROM sessions
+            WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                {filter_sql}
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
+        )
+
+        current = int(result[0].get("session_count", 0) or 0) if result else 0
+
+        # Comparison period
+        previous = None
+        if compare_start and compare_end:
+            prev_result = await self._query(
+                f"""
+                SELECT COUNT(*) as session_count
+                FROM sessions
+                WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                    {filter_sql}
+                """,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+            )
+            previous = int(prev_result[0].get("session_count", 0) or 0) if prev_result else 0
+
+        return self._metric_with_change(current, previous)
+
+    async def get_pages_per_session(
+        self,
+        start_date: date,
+        end_date: date,
+        filters: Optional[DashboardFilters] = None,
+        compare_start: Optional[date] = None,
+        compare_end: Optional[date] = None,
+    ) -> MetricChange:
+        """Get average pages per session.
+
+        Returns 0 if no sessions exist (handles zero-data gracefully).
+        """
+        filter_sql, filter_params = self._build_session_filter_sql(filters)
+
+        result = await self._query(
+            f"""
+            SELECT AVG(pageview_count) as pages_per_session
+            FROM sessions
+            WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                {filter_sql}
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params,
+        )
+
+        current = round(result[0].get("pages_per_session", 0) or 0, 1) if result else 0
+
+        # Comparison period
+        previous = None
+        if compare_start and compare_end:
+            prev_result = await self._query(
+                f"""
+                SELECT AVG(pageview_count) as pages_per_session
+                FROM sessions
+                WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                    {filter_sql}
+                """,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+            )
+            previous = round(prev_result[0].get("pages_per_session", 0) or 0, 1) if prev_result else 0
+
+        return self._metric_with_change(current, previous)
+
+    # =========================================================================
     # TIME SERIES
     # =========================================================================
 
@@ -363,10 +544,12 @@ class AnalyticsClient:
         limit: int = 10,
         filters: Optional[DashboardFilters] = None,
     ) -> List[PageStats]:
-        """Get top pages by views."""
+        """Get top pages by views with bounce rate per page."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
+        session_filter_sql, session_filter_params = self._build_session_filter_sql(filters)
 
+        # Get page views
         results = await self._query(
             f"""
             SELECT
@@ -383,8 +566,30 @@ class AnalyticsClient:
             [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
+        # Get bounce rates per entry page
+        bounce_results = await self._query(
+            f"""
+            SELECT
+                entry_page as url,
+                AVG(CASE WHEN is_bounce = 1 THEN 1.0 ELSE 0.0 END) * 100 as bounce_rate
+            FROM sessions
+            WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                {session_filter_sql}
+            GROUP BY entry_page
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + session_filter_params,
+        )
+
+        # Map bounce rates by URL
+        bounce_map = {r["url"]: round(r["bounce_rate"] or 0, 1) for r in bounce_results}
+
         return [
-            PageStats(url=r["url"], views=r["views"], visitors=r["visitors"])
+            PageStats(
+                url=r["url"],
+                views=r["views"],
+                visitors=r["visitors"],
+                bounce_rate=bounce_map.get(r["url"]),
+            )
             for r in results
         ]
 
@@ -395,7 +600,7 @@ class AnalyticsClient:
         limit: int = 10,
         filters: Optional[DashboardFilters] = None,
     ) -> List[PageStats]:
-        """Get top entry pages (first page of sessions)."""
+        """Get top entry pages (first page of sessions) with bounce rate."""
 
         filter_sql, filter_params = self._build_session_filter_sql(filters)
 
@@ -404,7 +609,8 @@ class AnalyticsClient:
             SELECT
                 entry_page as url,
                 COUNT(*) as entries,
-                COUNT(DISTINCT visitor_hash) as visitors
+                COUNT(DISTINCT visitor_hash) as visitors,
+                AVG(CASE WHEN is_bounce = 1 THEN 1.0 ELSE 0.0 END) * 100 as bounce_rate
             FROM sessions
             WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
                 {filter_sql}
@@ -416,7 +622,13 @@ class AnalyticsClient:
         )
 
         return [
-            PageStats(url=r["url"], views=r["entries"], visitors=r["visitors"], entries=r["entries"])
+            PageStats(
+                url=r["url"],
+                views=r["entries"],
+                visitors=r["visitors"],
+                entries=r["entries"],
+                bounce_rate=round(r["bounce_rate"] or 0, 1),
+            )
             for r in results
         ]
 
@@ -427,11 +639,16 @@ class AnalyticsClient:
         limit: int = 10,
         filters: Optional[DashboardFilters] = None,
     ) -> List[PageStats]:
-        """Get top exit pages (last page of sessions)."""
+        """Get top exit pages (last page of sessions) with exit rate.
+
+        Exit rate = exits from this page / total pageviews of this page * 100
+        """
 
         filter_sql, filter_params = self._build_session_filter_sql(filters)
+        pv_filter_sql, pv_filter_params = self._build_filter_sql(filters)
 
-        results = await self._query(
+        # Get exits per page from sessions
+        exit_results = await self._query(
             f"""
             SELECT
                 exit_page as url,
@@ -447,8 +664,76 @@ class AnalyticsClient:
             [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
+        if not exit_results:
+            return []
+
+        # Get pageview counts for exit rate calculation
+        urls = [r["url"] for r in exit_results]
+        placeholders = ", ".join(["?" for _ in urls])
+        pv_results = await self._query(
+            f"""
+            SELECT
+                url,
+                COUNT(*) as views
+            FROM pageviews
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                AND url IN ({placeholders}) AND is_bot = 0 {pv_filter_sql}
+            GROUP BY url
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + urls + pv_filter_params,
+        )
+
+        # Map pageviews by URL
+        pv_map = {r["url"]: r["views"] for r in pv_results}
+
         return [
-            PageStats(url=r["url"], views=r["exits"], visitors=r["visitors"], exits=r["exits"])
+            PageStats(
+                url=r["url"],
+                views=pv_map.get(r["url"], r["exits"]),  # Use pageviews if available
+                visitors=r["visitors"],
+                exits=r["exits"],
+                exit_rate=round((r["exits"] / pv_map.get(r["url"], r["exits"])) * 100, 1) if pv_map.get(r["url"], r["exits"]) > 0 else 0,
+            )
+            for r in exit_results
+        ]
+
+    async def get_entry_exit_flow(
+        self,
+        start_date: date,
+        end_date: date,
+        limit: int = 10,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get entry→exit page flow data for visualization.
+
+        Returns top entry→exit page combinations with session counts.
+        """
+
+        filter_sql, filter_params = self._build_session_filter_sql(filters)
+
+        results = await self._query(
+            f"""
+            SELECT
+                entry_page,
+                exit_page,
+                COUNT(*) as sessions
+            FROM sessions
+            WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
+                AND entry_page IS NOT NULL AND exit_page IS NOT NULL
+                {filter_sql}
+            GROUP BY entry_page, exit_page
+            ORDER BY sessions DESC
+            LIMIT ?
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+        )
+
+        return [
+            {
+                "entry_page": r["entry_page"],
+                "exit_page": r["exit_page"],
+                "sessions": r["sessions"],
+            }
             for r in results
         ]
 
@@ -965,6 +1250,54 @@ class AnalyticsClient:
 
         return depths
 
+    async def get_scroll_depth_by_page(
+        self,
+        start_date: date,
+        end_date: date,
+        limit: int = 10,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get average scroll depth per page.
+
+        Returns pages with their average maximum scroll depth reached.
+        Uses the highest scroll event (scroll_100 > scroll_75 > etc.) per session per page.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
+        # Get max scroll depth per page per session, then average across sessions
+        results = await self._query(
+            f"""
+            WITH max_scroll_per_session AS (
+                SELECT
+                    page_url,
+                    session_id,
+                    MAX(CAST(REPLACE(event_name, 'scroll_', '') AS INTEGER)) as max_depth
+                FROM events
+                WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                    AND event_type = 'scroll' {filter_sql}
+                GROUP BY page_url, session_id
+            )
+            SELECT
+                page_url,
+                AVG(max_depth) as avg_depth,
+                COUNT(*) as sessions
+            FROM max_scroll_per_session
+            GROUP BY page_url
+            ORDER BY sessions DESC
+            LIMIT ?
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+        )
+
+        return [
+            {
+                "url": r["page_url"],
+                "avg_depth": round(r["avg_depth"], 1) if r["avg_depth"] else 0,
+                "sessions": r["sessions"],
+            }
+            for r in results
+        ]
+
     async def get_event_types(
         self,
         start_date: date,
@@ -990,6 +1323,379 @@ class AnalyticsClient:
         )
 
         return results
+
+    async def get_events_time_series(
+        self,
+        start_date: date,
+        end_date: date,
+        event_type: Optional[str] = None,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get events count over time for charting.
+
+        Returns daily event counts, optionally filtered by event type.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+        type_filter = "AND event_type = ?" if event_type else ""
+
+        params = [self.site_name, start_date.isoformat(), end_date.isoformat()]
+        if event_type:
+            params.append(event_type)
+        params.extend(filter_params)
+
+        results = await self._query(
+            f"""
+            SELECT
+                date(timestamp) as date,
+                COUNT(*) as count
+            FROM events
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                {type_filter} {filter_sql}
+            GROUP BY date(timestamp)
+            ORDER BY date
+            """,
+            params,
+        )
+
+        return [{"date": r["date"], "count": r["count"]} for r in results]
+
+    async def get_events_with_trend(
+        self,
+        start_date: date,
+        end_date: date,
+        compare_start: Optional[date] = None,
+        compare_end: Optional[date] = None,
+        limit: int = 20,
+        event_type: Optional[str] = None,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get top events with trend comparison to previous period.
+
+        Returns events with current count and percentage change vs comparison period.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+        type_filter = "AND event_type = ?" if event_type else ""
+
+        # Build params for current period
+        params = [self.site_name, start_date.isoformat(), end_date.isoformat()]
+        if event_type:
+            params.append(event_type)
+        params.extend(filter_params)
+        params.append(limit)
+
+        # Get current period events
+        current_results = await self._query(
+            f"""
+            SELECT
+                event_name,
+                event_type,
+                COUNT(*) as count,
+                COUNT(DISTINCT session_id) as unique_sessions
+            FROM events
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                {type_filter} {filter_sql}
+            GROUP BY event_name, event_type
+            ORDER BY count DESC
+            LIMIT ?
+            """,
+            params,
+        )
+
+        # If no comparison period, return without trends
+        if not compare_start or not compare_end:
+            return [
+                {
+                    "event_name": r["event_name"],
+                    "event_type": r["event_type"],
+                    "count": r["count"],
+                    "unique_sessions": r["unique_sessions"],
+                    "trend_percent": None,
+                    "trend_direction": None,
+                }
+                for r in current_results
+            ]
+
+        # Build params for comparison period
+        compare_params = [self.site_name, compare_start.isoformat(), compare_end.isoformat()]
+        if event_type:
+            compare_params.append(event_type)
+        compare_params.extend(filter_params)
+
+        # Get comparison period events
+        prev_results = await self._query(
+            f"""
+            SELECT
+                event_name,
+                COUNT(*) as count
+            FROM events
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                {type_filter} {filter_sql}
+            GROUP BY event_name
+            """,
+            compare_params,
+        )
+
+        # Build lookup for previous counts
+        prev_counts = {r["event_name"]: r["count"] for r in prev_results}
+
+        # Calculate trends
+        events_with_trend = []
+        for r in current_results:
+            current_count = r["count"]
+            prev_count = prev_counts.get(r["event_name"], 0)
+
+            if prev_count == 0:
+                trend_percent = 100.0 if current_count > 0 else 0.0
+            else:
+                trend_percent = round(((current_count - prev_count) / prev_count) * 100, 1)
+
+            trend_direction = "up" if trend_percent > 0 else "down" if trend_percent < 0 else "same"
+
+            events_with_trend.append({
+                "event_name": r["event_name"],
+                "event_type": r["event_type"],
+                "count": current_count,
+                "unique_sessions": r["unique_sessions"],
+                "previous_count": prev_count,
+                "trend_percent": abs(trend_percent),
+                "trend_direction": trend_direction,
+            })
+
+        return events_with_trend
+
+    async def get_event_properties(
+        self,
+        event_name: str,
+        start_date: date,
+        end_date: date,
+        limit: int = 100,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get property breakdowns for a specific event.
+
+        Returns event_data properties with their frequency counts.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
+        # Get recent event data samples to analyze properties
+        results = await self._query(
+            f"""
+            SELECT
+                event_data,
+                COUNT(*) as count
+            FROM events
+            WHERE site = ? AND event_name = ?
+                AND date(timestamp) >= ? AND date(timestamp) <= ?
+                AND event_data IS NOT NULL AND event_data != 'null'
+                {filter_sql}
+            GROUP BY event_data
+            ORDER BY count DESC
+            LIMIT ?
+            """,
+            [self.site_name, event_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
+        )
+
+        # Parse and aggregate properties
+        property_counts: Dict[str, Dict[str, int]] = {}
+
+        for r in results:
+            try:
+                data = json.loads(r["event_data"]) if r["event_data"] else {}
+                count = r["count"]
+
+                for key, value in data.items():
+                    if key not in property_counts:
+                        property_counts[key] = {}
+
+                    # Convert value to string for grouping
+                    str_value = str(value) if value is not None else "(empty)"
+                    property_counts[key][str_value] = property_counts[key].get(str_value, 0) + count
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        # Format output
+        properties = []
+        for prop_name, values in property_counts.items():
+            top_values = sorted(values.items(), key=lambda x: x[1], reverse=True)[:10]
+            properties.append({
+                "property": prop_name,
+                "values": [{"value": v, "count": c} for v, c in top_values],
+                "total": sum(values.values()),
+            })
+
+        return sorted(properties, key=lambda x: x["total"], reverse=True)
+
+    async def get_outbound_clicks(
+        self,
+        start_date: date,
+        end_date: date,
+        limit: int = 20,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get top outbound link destinations.
+
+        Returns outbound click events with destination URL, click count, and link text.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
+        results = await self._query(
+            f"""
+            SELECT
+                json_extract(event_data, '$.destination') as destination,
+                json_extract(event_data, '$.text') as link_text,
+                COUNT(*) as clicks,
+                COUNT(DISTINCT session_id) as sessions
+            FROM events
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                AND event_name = 'outbound_click' {filter_sql}
+            GROUP BY destination
+            ORDER BY clicks DESC
+            LIMIT ?
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+        )
+
+        return [
+            {
+                "destination": r["destination"],
+                "link_text": r["link_text"] or "",
+                "clicks": r["clicks"],
+                "sessions": r["sessions"],
+            }
+            for r in results
+        ]
+
+    async def get_file_downloads(
+        self,
+        start_date: date,
+        end_date: date,
+        limit: int = 20,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get top file downloads.
+
+        Returns download events with filename, extension, click count.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
+        results = await self._query(
+            f"""
+            SELECT
+                json_extract(event_data, '$.filename') as filename,
+                json_extract(event_data, '$.extension') as extension,
+                COUNT(*) as downloads,
+                COUNT(DISTINCT session_id) as sessions
+            FROM events
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                AND event_name = 'file_download' {filter_sql}
+            GROUP BY filename, extension
+            ORDER BY downloads DESC
+            LIMIT ?
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+        )
+
+        return [
+            {
+                "filename": r["filename"],
+                "extension": r["extension"],
+                "downloads": r["downloads"],
+                "sessions": r["sessions"],
+            }
+            for r in results
+        ]
+
+    async def get_form_submissions(
+        self,
+        start_date: date,
+        end_date: date,
+        limit: int = 20,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get form submission events.
+
+        Returns form submissions with form id, name, action, and counts.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
+        results = await self._query(
+            f"""
+            SELECT
+                COALESCE(json_extract(event_data, '$.form_id'), json_extract(event_data, '$.form_name'), json_extract(event_data, '$.action')) as form_identifier,
+                json_extract(event_data, '$.form_id') as form_id,
+                json_extract(event_data, '$.form_name') as form_name,
+                json_extract(event_data, '$.action') as action,
+                json_extract(event_data, '$.method') as method,
+                COUNT(*) as submissions,
+                COUNT(DISTINCT session_id) as sessions
+            FROM events
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                AND event_name = 'form_submit' {filter_sql}
+            GROUP BY form_identifier
+            ORDER BY submissions DESC
+            LIMIT ?
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+        )
+
+        return [
+            {
+                "form_id": r["form_id"] or "",
+                "form_name": r["form_name"] or "",
+                "action": r["action"] or "",
+                "method": r["method"] or "GET",
+                "submissions": r["submissions"],
+                "sessions": r["sessions"],
+            }
+            for r in results
+        ]
+
+    async def get_js_errors(
+        self,
+        start_date: date,
+        end_date: date,
+        limit: int = 20,
+        filters: Optional[DashboardFilters] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get JavaScript errors grouped by normalized message.
+
+        Returns error events with message, source, count, and unique sessions.
+        Errors are grouped by normalized message for similarity grouping.
+        """
+        filter_sql, filter_params = self._build_event_filter_sql(filters)
+
+        results = await self._query(
+            f"""
+            SELECT
+                json_extract(event_data, '$.normalized') as normalized_message,
+                json_extract(event_data, '$.message') as message,
+                json_extract(event_data, '$.source') as source,
+                COUNT(*) as error_count,
+                COUNT(DISTINCT session_id) as sessions,
+                MAX(timestamp) as last_seen
+            FROM events
+            WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
+                AND event_name = 'js_error' {filter_sql}
+            GROUP BY normalized_message
+            ORDER BY error_count DESC
+            LIMIT ?
+            """,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+        )
+
+        return [
+            {
+                "message": r["message"] or "Unknown error",
+                "normalized": r["normalized_message"] or "",
+                "source": r["source"] or "",
+                "error_count": r["error_count"],
+                "sessions": r["sessions"],
+                "last_seen": r["last_seen"],
+            }
+            for r in results
+        ]
 
     # =========================================================================
     # REALTIME

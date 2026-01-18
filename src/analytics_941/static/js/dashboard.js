@@ -3,6 +3,88 @@
  * Alpine.js components and HTMX integration
  */
 
+// =============================================================================
+// TIMEZONE UTILITIES
+// =============================================================================
+
+/**
+ * Get the site's configured timezone from the body data attribute
+ */
+function getSiteTimezone() {
+    return document.body.dataset.timezone || 'America/New_York';
+}
+
+/**
+ * Format a UTC timestamp in the site's timezone
+ * @param {string|Date} utcTimestamp - UTC timestamp
+ * @param {object} options - Intl.DateTimeFormat options
+ * @returns {string} Formatted date/time string
+ */
+function formatInSiteTimezone(utcTimestamp, options = {}) {
+    const tz = getSiteTimezone();
+    const date = typeof utcTimestamp === 'string' ? new Date(utcTimestamp + 'Z') : utcTimestamp;
+
+    const defaultOptions = {
+        timeZone: tz,
+        ...options
+    };
+
+    return new Intl.DateTimeFormat('en-US', defaultOptions).format(date);
+}
+
+/**
+ * Format a timestamp for display (short format)
+ * @param {string|Date} utcTimestamp - UTC timestamp
+ * @returns {string} Formatted time (e.g., "2:30 PM")
+ */
+function formatTime(utcTimestamp) {
+    return formatInSiteTimezone(utcTimestamp, {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+/**
+ * Format a timestamp for display (date only)
+ * @param {string|Date} utcTimestamp - UTC timestamp
+ * @returns {string} Formatted date (e.g., "Jan 15")
+ */
+function formatDate(utcTimestamp) {
+    return formatInSiteTimezone(utcTimestamp, {
+        month: 'short',
+        day: 'numeric'
+    });
+}
+
+/**
+ * Format a timestamp for display (date and time)
+ * @param {string|Date} utcTimestamp - UTC timestamp
+ * @returns {string} Formatted datetime (e.g., "Jan 15, 2:30 PM")
+ */
+function formatDateTime(utcTimestamp) {
+    return formatInSiteTimezone(utcTimestamp, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+// Expose timezone utilities globally for use in templates
+window._941tz = {
+    getSiteTimezone,
+    formatInSiteTimezone,
+    formatTime,
+    formatDate,
+    formatDateTime
+};
+
+// =============================================================================
+// ALPINE.JS COMPONENTS
+// =============================================================================
+
 document.addEventListener('alpine:init', () => {
     /**
      * Date Picker Component

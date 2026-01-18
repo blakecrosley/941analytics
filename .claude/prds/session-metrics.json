@@ -22,8 +22,9 @@
         "worker/src/index.ts"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added SESSION_CONFIG (30min timeout). Updated tracking script with client-side session ID generation using sessionStorage (handles multi-tab correctly), heartbeat every 30s, visibility change handling. Added SessionData interface, upsertSession() to create/update sessions, closeExpiredSessions() called by scheduled handler. Heartbeats extend session without creating pageview records. Session duration calculated on closure via scheduled job."
     },
     {
       "id": "session-2",
@@ -42,8 +43,9 @@
         "tests/test_sessions.py"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added 4 standalone session metrics methods to client.py: get_bounce_rate (0-100%), get_avg_session_duration (seconds), get_sessions_count (int), get_pages_per_session (float, 1 decimal). All use _build_session_filter_sql for DashboardFilters support. All handle zero-data gracefully (return 0, not error). All support comparison periods via compare_start/compare_end. 25 unit tests passing in tests/test_sessions.py."
     },
     {
       "id": "session-3",
@@ -63,8 +65,9 @@
         "src/analytics_941/routes/dashboard.py"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added pages_per_session to CoreMetrics model. Updated get_core_metrics() to calculate pages_per_session with comparison period support. Added Pages/Session stat card to stats_cards.html. Added Sessions toggle button to chart.html for HTMX metric switching. Enhanced get_top_pages() to query bounce rates per entry page from sessions table and include bounce_rate in PageStats. Added Bounce column to top pages table in overview_content.html. All metrics respect active filters via _build_session_filter_sql."
     },
     {
       "id": "session-4",
@@ -82,8 +85,9 @@
         "src/analytics_941/core/client.py"
       ],
       "priority": 3,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added exit_rate field to PageStats model. Updated get_entry_pages() to include bounce_rate per entry page. Updated get_exit_pages() to calculate exit_rate (exits/pageviews*100) with separate pageviews query. Added get_entry_exit_flow() for entry→exit page combinations. Updated dashboard.py routes to fetch entry_pages, exit_pages, entry_exit_flow. Added Entry Pages and Exit Pages tables (grid-2) and Page Flow table to overview_content.html showing top entry→exit combinations. All 105 tests passing."
     }
   ]
 }

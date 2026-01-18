@@ -24,8 +24,9 @@
         "src/analytics_941/core/client.py"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added /event endpoint to worker for event collection via image beacon. Updated TRACKING_SCRIPT with scroll tracking: scrollDepths state, trackEvent() and trackScroll() functions, 100ms debounce, resets on SPA navigation via resetScrollTracking(). Each threshold fires once per page via scrollDepths[depth] flag. Added get_scroll_depth_by_page() client method. Updated events routes and template with scroll_depth_by_page table showing avg depth per page."
     },
     {
       "id": "track-2",
@@ -45,8 +46,9 @@
         "src/analytics_941/core/client.py"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added outbound click tracking to TRACKING_SCRIPT: isOutboundLink() checks if link host differs from current, getLinkText() extracts link text/alt/title (truncated to 50 chars), trackOutboundClick() fires event with destination/text/new_tab before navigation. For same-tab links, uses 100ms delay to ensure beacon fires. Added get_outbound_clicks() client method using json_extract on event_data. Added Top Outbound Links table to events template."
     },
     {
       "id": "track-3",
@@ -64,8 +66,9 @@
         "src/analytics_941/templates/partials/_events.html"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added file download tracking to TRACKING_SCRIPT: DOWNLOAD_EXTENSIONS array with 20+ extensions (pdf, zip, doc, docx, xls, xlsx, ppt, pptx, csv, txt, mp3, mp4, etc), configurable via data-download-extensions attribute. Functions: isDownloadLink() checks file extension against list, getFilename() extracts filename from URL, getFileExtension() gets extension. trackDownloadClick() fires event with filename/extension/url/external flag. Added get_file_downloads() client method using json_extract. Added File Downloads table to events template with file type icons."
     },
     {
       "id": "track-4",
@@ -84,8 +87,9 @@
         "src/analytics_941/templates/partials/_events.html"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added form submission tracking to TRACKING_SCRIPT: isSearchForm() checks role=search and name/id/action containing 'search', getFormIdentifier() returns id/name/data-form-name, getFormAction() strips query params for privacy, trackFormSubmission() captures form_id/form_name/action/method/field_count/source. Listens to native submit events and htmx:beforeRequest for HTMX forms. Added get_form_submissions() client method. Added Form Submissions table to events template showing form id, action, method, submission count."
     },
     {
       "id": "track-5",
@@ -104,8 +108,9 @@
         "src/analytics_941/templates/partials/_events.html"
       ],
       "priority": 3,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added JS error tracking to TRACKING_SCRIPT: rate limited to 10 errors per page load (resets every 60s), truncateStack() limits stack traces to 500 chars, normalizeErrorMessage() removes variable parts for grouping. Captures window.onerror with message/source/lineno/colno/stack, and unhandledrejection events for promise errors. Added get_js_errors() client method grouping by normalized message. Added JavaScript Errors table to events template with red error styling."
     },
     {
       "id": "track-6",
@@ -124,8 +129,9 @@
         "README.md"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added public API to TRACKING_SCRIPT: window.analytics and window._941analytics expose track(eventName, properties), page(url, title), getSessionId(), identify(userId). Events use trackEvent() with type 'custom'. Queue processing via window._941q allows events before script loads - queue processed on init, then push() calls API directly. Created types/analytics.d.ts with full TypeScript definitions and JSDoc comments. Updated README.md with Custom Events section including basic usage, API methods, queue example, TypeScript reference, and auto-tracked events table."
     },
     {
       "id": "track-7",
@@ -145,8 +151,9 @@
         "src/analytics_941/core/client.py"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added 3 new client methods: get_events_time_series() for daily event counts, get_events_with_trend() for top events with trend comparison to previous period, get_event_properties() for property breakdowns. Updated dashboard routes to fetch and pass new data including events_time_series, event_properties, selected_event, selected_event_type. Rewrote events_content.html with: active filters display with clear option, CSV export button, Events Over Time bar chart, Top Events table with trend column (up/down indicators and percentages), Event Type Breakdown horizontal bar chart, Event Properties drill-down section for selected event. All 105 tests pass."
     }
   ]
 }

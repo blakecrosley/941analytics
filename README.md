@@ -12,6 +12,8 @@ Privacy-first analytics for 941 Apps projects. No cookies, no fingerprinting, no
 - **SPA navigation**: Tracks pushState/replaceState for HTMX and SPAs
 - **UTM attribution**: Captures campaign parameters automatically
 - **Interactive globe**: 3D visualization with country → state → city drill-down
+- **Auto-tracked events**: Scroll depth, outbound clicks, downloads, forms, JS errors
+- **Custom events API**: Track your own events with `analytics.track()`
 
 ## What We Track
 
@@ -86,6 +88,86 @@ In your Jinja2 base template:
 {# Before </body> #}
 {{ analytics.tracking_script() | safe }}
 ```
+
+## Custom Events
+
+Track custom events from your application code using the JavaScript API.
+
+### Basic Usage
+
+```javascript
+// Track a simple event
+analytics.track('button_click');
+
+// Track an event with properties
+analytics.track('signup_complete', {
+  plan: 'pro',
+  source: 'landing_page'
+});
+
+// Track a purchase
+analytics.track('purchase', {
+  product_id: 'sku-123',
+  price: 29.99,
+  currency: 'USD'
+});
+```
+
+### API Methods
+
+```javascript
+// Track custom event
+analytics.track(eventName, properties?)
+
+// Track pageview manually (for SPAs)
+analytics.page(url?, title?)
+
+// Get current session ID
+analytics.getSessionId()
+
+// Identify user (optional, for your own correlation)
+analytics.identify(userId)
+```
+
+### Queue for Early Events
+
+If you need to track events before the script loads, use the queue:
+
+```html
+<script>
+  window._941q = window._941q || [];
+  window._941q.push(['track', 'early_event', { timing: 'before_load' }]);
+</script>
+```
+
+Events in the queue are processed automatically when the script loads.
+
+### TypeScript Support
+
+Type definitions are available at `types/analytics.d.ts`:
+
+```typescript
+// Reference the types
+/// <reference path="node_modules/941analytics/types/analytics.d.ts" />
+
+// Full type safety
+analytics.track('purchase', {
+  product_id: 'sku-123',
+  price: 29.99
+});
+```
+
+### Auto-Tracked Events
+
+The following events are tracked automatically (no code required):
+
+| Event | Type | Data Captured |
+|-------|------|---------------|
+| `scroll_25`, `scroll_50`, etc. | scroll | Scroll depth milestones |
+| `outbound_click` | click | Destination URL, link text |
+| `file_download` | click | Filename, extension, URL |
+| `form_submit` | form | Form ID/name, action, method |
+| `js_error` | error | Message, source, line, stack |
 
 ## Dashboard
 

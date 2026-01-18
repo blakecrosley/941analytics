@@ -21,6 +21,7 @@
                         <th>Page</th>
                         <th class="text-right">Views</th>
                         <th class="text-right">Visitors</th>
+                        <th class="text-right">Bounce</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -40,6 +41,7 @@
                         </td>
                         <td class="text-right table__number">{{ "{:,}".format(page.views) }}</td>
                         <td class="text-right table__number">{{ "{:,}".format(page.visitors) }}</td>
+                        <td class="text-right table__number">{% if page.bounce_rate is not none %}{{ "{:.0f}".format(page.bounce_rate) }}%{% else %}—{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -97,6 +99,144 @@
             </div>
             {% endif %}
         </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    {# Entry Pages #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Entry Pages</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if entry_pages|length > 0 %}
+            {% set max_entries = entry_pages|map(attribute='entries')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Page</th>
+                        <th class="text-right">Sessions</th>
+                        <th class="text-right">Bounce</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page in entry_pages[:7] %}
+                    <tr>
+                        <td>
+                            <a href="?page={{ page.url|urlencode }}"
+                               hx-get="./partials/overview?page={{ page.url|urlencode }}"
+                               hx-target="#main-content"
+                               hx-push-url="?page={{ page.url|urlencode }}"
+                               class="truncate" style="display: block; max-width: 250px; text-decoration: none; color: var(--muted);">
+                                {{ page.url }}
+                            </a>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (page.entries / max_entries * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:,}".format(page.entries) }}</td>
+                        <td class="text-right table__number">{% if page.bounce_rate is not none %}{{ "{:.0f}".format(page.bounce_rate) }}%{% else %}—{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">🚪</div>
+                <p>No entry pages recorded</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Exit Pages #}
+    <div class="section">
+        <div class="section__header">
+            <span class="section__title">Exit Pages</span>
+        </div>
+        <div class="section__content section__content--flush">
+            {% if exit_pages|length > 0 %}
+            {% set max_exits = exit_pages|map(attribute='exits')|max %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Page</th>
+                        <th class="text-right">Exits</th>
+                        <th class="text-right">Exit %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page in exit_pages[:7] %}
+                    <tr>
+                        <td>
+                            <a href="?page={{ page.url|urlencode }}"
+                               hx-get="./partials/overview?page={{ page.url|urlencode }}"
+                               hx-target="#main-content"
+                               hx-push-url="?page={{ page.url|urlencode }}"
+                               class="truncate" style="display: block; max-width: 250px; text-decoration: none; color: var(--muted);">
+                                {{ page.url }}
+                            </a>
+                            <div class="table__bar">
+                                <div class="table__bar-fill" style="width: {{ (page.exits / max_exits * 100)|int }}%;"></div>
+                            </div>
+                        </td>
+                        <td class="text-right table__number">{{ "{:,}".format(page.exits) }}</td>
+                        <td class="text-right table__number">{% if page.exit_rate is not none %}{{ "{:.0f}".format(page.exit_rate) }}%{% else %}—{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">
+                <div class="empty__icon">🚶</div>
+                <p>No exit pages recorded</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{# Entry → Exit Flow #}
+<div class="section">
+    <div class="section__header">
+        <span class="section__title">Page Flow (Entry → Exit)</span>
+    </div>
+    <div class="section__content section__content--flush">
+        {% if entry_exit_flow|length > 0 %}
+        {% set max_flow = entry_exit_flow|map(attribute='sessions')|max %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Entry Page</th>
+                    <th style="width: 40px; text-align: center;">→</th>
+                    <th>Exit Page</th>
+                    <th class="text-right">Sessions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for flow in entry_exit_flow[:10] %}
+                <tr>
+                    <td>
+                        <span class="truncate" style="display: block; max-width: 200px;">{{ flow.entry_page }}</span>
+                    </td>
+                    <td style="text-align: center; color: var(--muted);">→</td>
+                    <td>
+                        <span class="truncate" style="display: block; max-width: 200px;">{{ flow.exit_page }}</span>
+                        <div class="table__bar">
+                            <div class="table__bar-fill" style="width: {{ (flow.sessions / max_flow * 100)|int }}%;"></div>
+                        </div>
+                    </td>
+                    <td class="text-right table__number">{{ "{:,}".format(flow.sessions) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            <div class="empty__icon">🔄</div>
+            <p>No page flow data</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 

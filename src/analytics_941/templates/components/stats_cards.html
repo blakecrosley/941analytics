@@ -57,6 +57,17 @@
         {% endif %}
     </div>
 
+    <div class="stat-card">
+        <div class="stat-card__label">Pages/Session</div>
+        <div class="stat-card__value">{{ "{:.1f}".format(metrics.pages_per_session.value) }}</div>
+        {% if metrics.pages_per_session.change_percent is not none %}
+        <div class="stat-card__change stat-card__change--{{ metrics.pages_per_session.change_direction }}">
+            {% if metrics.pages_per_session.change_direction == 'up' %}↑{% elif metrics.pages_per_session.change_direction == 'down' %}↓{% else %}→{% endif %}
+            {{ "{:.1f}".format(metrics.pages_per_session.change_percent|abs) }}%
+        </div>
+        {% endif %}
+    </div>
+
     {% if metrics.bot_views > 0 %}
     <div class="stat-card">
         <div class="stat-card__label">Bot Views</div>

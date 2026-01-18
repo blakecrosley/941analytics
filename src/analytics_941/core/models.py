@@ -126,6 +126,7 @@ class CoreMetrics(BaseModel):
     sessions: MetricChange
     bounce_rate: MetricChange  # As percentage (0-100)
     avg_duration: MetricChange  # In seconds
+    pages_per_session: MetricChange  # Float, 1 decimal
     bot_views: int = 0
 
 
@@ -136,6 +137,7 @@ class PageStats(BaseModel):
     visitors: int
     avg_time: Optional[float] = None  # seconds
     bounce_rate: Optional[float] = None
+    exit_rate: Optional[float] = None  # percentage of pageviews that resulted in exit
     entries: int = 0
     exits: int = 0
 

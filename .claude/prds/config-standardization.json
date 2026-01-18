@@ -4,7 +4,8 @@
     "description": "Create consistent configuration across all tracked sites. Currently each site has ad-hoc settings scattered across Worker environment and D1 database. Standardize into a unified configuration system.",
     "priority": 4,
     "estimated_effort": "4-6 hours",
-    "created_at": "2026-01-17T18:05:00Z"
+    "created_at": "2026-01-17T18:05:00Z",
+    "completed_at": "2026-01-17T23:45:00Z"
   },
   "current_state": {
     "sites": [
@@ -45,8 +46,9 @@
         "worker/src/index.ts"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added sites and site_settings tables to schema.sql. Worker now reads site config from D1 with in-memory + KV caching. Migration script at migrations/001_sites_configuration.sql populates existing sites with friendly display names."
     },
     {
       "id": "config-2",
@@ -63,8 +65,9 @@
         "src/analytics_941/templates/base.html"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added display_name and effective_display_name to AnalyticsConfig. Dashboard context now passes site_name (display) and site_domain (API identifier) separately. Login page uses effective_display_name. Settings page editing deferred to future admin interface."
     },
     {
       "id": "config-3",
@@ -83,8 +86,9 @@
         "src/analytics_941/routes/dashboard.py"
       ],
       "priority": 3,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "Added timezone to AnalyticsConfig (default: America/New_York). Dashboard passes site_timezone to templates via data-timezone attribute on body. JavaScript timezone utilities (formatTime, formatDate, formatDateTime) use Intl.DateTimeFormat with site timezone. Exposed as window._941tz for use in templates. Settings page editing deferred to future admin interface."
     },
     {
       "id": "config-4",
@@ -102,8 +106,9 @@
         "src/analytics_941/routes/auth.py"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1,
+      "implementation_notes": "D1 sites table has passkey_hash column for future multi-tenant use. Added MIN_PASSKEY_LENGTH=16, validate_passkey_strength(), and PasskeyTooShortError to config.py. AnalyticsConfig.__post_init__ now validates passkey and warns about plaintext passkeys (deprecated). Login flow validates passkey length. Passkey change via settings page deferred to future admin interface."
     }
   ],
   "verification": {

@@ -20,10 +20,67 @@
 </div>
 {# Globe script inline to work with both full page and HTMX partial loads #}
 <script>
+    // Globe state management for cleanup (globe-1: memory management)
+    window._941globe = window._941globe || {
+        animationId: null,
+        renderer: null,
+        scene: null,
+        resizeHandler: null,
+        cleanup: function() {
+            // Stop animation loop
+            if (this.animationId) {
+                cancelAnimationFrame(this.animationId);
+                this.animationId = null;
+            }
+            // Dispose of WebGL resources
+            if (this.renderer) {
+                this.renderer.dispose();
+                this.renderer = null;
+            }
+            // Clear scene
+            if (this.scene) {
+                this.scene.traverse(function(object) {
+                    if (object.geometry) object.geometry.dispose();
+                    if (object.material) object.material.dispose();
+                });
+                this.scene = null;
+            }
+            // Remove resize listener
+            if (this.resizeHandler) {
+                window.removeEventListener('resize', this.resizeHandler);
+                this.resizeHandler = null;
+            }
+        }
+    };
+
+    // Check if device should show 2D instead of 3D (globe-3: device detection)
+    function shouldUse2DMap() {
+        // Check user preference first
+        const pref = localStorage.getItem('globe_preference');
+        if (pref === '2d') return true;
+        if (pref === '3d') return false;
+
+        // Auto-detect: mobile, low memory, or prefers-reduced-motion
+        const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const lowMemory = navigator.deviceMemory && navigator.deviceMemory < 4;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        return isMobile || lowMemory || reducedMotion;
+    }
+
     // Lazy load Three.js globe when user clicks "Load Globe"
     function loadGlobe() {
         const container = document.getElementById('globe-container');
         if (!container || container.dataset.loaded === 'true') return;
+
+        // Check if we should show 2D instead
+        if (shouldUse2DMap()) {
+            show2DFallback(container);
+            return;
+        }
+
+        // Cleanup any previous instance
+        window._941globe.cleanup();
 
         // Clear container safely and show loading
         while (container.firstChild) {
@@ -34,6 +91,12 @@
         loadingDiv.textContent = 'Loading 3D globe...';
         container.appendChild(loadingDiv);
         container.dataset.loaded = 'true';
+
+        // Check if Three.js is already loaded
+        if (window.THREE) {
+            initGlobe();
+            return;
+        }
 
         // Dynamically load Three.js (r125 - last version with standalone OrbitControls.js)
         const script = document.createElement('script');
@@ -48,6 +111,59 @@
         document.head.appendChild(script);
     }
 
+    // 2D fallback for mobile/low-power devices (globe-3)
+    function show2DFallback(container) {
+        container.dataset.loaded = 'true';
+        const data = JSON.parse(document.getElementById('globe-data').textContent);
+
+        // Clear container using safe DOM methods
+        while (container.firstChild) {
+            container.removeChild(container.firstChild);
+        }
+
+        // Create wrapper
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'padding: 1rem; text-align: center;';
+
+        // Info text
+        const info = document.createElement('p');
+        info.style.cssText = 'color: var(--muted); margin-bottom: 1rem;';
+        info.textContent = 'Showing simplified view for better performance. ';
+
+        // Toggle button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn btn--small';
+        toggleBtn.style.marginLeft = '0.5rem';
+        toggleBtn.textContent = 'Try 3D';
+        toggleBtn.onclick = toggle3DGlobe;
+        info.appendChild(toggleBtn);
+
+        wrapper.appendChild(info);
+
+        // Country chips container
+        const chipContainer = document.createElement('div');
+        chipContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;';
+
+        // Add country chips (safe DOM creation, no innerHTML)
+        data.countries.slice(0, 10).forEach(function(c) {
+            const chip = document.createElement('span');
+            chip.style.cssText = 'background: var(--surface); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem;';
+            chip.textContent = c.country_name + ': ' + c.visits.toLocaleString();
+            chipContainer.appendChild(chip);
+        });
+
+        wrapper.appendChild(chipContainer);
+        container.appendChild(wrapper);
+    }
+
+    // Toggle between 2D and 3D
+    function toggle3DGlobe() {
+        localStorage.setItem('globe_preference', '3d');
+        const container = document.getElementById('globe-container');
+        container.dataset.loaded = 'false';
+        loadGlobe();
+    }
+
     function initGlobe() {
         const container = document.getElementById('globe-container');
         const data = JSON.parse(document.getElementById('globe-data').textContent);
@@ -56,18 +172,35 @@
         const height = 400;
 
         const scene = new THREE.Scene();
+        window._941globe.scene = scene;
+
         const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
         camera.position.z = 2.5;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(width, height);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        window._941globe.renderer = renderer;
 
         // Clear container safely and add canvas
         while (container.firstChild) {
             container.removeChild(container.firstChild);
         }
         container.appendChild(renderer.domElement);
+
+        // Add toggle button using safe DOM methods
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn btn--small';
+        toggleBtn.style.cssText = 'position: absolute; top: 0.5rem; right: 0.5rem; z-index: 10;';
+        toggleBtn.textContent = 'Use 2D';
+        toggleBtn.onclick = function() {
+            localStorage.setItem('globe_preference', '2d');
+            window._941globe.cleanup();
+            container.dataset.loaded = 'false';
+            loadGlobe();
+        };
+        container.style.position = 'relative';
+        container.appendChild(toggleBtn);
 
         // Earth sphere
         const geometry = new THREE.SphereGeometry(1, 64, 64);
@@ -108,20 +241,29 @@
         controls.autoRotateSpeed = 0.5;
 
         function animate() {
-            requestAnimationFrame(animate);
+            window._941globe.animationId = requestAnimationFrame(animate);
             controls.update();
             renderer.render(scene, camera);
         }
         animate();
 
         // Handle resize
-        window.addEventListener('resize', function() {
+        window._941globe.resizeHandler = function() {
             const newWidth = container.clientWidth;
             camera.aspect = newWidth / height;
             camera.updateProjectionMatrix();
             renderer.setSize(newWidth, height);
-        });
+        };
+        window.addEventListener('resize', window._941globe.resizeHandler);
     }
+
+    // Cleanup when navigating away (HTMX integration for globe-1)
+    document.addEventListener('htmx:beforeSwap', function(event) {
+        // Only cleanup if leaving geography tab
+        if (event.detail.target && event.detail.target.id === 'main-content') {
+            window._941globe.cleanup();
+        }
+    });
 </script>
 {% endif %}
 

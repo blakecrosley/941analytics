@@ -22,10 +22,31 @@ interface Env {
   DB: D1Database;
   ANALYTICS_SECRET: string;
   ALLOWED_ORIGINS?: string; // Comma-separated list of allowed origins
-  ALLOWED_SITES?: string; // Comma-separated list of valid site identifiers
+  ALLOWED_SITES?: string; // Deprecated: comma-separated list (use sites table instead)
   RATE_LIMIT_KV?: KVNamespace; // Optional KV for rate limiting
   LOGIN_RATE_LIMIT_KV?: KVNamespace; // KV for login rate limiting
+  SITE_CONFIG_CACHE?: KVNamespace; // Optional KV for site config caching
 }
+
+// Session configuration
+const SESSION_CONFIG = {
+  TIMEOUT_MINUTES: 30,          // Session times out after 30 min inactivity
+  ID_LENGTH: 16,                // Length of session ID (hex characters)
+};
+
+// Site configuration from D1
+interface SiteConfig {
+  id: number;
+  domain: string;
+  display_name: string | null;
+  timezone: string;
+  passkey_hash: string | null;
+  is_active: boolean;
+}
+
+// In-memory cache for site configs (cleared on each request to stay fresh)
+const siteConfigCache = new Map<string, { config: SiteConfig | null; timestamp: number }>();
+const SITE_CONFIG_CACHE_TTL = 60 * 1000; // 1 minute in-memory cache
 
 interface PageViewData {
   site: string;
@@ -33,6 +54,17 @@ interface PageViewData {
   title: string;
   ref: string;
   w: number;
+  sid: string;      // Session ID (client-generated)
+  type: string;     // 'pageview' or 'heartbeat'
+}
+
+interface EventData {
+  site: string;
+  url: string;
+  sid: string;        // Session ID
+  event_type: string; // scroll, click, form, error, custom
+  event_name: string; // scroll_25, outbound_click, form_submit, etc.
+  event_data?: string; // JSON stringified additional data
 }
 
 // =============================================================================
@@ -178,7 +210,8 @@ const BOT_PATTERNS: Record<string, Record<string, string>> = {
 };
 
 const GENERIC_BOT_PATTERNS = [
-  /\bbot\b/i,
+  /bot[^a-z]/i,    // "bot" followed by non-letter (catches "Bot/1.0", "bot-", etc.)
+  /bot$/i,         // "bot" at end of string
   /crawl/i,
   /spider/i,
   /scrape/i,
@@ -433,6 +466,129 @@ async function generateVisitorHash(
 }
 
 // =============================================================================
+// SESSION MANAGEMENT
+// =============================================================================
+
+interface SessionData {
+  site: string;
+  sessionId: string;
+  visitorHash: string;
+  entryPage: string;
+  referrer: string;
+  referrerType: string;
+  referrerDomain: string;
+  utmSource: string;
+  utmMedium: string;
+  utmCampaign: string;
+  country: string;
+  region: string;
+  deviceType: string;
+  browser: string;
+  os: string;
+}
+
+/**
+ * Create or update a session record.
+ * On first pageview: creates session with entry page
+ * On subsequent pageviews: updates last_activity, exit_page, pageview_count
+ */
+async function upsertSession(
+  db: D1Database,
+  data: SessionData,
+  isHeartbeat: boolean
+): Promise<void> {
+  const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+
+  // Check if session already exists
+  const existing = await db.prepare(`
+    SELECT id, pageview_count FROM sessions WHERE session_id = ?
+  `).bind(data.sessionId).first<{ id: number; pageview_count: number }>();
+
+  if (existing) {
+    // Update existing session
+    if (isHeartbeat) {
+      // Heartbeat only updates last_activity, doesn't increment pageview_count
+      await db.prepare(`
+        UPDATE sessions
+        SET last_activity_at = ?
+        WHERE session_id = ?
+      `).bind(now, data.sessionId).run();
+    } else {
+      // Regular pageview updates more fields
+      const newCount = existing.pageview_count + 1;
+      await db.prepare(`
+        UPDATE sessions
+        SET last_activity_at = ?,
+            exit_page = ?,
+            pageview_count = ?,
+            is_bounce = ?
+        WHERE session_id = ?
+      `).bind(
+        now,
+        data.entryPage, // Current page becomes potential exit page
+        newCount,
+        newCount === 1 ? 1 : 0, // Not a bounce if more than 1 pageview
+        data.sessionId
+      ).run();
+    }
+  } else {
+    // Create new session (only on pageview, not heartbeat)
+    if (!isHeartbeat) {
+      await db.prepare(`
+        INSERT INTO sessions (
+          site, session_id, visitor_hash,
+          started_at, last_activity_at,
+          entry_page, exit_page, pageview_count, is_bounce,
+          referrer, referrer_type, referrer_domain,
+          utm_source, utm_medium, utm_campaign,
+          country, region, device_type, browser, os
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        data.site,
+        data.sessionId,
+        data.visitorHash,
+        now,
+        now,
+        data.entryPage,
+        data.entryPage, // Initially, entry = exit
+        data.referrer,
+        data.referrerType,
+        data.referrerDomain,
+        data.utmSource,
+        data.utmMedium,
+        data.utmCampaign,
+        data.country,
+        data.region,
+        data.deviceType,
+        data.browser,
+        data.os
+      ).run();
+    }
+  }
+}
+
+/**
+ * Close expired sessions by calculating duration.
+ * Called during scheduled aggregation.
+ */
+async function closeExpiredSessions(db: D1Database): Promise<number> {
+  const timeoutMinutes = SESSION_CONFIG.TIMEOUT_MINUTES;
+
+  // Close sessions where last_activity is more than 30 minutes ago and not already closed
+  const result = await db.prepare(`
+    UPDATE sessions
+    SET ended_at = last_activity_at,
+        duration_seconds = CAST(
+          (julianday(last_activity_at) - julianday(started_at)) * 86400 AS INTEGER
+        )
+    WHERE ended_at IS NULL
+      AND datetime(last_activity_at, '+${timeoutMinutes} minutes') < datetime('now')
+  `).run();
+
+  return result.meta.changes || 0;
+}
+
+// =============================================================================
 // RATE LIMITING (Privacy-Preserving)
 // =============================================================================
 
@@ -468,6 +624,85 @@ async function checkRateLimit(
   });
 
   return { allowed: true, remaining: CONFIG.RATE_LIMIT_REQUESTS - current - 1 };
+}
+
+// =============================================================================
+// SITE CONFIGURATION (D1-based with caching)
+// =============================================================================
+
+async function getSiteConfig(domain: string, env: Env): Promise<SiteConfig | null> {
+  const normalizedDomain = domain.toLowerCase().replace(/^www\./, "");
+
+  // Check in-memory cache first
+  const cached = siteConfigCache.get(normalizedDomain);
+  if (cached && Date.now() - cached.timestamp < SITE_CONFIG_CACHE_TTL) {
+    return cached.config;
+  }
+
+  // Check KV cache if available (longer TTL, persists across requests)
+  if (env.SITE_CONFIG_CACHE) {
+    const kvCached = await env.SITE_CONFIG_CACHE.get(`site:${normalizedDomain}`, "json");
+    if (kvCached) {
+      const config = kvCached as SiteConfig;
+      siteConfigCache.set(normalizedDomain, { config, timestamp: Date.now() });
+      return config;
+    }
+  }
+
+  // Query D1
+  const result = await env.DB.prepare(`
+    SELECT id, domain, display_name, timezone, passkey_hash, is_active
+    FROM sites
+    WHERE domain = ? AND is_active = 1
+  `).bind(normalizedDomain).first<{
+    id: number;
+    domain: string;
+    display_name: string | null;
+    timezone: string;
+    passkey_hash: string | null;
+    is_active: number;
+  }>();
+
+  const config: SiteConfig | null = result ? {
+    id: result.id,
+    domain: result.domain,
+    display_name: result.display_name,
+    timezone: result.timezone,
+    passkey_hash: result.passkey_hash,
+    is_active: result.is_active === 1,
+  } : null;
+
+  // Update in-memory cache
+  siteConfigCache.set(normalizedDomain, { config, timestamp: Date.now() });
+
+  // Update KV cache if available (5 minute TTL)
+  if (env.SITE_CONFIG_CACHE && config) {
+    await env.SITE_CONFIG_CACHE.put(`site:${normalizedDomain}`, JSON.stringify(config), {
+      expirationTtl: 300,
+    });
+  }
+
+  return config;
+}
+
+async function isValidSite(domain: string, env: Env): Promise<boolean> {
+  // First check D1 sites table
+  const config = await getSiteConfig(domain, env);
+  if (config && config.is_active) {
+    return true;
+  }
+
+  // Fallback to ALLOWED_SITES env var for backward compatibility
+  const allowedSites = (env.ALLOWED_SITES || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (allowedSites.length > 0) {
+    const siteNormalized = domain.toLowerCase();
+    return allowedSites.some((allowed) =>
+      siteNormalized === allowed || siteNormalized.endsWith("." + allowed)
+    );
+  }
+
+  // If no sites configured at all, reject (secure by default)
+  return false;
 }
 
 // =============================================================================
@@ -753,6 +988,11 @@ async function handleScheduled(env: Env): Promise<void> {
     }
   }
 
+  // Close expired sessions
+  console.log("Closing expired sessions...");
+  const closedSessions = await closeExpiredSessions(env.DB);
+  console.log(`  ✓ Closed ${closedSessions} expired sessions`);
+
   // Cleanup old raw data
   console.log("Cleaning up old data...");
   const deleted = await cleanupOldData(env.DB);
@@ -776,19 +1016,74 @@ const TRACKING_SCRIPT = `
 
   if (!endpoint || !site) return;
 
-  // Send pageview
+  // Session management
+  var SESSION_KEY = '_941_sid';
+  var SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes in ms
+  var HEARTBEAT_INTERVAL = 30 * 1000;   // 30 seconds
+
+  // Scroll tracking state
+  var scrollDepths = { 25: false, 50: false, 75: false, 100: false };
+  var scrollDebounceTimer = null;
+  var SCROLL_DEBOUNCE_MS = 100;
+
+  function generateSessionId() {
+    var arr = new Uint8Array(8);
+    crypto.getRandomValues(arr);
+    return Array.from(arr).map(function(b) {
+      return b.toString(16).padStart(2, '0');
+    }).join('');
+  }
+
+  function getSession() {
+    try {
+      var stored = sessionStorage.getItem(SESSION_KEY);
+      if (stored) {
+        var data = JSON.parse(stored);
+        var now = Date.now();
+        // Check if session is still valid (not expired)
+        if (now - data.lastActivity < SESSION_TIMEOUT) {
+          data.lastActivity = now;
+          sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+          return data.id;
+        }
+      }
+    } catch (e) {}
+
+    // Create new session
+    var newId = generateSessionId();
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        id: newId,
+        lastActivity: Date.now()
+      }));
+    } catch (e) {}
+    return newId;
+  }
+
+  // Get event endpoint (same origin, different path)
+  function getEventEndpoint() {
+    // Replace /collect with /event
+    return endpoint.replace('/collect', '/event');
+  }
+
+  // Send pageview or heartbeat
   function track(extra) {
+    var sid = getSession();
     var params = new URLSearchParams({
       site: site,
       url: window.location.href,
       title: document.title || '',
       ref: document.referrer || '',
-      w: String(window.innerWidth || 0)
+      w: String(window.innerWidth || 0),
+      sid: sid,
+      type: (extra && extra.type) || 'pageview'
     });
 
-    // Add any extra params
+    // Add any extra params (except type which we handle above)
     if (extra) {
-      for (var k in extra) params.set(k, extra[k]);
+      for (var k in extra) {
+        if (k !== 'type') params.set(k, extra[k]);
+      }
     }
 
     // Use image beacon for reliability
@@ -796,26 +1091,476 @@ const TRACKING_SCRIPT = `
     img.src = endpoint + '?' + params.toString();
   }
 
+  // Send custom event
+  function trackEvent(eventName, eventType, eventData) {
+    var sid = getSession();
+    var params = new URLSearchParams({
+      site: site,
+      url: window.location.href,
+      sid: sid,
+      event_type: eventType || 'custom',
+      event_name: eventName
+    });
+
+    if (eventData) {
+      params.set('event_data', JSON.stringify(eventData));
+    }
+
+    var img = new Image();
+    img.src = getEventEndpoint() + '?' + params.toString();
+  }
+
+  // Scroll depth tracking
+  function trackScroll() {
+    var scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    var docHeight = Math.max(
+      document.body.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.clientHeight,
+      document.documentElement.scrollHeight,
+      document.documentElement.offsetHeight
+    );
+    var winHeight = window.innerHeight || document.documentElement.clientHeight;
+    var scrollableHeight = docHeight - winHeight;
+
+    // Handle pages with no scrollable content
+    if (scrollableHeight <= 0) {
+      // Page fits in viewport, count as 100% scroll
+      if (!scrollDepths[100]) {
+        scrollDepths[100] = true;
+        trackEvent('scroll_100', 'scroll', { depth: 100, max_depth: 100 });
+      }
+      return;
+    }
+
+    var scrollPercent = Math.min(100, Math.round((scrollTop / scrollableHeight) * 100));
+
+    // Track each threshold once
+    [25, 50, 75, 100].forEach(function(depth) {
+      if (scrollPercent >= depth && !scrollDepths[depth]) {
+        scrollDepths[depth] = true;
+        trackEvent('scroll_' + depth, 'scroll', { depth: depth, max_depth: scrollPercent });
+      }
+    });
+  }
+
+  // Debounced scroll handler
+  function handleScroll() {
+    if (scrollDebounceTimer) {
+      clearTimeout(scrollDebounceTimer);
+    }
+    scrollDebounceTimer = setTimeout(trackScroll, SCROLL_DEBOUNCE_MS);
+  }
+
+  // Reset scroll tracking on navigation (SPA)
+  function resetScrollTracking() {
+    scrollDepths = { 25: false, 50: false, 75: false, 100: false };
+  }
+
+  // Heartbeat to extend session without creating pageview
+  function heartbeat() {
+    track({ type: 'heartbeat' });
+  }
+
+  // Start heartbeat interval (only when page is visible)
+  var heartbeatTimer = null;
+
+  function startHeartbeat() {
+    if (!heartbeatTimer) {
+      heartbeatTimer = setInterval(heartbeat, HEARTBEAT_INTERVAL);
+    }
+  }
+
+  function stopHeartbeat() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+  }
+
+  // Visibility change handling
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      stopHeartbeat();
+    } else {
+      // Page became visible - update session and restart heartbeat
+      getSession();
+      startHeartbeat();
+    }
+  });
+
+  // Initialize scroll tracking
+  window.addEventListener('scroll', handleScroll, { passive: true });
+
   // Track initial pageview
   if (document.readyState === 'complete') {
     track();
+    startHeartbeat();
+    // Check initial scroll position
+    setTimeout(trackScroll, 100);
   } else {
-    window.addEventListener('load', function() { track(); });
+    window.addEventListener('load', function() {
+      track();
+      startHeartbeat();
+      // Check initial scroll position
+      setTimeout(trackScroll, 100);
+    });
   }
 
   // Handle SPA navigation (History API)
   var pushState = history.pushState;
   history.pushState = function() {
     pushState.apply(history, arguments);
-    setTimeout(track, 100);
+    setTimeout(function() {
+      track();
+      resetScrollTracking();
+    }, 100);
   };
 
   window.addEventListener('popstate', function() {
-    setTimeout(track, 100);
+    setTimeout(function() {
+      track();
+      resetScrollTracking();
+    }, 100);
   });
 
-  // Expose for manual tracking
-  window._941 = { track: track };
+  // Outbound link tracking
+  function isOutboundLink(href) {
+    if (!href) return false;
+    try {
+      var linkUrl = new URL(href, window.location.href);
+      // Check if different host (outbound)
+      return linkUrl.host !== window.location.host;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function getLinkText(element) {
+    // Get link text for identification (truncated)
+    var text = element.innerText || element.textContent || '';
+    text = text.trim().substring(0, 50);
+    // If no text, try alt from images inside
+    if (!text) {
+      var img = element.querySelector('img');
+      if (img) text = img.alt || '';
+    }
+    // If still no text, use title attribute
+    if (!text) text = element.title || '';
+    return text.trim().substring(0, 50);
+  }
+
+  function trackOutboundClick(event) {
+    var link = event.target.closest('a');
+    if (!link) return;
+
+    var href = link.href;
+    if (!isOutboundLink(href)) return;
+
+    var isNewTab = link.target === '_blank' || event.ctrlKey || event.metaKey;
+    var linkText = getLinkText(link);
+
+    // Track the outbound click
+    trackEvent('outbound_click', 'click', {
+      destination: href,
+      text: linkText,
+      new_tab: isNewTab
+    });
+
+    // For same-tab navigation, delay briefly to ensure beacon fires
+    if (!isNewTab) {
+      event.preventDefault();
+      setTimeout(function() {
+        window.location.href = href;
+      }, 100);
+    }
+  }
+
+  // Attach outbound click listener
+  document.addEventListener('click', trackOutboundClick, true);
+
+  // File download tracking
+  var DOWNLOAD_EXTENSIONS = ['pdf', 'zip', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'txt', 'mp3', 'mp4', 'avi', 'mov', 'rar', '7z', 'gz', 'tar', 'dmg', 'exe', 'apk', 'ipa'];
+
+  // Check for custom extensions from script attribute
+  var customExtensions = s?.getAttribute('data-download-extensions');
+  if (customExtensions) {
+    DOWNLOAD_EXTENSIONS = customExtensions.split(',').map(function(e) { return e.trim().toLowerCase(); });
+  }
+
+  function isDownloadLink(href) {
+    if (!href) return false;
+    try {
+      var url = new URL(href, window.location.href);
+      var pathname = url.pathname.toLowerCase();
+      var ext = pathname.split('.').pop();
+      return DOWNLOAD_EXTENSIONS.indexOf(ext) !== -1;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function getFilename(href) {
+    try {
+      var url = new URL(href, window.location.href);
+      var pathname = url.pathname;
+      return pathname.split('/').pop() || pathname;
+    } catch (e) {
+      return href;
+    }
+  }
+
+  function getFileExtension(href) {
+    try {
+      var url = new URL(href, window.location.href);
+      return url.pathname.toLowerCase().split('.').pop();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function trackDownloadClick(event) {
+    var link = event.target.closest('a');
+    if (!link) return;
+
+    var href = link.href;
+    if (!isDownloadLink(href)) return;
+
+    var filename = getFilename(href);
+    var extension = getFileExtension(href);
+    var isExternal = isOutboundLink(href);
+
+    // Track the download
+    trackEvent('file_download', 'click', {
+      filename: filename,
+      extension: extension,
+      url: href,
+      external: isExternal
+    });
+
+    // Don't delay downloads - let the browser handle normally
+    // Download attribute or file response headers will trigger download
+  }
+
+  // Attach download click listener (runs before outbound click handler due to capture)
+  document.addEventListener('click', trackDownloadClick, true);
+
+  // Form submission tracking
+  function isSearchForm(form) {
+    // Exclude search forms by default
+    if (form.getAttribute('role') === 'search') return true;
+    var name = (form.name || '').toLowerCase();
+    var id = (form.id || '').toLowerCase();
+    var action = (form.action || '').toLowerCase();
+    if (name.indexOf('search') !== -1 || id.indexOf('search') !== -1) return true;
+    if (action.indexOf('/search') !== -1 || action.indexOf('?q=') !== -1 || action.indexOf('?s=') !== -1) return true;
+    return false;
+  }
+
+  function getFormIdentifier(form) {
+    // Get the best identifier for the form
+    return form.id || form.name || form.getAttribute('data-form-name') || '';
+  }
+
+  function getFormAction(form) {
+    // Get form action, stripping query params for privacy
+    var action = form.action || '';
+    try {
+      var url = new URL(action, window.location.href);
+      return url.pathname;
+    } catch (e) {
+      return action.split('?')[0];
+    }
+  }
+
+  function trackFormSubmission(form, source) {
+    if (isSearchForm(form)) return;
+
+    var formId = getFormIdentifier(form);
+    var formName = form.name || '';
+    var formAction = getFormAction(form);
+    var formMethod = (form.method || 'GET').toUpperCase();
+    var fieldCount = form.querySelectorAll('input, select, textarea').length;
+
+    trackEvent('form_submit', 'form', {
+      form_id: formId,
+      form_name: formName,
+      action: formAction,
+      method: formMethod,
+      field_count: fieldCount,
+      source: source // 'native' or 'htmx'
+    });
+  }
+
+  // Native form submit handler
+  function handleFormSubmit(event) {
+    var form = event.target;
+    if (form.tagName !== 'FORM') return;
+    trackFormSubmission(form, 'native');
+  }
+
+  // Attach native form submit listener
+  document.addEventListener('submit', handleFormSubmit, true);
+
+  // HTMX form submission support
+  document.addEventListener('htmx:beforeRequest', function(event) {
+    var elt = event.detail.elt;
+    if (elt && elt.tagName === 'FORM') {
+      trackFormSubmission(elt, 'htmx');
+    }
+  });
+
+  // JavaScript error tracking
+  var errorCount = 0;
+  var ERROR_RATE_LIMIT = 10; // Max errors per page load
+  var ERROR_RESET_INTERVAL = 60000; // Reset count after 1 minute
+
+  // Reset error count periodically to allow tracking after broken period
+  setInterval(function() {
+    errorCount = 0;
+  }, ERROR_RESET_INTERVAL);
+
+  function truncateStack(stack, maxLength) {
+    if (!stack) return '';
+    if (stack.length <= maxLength) return stack;
+    return stack.substring(0, maxLength) + '... (truncated)';
+  }
+
+  function normalizeErrorMessage(message) {
+    // Normalize message for grouping (remove variable parts like line numbers, URLs)
+    if (!message) return 'Unknown error';
+    return message
+      .replace(/at line \d+/gi, 'at line X')
+      .replace(/:\d+:\d+/g, ':X:X')
+      .replace(/https?:\/\/[^\s]+/g, '[URL]')
+      .substring(0, 200);
+  }
+
+  function trackError(message, source, lineno, colno, error) {
+    // Rate limit to prevent flood on broken page
+    if (errorCount >= ERROR_RATE_LIMIT) return;
+    errorCount++;
+
+    var stack = '';
+    if (error && error.stack) {
+      stack = truncateStack(error.stack, 500);
+    }
+
+    var normalizedMsg = normalizeErrorMessage(message);
+
+    trackEvent('js_error', 'error', {
+      message: message ? String(message).substring(0, 200) : 'Unknown error',
+      normalized: normalizedMsg,
+      source: source ? String(source).substring(0, 200) : '',
+      lineno: lineno || 0,
+      colno: colno || 0,
+      stack: stack,
+      user_agent: navigator.userAgent.substring(0, 100)
+    });
+  }
+
+  // Capture window.onerror
+  var originalOnError = window.onerror;
+  window.onerror = function(message, source, lineno, colno, error) {
+    trackError(message, source, lineno, colno, error);
+    // Call original handler if it exists
+    if (typeof originalOnError === 'function') {
+      return originalOnError.apply(this, arguments);
+    }
+    return false;
+  };
+
+  // Capture unhandled promise rejections
+  window.addEventListener('unhandledrejection', function(event) {
+    var reason = event.reason;
+    var message = 'Unhandled Promise Rejection';
+    var stack = '';
+
+    if (reason) {
+      if (reason instanceof Error) {
+        message = reason.message || message;
+        stack = reason.stack || '';
+      } else if (typeof reason === 'string') {
+        message = reason;
+      } else if (typeof reason === 'object') {
+        message = reason.message || JSON.stringify(reason).substring(0, 200);
+      }
+    }
+
+    trackError(message, window.location.href, 0, 0, reason instanceof Error ? reason : null);
+  });
+
+  // Expose for manual tracking (internal API)
+  window._941 = {
+    track: track,
+    trackEvent: trackEvent,
+    heartbeat: heartbeat,
+    getSessionId: getSession
+  };
+
+  // Public API - window.analytics.track(name, properties)
+  // Simple interface for custom event tracking from application code
+  var analyticsApi = {
+    // Track a custom event with optional properties
+    // Example: analytics.track('signup_completed', { plan: 'pro', trial: true })
+    track: function(eventName, properties) {
+      if (!eventName || typeof eventName !== 'string') {
+        console.warn('[941] analytics.track() requires an event name');
+        return;
+      }
+      trackEvent(eventName, 'custom', properties || {});
+    },
+
+    // Track a page view (useful for SPAs after navigation)
+    page: function(url, title) {
+      track({
+        type: 'pageview',
+        url: url || window.location.href,
+        title: title || document.title
+      });
+    },
+
+    // Get current session ID
+    getSessionId: function() {
+      return getSession();
+    },
+
+    // Identify user (stored in session, sent with events)
+    // Note: Does NOT store PII - just an anonymous identifier you provide
+    identify: function(userId) {
+      if (userId) {
+        try {
+          sessionStorage.setItem('_941_uid', String(userId));
+        } catch (e) {}
+      }
+    }
+  };
+
+  // Expose public API
+  window.analytics = window.analytics || analyticsApi;
+
+  // Also expose as _941analytics for namespace safety
+  window._941analytics = analyticsApi;
+
+  // Process any queued events (for script loading before DOMContentLoaded)
+  var queue = window._941q || [];
+  for (var i = 0; i < queue.length; i++) {
+    var call = queue[i];
+    if (call && call.length >= 2) {
+      var method = call[0];
+      var args = call.slice(1);
+      if (analyticsApi[method]) {
+        analyticsApi[method].apply(null, args);
+      }
+    }
+  }
+  window._941q = { push: function(args) {
+    var method = args[0];
+    var callArgs = args.slice(1);
+    if (analyticsApi[method]) {
+      analyticsApi[method].apply(null, callArgs);
+    }
+  }};
 })();
 `;
 
@@ -985,6 +1730,103 @@ async function handleStats(
 }
 
 // =============================================================================
+// EVENT COLLECTION HANDLER
+// =============================================================================
+
+async function handleEventCollect(
+  request: Request,
+  url: URL,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    // Get client IP for rate limiting
+    const clientIP = request.headers.get("CF-Connecting-IP") || "unknown";
+    const rateLimit = await checkRateLimit(clientIP, env);
+    if (!rateLimit.allowed) {
+      return new Response("Rate limit exceeded", {
+        status: 429,
+        headers: { ...corsHeaders, "Retry-After": String(CONFIG.RATE_LIMIT_WINDOW_SEC) },
+      });
+    }
+
+    // Parse query parameters
+    const params = url.searchParams;
+    const eventData: EventData = {
+      site: params.get("site") || "",
+      url: params.get("url") || "",
+      sid: params.get("sid") || "",
+      event_type: params.get("event_type") || "",
+      event_name: params.get("event_name") || "",
+      event_data: params.get("event_data") || "",
+    };
+
+    // Validate required fields
+    if (!eventData.site || !eventData.url || !eventData.event_type || !eventData.event_name) {
+      return new Response("Missing required fields", { status: 400 });
+    }
+
+    // Validate site
+    const siteValid = await isValidSite(eventData.site, env);
+    if (!siteValid) {
+      console.log(`[SECURITY] Rejected invalid site for event: ${eventData.site}`);
+      return new Response("Invalid site", { status: 400 });
+    }
+
+    // Filter dev traffic
+    if (isDevTraffic(eventData.url)) {
+      return new Response(TRANSPARENT_GIF, {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "image/gif", "X-Dev-Traffic": "filtered" },
+      });
+    }
+
+    // Get visitor info for event storage
+    const cf = (request.cf as Record<string, unknown>) || {};
+    const country = (cf.country as string) || "";
+    const userAgent = request.headers.get("User-Agent") || "";
+    const deviceInfo = parseUserAgent(userAgent);
+    const deviceType = deviceInfo.deviceType;
+
+    // Generate visitor hash (for deduplication/grouping)
+    const region = (cf.region as string) || "";
+    const visitorHash = await generateVisitorHash(eventData.site, country, region, env.ANALYTICS_SECRET);
+
+    // Insert event into D1
+    await env.DB.prepare(`
+      INSERT INTO events (
+        site, timestamp, session_id, visitor_hash,
+        event_type, event_name, event_data,
+        page_url, country, device_type
+      ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      eventData.site,
+      eventData.sid || null,
+      visitorHash,
+      eventData.event_type,
+      eventData.event_name,
+      eventData.event_data || null,
+      eventData.url,
+      country,
+      deviceType
+    ).run();
+
+    // Return tracking pixel
+    return new Response(TRANSPARENT_GIF, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "image/gif",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    });
+  } catch (error) {
+    console.error("Event collection error:", error);
+    return new Response("OK", { status: 200, headers: corsHeaders });
+  }
+}
+
+// =============================================================================
 // MAIN WORKER EXPORT
 // =============================================================================
 
@@ -1020,6 +1862,11 @@ export default {
       return handleStats(url, env, corsHeaders);
     }
 
+    // Handle /event endpoint for custom event tracking
+    if (url.pathname === "/event" && request.method === "GET") {
+      return handleEventCollect(request, url, env, corsHeaders);
+    }
+
     // Only handle GET /collect
     if (url.pathname !== "/collect" || request.method !== "GET") {
       return new Response("Not Found", { status: 404 });
@@ -1049,6 +1896,8 @@ export default {
         title: params.get("title") || "",
         ref: params.get("ref") || "",
         w: parseInt(params.get("w") || "0", 10),
+        sid: params.get("sid") || "",
+        type: params.get("type") || "pageview",
       };
 
       // Validate required fields
@@ -1056,17 +1905,15 @@ export default {
         return new Response("Missing required fields", { status: 400 });
       }
 
-      // Validate site against allowlist (sec-1: strict site validation)
-      const allowedSites = (env.ALLOWED_SITES || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-      if (allowedSites.length > 0) {
-        const siteNormalized = data.site.toLowerCase();
-        const isValidSite = allowedSites.some((allowed) =>
-          siteNormalized === allowed || siteNormalized.endsWith("." + allowed)
-        );
-        if (!isValidSite) {
-          console.log(`[SECURITY] Rejected invalid site: ${data.site}`);
-          return new Response("Invalid site", { status: 400 });
-        }
+      // Validate type
+      const isHeartbeat = data.type === "heartbeat";
+      const isPageview = data.type === "pageview" || !data.type;
+
+      // Validate site against D1 sites table (with fallback to env var)
+      const siteValid = await isValidSite(data.site, env);
+      if (!siteValid) {
+        console.log(`[SECURITY] Rejected invalid site: ${data.site}`);
+        return new Response("Invalid site", { status: 400 });
       }
 
       // Filter development/local traffic (don't pollute analytics with dev pageviews)
@@ -1118,53 +1965,80 @@ export default {
       // Generate visitor hash
       const visitorHash = await generateVisitorHash(data.site, country, region, env.ANALYTICS_SECRET);
 
-      // Insert into D1
-      await env.DB.prepare(`
-        INSERT INTO page_views (
-          site, timestamp, url, page_title,
-          referrer, referrer_type, referrer_domain,
-          country, region, city, latitude, longitude,
-          device_type, user_agent, browser, browser_version, os, os_version,
-          is_bot, bot_name, bot_category,
-          utm_source, utm_medium, utm_campaign, utm_term, utm_content,
-          visitor_hash
-        ) VALUES (
-          ?, datetime('now'), ?, ?,
-          ?, ?, ?,
-          ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?,
-          ?, ?, ?,
-          ?, ?, ?, ?, ?,
-          ?
-        )
-      `).bind(
-        data.site,
-        data.url,
-        data.title,
-        data.ref,
-        referrerInfo.type,
-        referrerInfo.domain,
+      // Prepare session data for upsert
+      const sessionData: SessionData = {
+        site: data.site,
+        sessionId: data.sid,
+        visitorHash,
+        entryPage: data.url,
+        referrer: data.ref,
+        referrerType: referrerInfo.type,
+        referrerDomain: referrerInfo.domain,
+        utmSource: utmParams.source,
+        utmMedium: utmParams.medium,
+        utmCampaign: utmParams.campaign,
         country,
         region,
-        city,
-        latitude,
-        longitude,
         deviceType,
-        userAgent.slice(0, 500),
-        deviceInfo.browser,
-        deviceInfo.browserVersion,
-        deviceInfo.os,
-        deviceInfo.osVersion,
-        botInfo.isBot ? 1 : 0,
-        botInfo.name,
-        botInfo.category,
-        utmParams.source,
-        utmParams.medium,
-        utmParams.campaign,
-        utmParams.term,
-        utmParams.content,
-        visitorHash
-      ).run();
+        browser: deviceInfo.browser,
+        os: deviceInfo.os,
+      };
+
+      // Update session (works for both pageviews and heartbeats)
+      if (data.sid && !botInfo.isBot) {
+        await upsertSession(env.DB, sessionData, isHeartbeat);
+      }
+
+      // Only insert pageview record for actual pageviews (not heartbeats)
+      if (isPageview) {
+        await env.DB.prepare(`
+          INSERT INTO page_views (
+            site, timestamp, url, page_title,
+            referrer, referrer_type, referrer_domain,
+            country, region, city, latitude, longitude,
+            device_type, user_agent, browser, browser_version, os, os_version,
+            is_bot, bot_name, bot_category,
+            utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+            visitor_hash, session_id
+          ) VALUES (
+            ?, datetime('now'), ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?
+          )
+        `).bind(
+          data.site,
+          data.url,
+          data.title,
+          data.ref,
+          referrerInfo.type,
+          referrerInfo.domain,
+          country,
+          region,
+          city,
+          latitude,
+          longitude,
+          deviceType,
+          userAgent.slice(0, 500),
+          deviceInfo.browser,
+          deviceInfo.browserVersion,
+          deviceInfo.os,
+          deviceInfo.osVersion,
+          botInfo.isBot ? 1 : 0,
+          botInfo.name,
+          botInfo.category,
+          utmParams.source,
+          utmParams.medium,
+          utmParams.campaign,
+          utmParams.term,
+          utmParams.content,
+          visitorHash,
+          data.sid || null
+        ).run();
+      }
 
       // Return tracking pixel
       return new Response(TRANSPARENT_GIF, {

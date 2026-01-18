@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from ..config import AnalyticsConfig, verify_passkey
+from ..config import AnalyticsConfig, verify_passkey, MIN_PASSKEY_LENGTH
 from ..core.client import AnalyticsClient
 from ..core.models import DashboardFilters, DateRange
 
@@ -262,7 +262,9 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         current_params = str(request.query_params)
         return {
             "request": request,
-            "site_name": config.site_name,
+            "site_name": config.effective_display_name,  # Use display name for UI
+            "site_domain": config.site_name,  # Keep domain for API calls
+            "site_timezone": config.timezone,  # Site timezone for JS display
             "config": config,
             "has_auth": config.has_auth,
             "active_tab": active_tab,
@@ -306,7 +308,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "pages/login.html",
             {
                 "request": request,
-                "site_name": config.site_name,
+                "site_name": config.effective_display_name,
                 "error": error,
                 "has_webauthn": config.has_webauthn,
             },
@@ -333,6 +335,13 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         # Record this attempt
         _login_rate_limiter.record_attempt(client_ip, config.site_name)
+
+        # Validate passkey length (config-4: 16+ characters required)
+        if len(passkey) < MIN_PASSKEY_LENGTH:
+            return RedirectResponse(
+                url=f"./login?error=Passkey+must+be+at+least+{MIN_PASSKEY_LENGTH}+characters",
+                status_code=303
+            )
 
         if config.passkey and verify_passkey(config.passkey, passkey):
             # Clear rate limit on successful login (sec-2)
@@ -388,6 +397,9 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
         time_series = await client.get_time_series(start_date, end_date, "day", filters)
         top_pages = await client.get_top_pages(start_date, end_date, 10, filters)
+        entry_pages = await client.get_entry_pages(start_date, end_date, 10, filters)
+        exit_pages = await client.get_exit_pages(start_date, end_date, 10, filters)
+        entry_exit_flow = await client.get_entry_exit_flow(start_date, end_date, 10, filters)
         sources = await client.get_sources(start_date, end_date, 10, filters)
         countries = await client.get_countries(start_date, end_date, 10, filters)
         devices = await client.get_devices(start_date, end_date, filters)
@@ -400,6 +412,9 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "chart_metric": "visitors",
             "granularity": "day",
             "top_pages": top_pages,
+            "entry_pages": entry_pages,
+            "exit_pages": exit_pages,
+            "entry_exit_flow": entry_exit_flow,
             "sources": sources,
             "countries": countries,
             "devices": devices,
@@ -438,6 +453,9 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
         time_series = await client.get_time_series(start_date, end_date, "day", filters)
         top_pages = await client.get_top_pages(start_date, end_date, 10, filters)
+        entry_pages = await client.get_entry_pages(start_date, end_date, 10, filters)
+        exit_pages = await client.get_exit_pages(start_date, end_date, 10, filters)
+        entry_exit_flow = await client.get_entry_exit_flow(start_date, end_date, 10, filters)
         sources = await client.get_sources(start_date, end_date, 10, filters)
         countries = await client.get_countries(start_date, end_date, 10, filters)
         devices = await client.get_devices(start_date, end_date, filters)
@@ -450,6 +468,9 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "chart_metric": "visitors",
             "granularity": "day",
             "top_pages": top_pages,
+            "entry_pages": entry_pages,
+            "exit_pages": exit_pages,
+            "entry_exit_flow": entry_exit_flow,
             "sources": sources,
             "countries": countries,
             "devices": devices,
@@ -728,16 +749,38 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         filters = _get_filters()
 
         metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        events = await client.get_events(start_date, end_date, 50, event_type)
+        events = await client.get_events_with_trend(
+            start_date, end_date, compare_start, compare_end, 50, event_type, filters
+        )
+        events_time_series = await client.get_events_time_series(start_date, end_date, event_type, filters)
         scroll_depth = await client.get_scroll_depth(start_date, end_date)
+        scroll_depth_by_page = await client.get_scroll_depth_by_page(start_date, end_date, 10, filters)
+        outbound_clicks = await client.get_outbound_clicks(start_date, end_date, 20, filters)
+        file_downloads = await client.get_file_downloads(start_date, end_date, 20, filters)
+        form_submissions = await client.get_form_submissions(start_date, end_date, 20, filters)
+        js_errors = await client.get_js_errors(start_date, end_date, 20, filters)
         event_types_list = await client.get_event_types(start_date, end_date)
+
+        # Get event properties if a specific event is selected
+        event_properties = []
+        if event:
+            event_properties = await client.get_event_properties(event, start_date, end_date, 100, filters)
 
         context = _get_common_context(request, "events", period)
         context.update({
             "metrics": metrics,
             "events": events,
+            "events_time_series": events_time_series,
             "scroll_depth": scroll_depth,
+            "scroll_depth_by_page": scroll_depth_by_page,
+            "outbound_clicks": outbound_clicks,
+            "file_downloads": file_downloads,
+            "form_submissions": form_submissions,
+            "js_errors": js_errors,
             "event_types": event_types_list,
+            "event_properties": event_properties,
+            "selected_event": event,
+            "selected_event_type": event_type,
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -763,16 +806,38 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         filters = _get_filters()
 
         metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        events = await client.get_events(start_date, end_date, 50, event_type)
+        events = await client.get_events_with_trend(
+            start_date, end_date, compare_start, compare_end, 50, event_type, filters
+        )
+        events_time_series = await client.get_events_time_series(start_date, end_date, event_type, filters)
         scroll_depth = await client.get_scroll_depth(start_date, end_date)
+        scroll_depth_by_page = await client.get_scroll_depth_by_page(start_date, end_date, 10, filters)
+        outbound_clicks = await client.get_outbound_clicks(start_date, end_date, 20, filters)
+        file_downloads = await client.get_file_downloads(start_date, end_date, 20, filters)
+        form_submissions = await client.get_form_submissions(start_date, end_date, 20, filters)
+        js_errors = await client.get_js_errors(start_date, end_date, 20, filters)
         event_types_list = await client.get_event_types(start_date, end_date)
+
+        # Get event properties if a specific event is selected
+        event_properties = []
+        if event:
+            event_properties = await client.get_event_properties(event, start_date, end_date, 100, filters)
 
         context = _get_common_context(request, "events", period)
         context.update({
             "metrics": metrics,
             "events": events,
+            "events_time_series": events_time_series,
             "scroll_depth": scroll_depth,
+            "scroll_depth_by_page": scroll_depth_by_page,
+            "outbound_clicks": outbound_clicks,
+            "file_downloads": file_downloads,
+            "form_submissions": form_submissions,
+            "js_errors": js_errors,
             "event_types": event_types_list,
+            "event_properties": event_properties,
+            "selected_event": event,
+            "selected_event_type": event_type,
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),

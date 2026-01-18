@@ -1,4 +1,4 @@
-{# Time series chart component - displays visitors/views over time #}
+{# Time series chart component - displays visitors/views/sessions over time #}
 <div class="section">
     <div class="section__header">
         <span class="section__title">Traffic Over Time</span>
@@ -14,6 +14,12 @@
                     hx-target="#chart-container"
                     hx-swap="innerHTML">
                 Views
+            </button>
+            <button class="btn btn--small{% if chart_metric == 'sessions' %} active{% endif %}"
+                    hx-get="./partials/chart?metric=sessions"
+                    hx-target="#chart-container"
+                    hx-swap="innerHTML">
+                Sessions
             </button>
         </div>
     </div>

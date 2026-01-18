@@ -22,7 +22,7 @@
 
     {% block head %}{% endblock %}
 </head>
-<body>
+<body data-timezone="{{ site_timezone | default('America/New_York') }}">
     <div class="layout">
         <!-- Header -->
         <header class="header">

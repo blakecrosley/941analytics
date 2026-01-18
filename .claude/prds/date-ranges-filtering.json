@@ -3,7 +3,8 @@
     "name": "Custom Date Ranges & Filtering",
     "description": "Add custom date range selection and multi-dimensional filtering to the analytics dashboard. These are the two most critical missing features blocking daily use of the dashboard.",
     "priority": 1,
-    "estimated_effort": "2-3 days"
+    "estimated_effort": "2-3 days",
+    "completed_at": "2026-01-15T14:12:00Z"
   },
   "stories": [
     {
