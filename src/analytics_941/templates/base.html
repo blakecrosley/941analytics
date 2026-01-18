@@ -23,11 +23,11 @@
     <!-- HTMX for server-driven interactivity -->
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
 
-    <!-- Alpine.js for client state -->
-    <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
-
-    <!-- Dashboard JavaScript (cacheable) -->
+    <!-- Dashboard JavaScript - MUST load before Alpine.js to register alpine:init listener -->
     <script src="./static/js/dashboard.js" defer></script>
+
+    <!-- Alpine.js for client state - loads last to ensure components are registered -->
+    <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
 
     {% block head %}{% endblock %}
 </head>

@@ -25,6 +25,7 @@
     --941-color-text-tertiary: rgba(255, 255, 255, 0.4);
 
     /* Colors - Semantic */
+    --941-color-primary: #3b82f6;  /* Primary brand color for charts */
     --941-color-accent: #ffffff;
     --941-color-success: #22c55e;
     --941-color-success-muted: rgba(34, 197, 94, 0.15);
