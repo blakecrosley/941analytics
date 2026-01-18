@@ -18,7 +18,7 @@
         <div class="analytics-section__header">
             <span class="analytics-section__title">Top Pages</span>
             <div class="analytics-section__actions">
-                {% include "components/export_button.html" with export_type="pages" %}
+                {% with export_type="pages" %}{% include "components/export_button.html" %}{% endwith %}
             </div>
         </div>
         <div class="analytics-section__content analytics-section__content--flush">
@@ -69,7 +69,7 @@
         <div class="analytics-section__header">
             <span class="analytics-section__title">Top Sources</span>
             <div class="analytics-section__actions">
-                {% include "components/export_button.html" with export_type="sources" %}
+                {% with export_type="sources" %}{% include "components/export_button.html" %}{% endwith %}
                 <a href="./sources" class="analytics-btn analytics-btn--small" hx-get="./partials/sources" hx-target="#main-content" hx-push-url="./sources">View All</a>
             </div>
         </div>
@@ -261,7 +261,7 @@
         <div class="analytics-section__header">
             <span class="analytics-section__title">Countries</span>
             <div class="analytics-section__actions">
-                {% include "components/export_button.html" with export_type="geography" %}
+                {% with export_type="geography" %}{% include "components/export_button.html" %}{% endwith %}
                 <a href="./geography" class="analytics-btn analytics-btn--small" hx-get="./partials/geography" hx-target="#main-content" hx-push-url="./geography">View All</a>
             </div>
         </div>

@@ -16,7 +16,7 @@
         <div class="analytics-section__header">
             <span class="analytics-section__title">All Sources</span>
             <div class="analytics-section__actions">
-                {% include "components/export_button.html" with export_type="sources" %}
+                {% with export_type="sources" %}{% include "components/export_button.html" %}{% endwith %}
             </div>
         </div>
         <div class="analytics-section__content analytics-section__content--flush">

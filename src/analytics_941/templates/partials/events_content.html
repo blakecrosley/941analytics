@@ -31,7 +31,7 @@
         </span>
         {% endif %}
     </div>
-    {% include "components/export_button.html" with export_type="events" %}
+    {% with export_type="events" %}{% include "components/export_button.html" %}{% endwith %}
     </div>
 </div>{# End analytics-zone-primary #}
 

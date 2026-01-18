@@ -279,7 +279,7 @@
         <div class="analytics-section__header">
             <span class="analytics-section__title">Countries</span>
             <div class="analytics-section__actions">
-                {% include "components/export_button.html" with export_type="geography" %}
+                {% with export_type="geography" %}{% include "components/export_button.html" %}{% endwith %}
             </div>
         </div>
         <div class="analytics-section__content analytics-section__content--flush">
