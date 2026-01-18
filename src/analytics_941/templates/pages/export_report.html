@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Report - {{ site_name }}</title>
+    <style>
+        /* Print-friendly report styles */
+        :root {
+            --color-text: #1a1a1a;
+            --color-text-secondary: #6b7280;
+            --color-border: #e5e7eb;
+            --color-accent: #3b82f6;
+            --color-success: #10b981;
+            --color-danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--color-text);
+            background: white;
+            padding: 24px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+                font-size: 11px;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        /* Header */
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--color-text);
+            margin-bottom: 24px;
+        }
+
+        .report-title {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .report-subtitle {
+            color: var(--color-text-secondary);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .report-meta {
+            text-align: right;
+            font-size: 11px;
+            color: var(--color-text-secondary);
+        }
+
+        /* Print button */
+        .print-actions {
+            margin-bottom: 24px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .print-btn {
+            padding: 8px 16px;
+            background: var(--color-accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .print-btn:hover {
+            opacity: 0.9;
+        }
+
+        .print-btn--secondary {
+            background: white;
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
+        }
+
+        /* Metrics grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .metric-card {
+            padding: 16px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .metric-change {
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .metric-change--up {
+            color: var(--color-success);
+        }
+
+        .metric-change--down {
+            color: var(--color-danger);
+        }
+
+        /* Sections */
+        .report-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        /* Tables */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .report-table th,
+        .report-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .report-table th {
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.05em;
+        }
+
+        .report-table td.number {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .report-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Two column layout */
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        /* Footer */
+        .report-footer {
+            margin-top: 32px;
+            padding-top: 16px;
+            border-top: 1px solid var(--color-border);
+            font-size: 10px;
+            color: var(--color-text-secondary);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Print actions -->
+    <div class="print-actions no-print">
+        <button class="print-btn" onclick="window.print()">
+            Print Report / Save as PDF
+        </button>
+        <a href="./" class="print-btn print-btn--secondary">Back to Dashboard</a>
+    </div>
+
+    <!-- Report header -->
+    <header class="report-header">
+        <div>
+            <h1 class="report-title">{{ site_name }} Analytics Report</h1>
+            <p class="report-subtitle">
+                {{ date_range.start.strftime('%B %d, %Y') }} - {{ date_range.end.strftime('%B %d, %Y') }}
+            </p>
+        </div>
+        <div class="report-meta">
+            <div>Generated: {{ generated_at[:10] }}</div>
+            <div>941 Analytics</div>
+        </div>
+    </header>
+
+    <!-- Key metrics -->
+    <section class="report-section">
+        <h2 class="section-title">Key Metrics</h2>
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">{{ "{:,}".format(metrics.views.value|int) }}</div>
+                <div class="metric-label">Page Views</div>
+                {% if metrics.views.change_percent is not none %}
+                <div class="metric-change metric-change--{{ metrics.views.change_direction }}">
+                    {{ "+" if metrics.views.change_percent > 0 else "" }}{{ "{:.1f}".format(metrics.views.change_percent) }}% vs prev
+                </div>
+                {% endif %}
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ "{:,}".format(metrics.visitors.value|int) }}</div>
+                <div class="metric-label">Visitors</div>
+                {% if metrics.visitors.change_percent is not none %}
+                <div class="metric-change metric-change--{{ metrics.visitors.change_direction }}">
+                    {{ "+" if metrics.visitors.change_percent > 0 else "" }}{{ "{:.1f}".format(metrics.visitors.change_percent) }}% vs prev
+                </div>
+                {% endif %}
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ "{:,}".format(metrics.sessions.value|int) }}</div>
+                <div class="metric-label">Sessions</div>
+                {% if metrics.sessions.change_percent is not none %}
+                <div class="metric-change metric-change--{{ metrics.sessions.change_direction }}">
+                    {{ "+" if metrics.sessions.change_percent > 0 else "" }}{{ "{:.1f}".format(metrics.sessions.change_percent) }}% vs prev
+                </div>
+                {% endif %}
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ "{:.1f}".format(metrics.bounce_rate.value) }}%</div>
+                <div class="metric-label">Bounce Rate</div>
+                {% if metrics.bounce_rate.change_percent is not none %}
+                <div class="metric-change metric-change--{{ 'down' if metrics.bounce_rate.change_percent < 0 else 'up' }}">
+                    {{ "+" if metrics.bounce_rate.change_percent > 0 else "" }}{{ "{:.1f}".format(metrics.bounce_rate.change_percent) }}% vs prev
+                </div>
+                {% endif %}
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ format_duration(metrics.avg_duration.value) if format_duration else "{:.0f}s".format(metrics.avg_duration.value) }}</div>
+                <div class="metric-label">Avg Duration</div>
+                {% if metrics.avg_duration.change_percent is not none %}
+                <div class="metric-change metric-change--{{ metrics.avg_duration.change_direction }}">
+                    {{ "+" if metrics.avg_duration.change_percent > 0 else "" }}{{ "{:.1f}".format(metrics.avg_duration.change_percent) }}% vs prev
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Top pages -->
+    <section class="report-section">
+        <h2 class="section-title">Top Pages</h2>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Page</th>
+                    <th class="number">Views</th>
+                    <th class="number">Visitors</th>
+                    <th class="number">Bounce %</th>
+                    <th class="number">Avg Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for page in pages[:15] %}
+                <tr>
+                    <td>{{ page.url|truncate(60) }}</td>
+                    <td class="number">{{ "{:,}".format(page.views) }}</td>
+                    <td class="number">{{ "{:,}".format(page.visitors) }}</td>
+                    <td class="number">{{ "{:.1f}".format(page.bounce_rate) if page.bounce_rate else "-" }}%</td>
+                    <td class="number">{{ "{:.0f}s".format(page.avg_time) if page.avg_time else "-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    <!-- Two column section -->
+    <div class="two-columns">
+        <!-- Traffic sources -->
+        <section class="report-section">
+            <h2 class="section-title">Traffic Sources</h2>
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th class="number">Visits</th>
+                        <th class="number">Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for source in sources[:10] %}
+                    <tr>
+                        <td>{{ source.source }}</td>
+                        <td class="number">{{ "{:,}".format(source.visits) }}</td>
+                        <td class="number">{{ "{:,}".format(source.visitors) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Countries -->
+        <section class="report-section">
+            <h2 class="section-title">Top Countries</h2>
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Country</th>
+                        <th class="number">Visits</th>
+                        <th class="number">Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for country in countries[:10] %}
+                    <tr>
+                        <td>{{ country.country_name }}</td>
+                        <td class="number">{{ "{:,}".format(country.visits) }}</td>
+                        <td class="number">{{ "{:,}".format(country.visitors) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <div class="two-columns page-break">
+        <!-- Devices -->
+        <section class="report-section">
+            <h2 class="section-title">Devices</h2>
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th class="number">Visits</th>
+                        <th class="number">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for device in devices %}
+                    <tr>
+                        <td>{{ device.device_type|capitalize }}</td>
+                        <td class="number">{{ "{:,}".format(device.visits) }}</td>
+                        <td class="number">{{ "{:.1f}".format(device.percentage) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Browsers -->
+        <section class="report-section">
+            <h2 class="section-title">Browsers</h2>
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Browser</th>
+                        <th class="number">Visits</th>
+                        <th class="number">%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for browser in browsers[:8] %}
+                    <tr>
+                        <td>{{ browser.browser }}</td>
+                        <td class="number">{{ "{:,}".format(browser.visits) }}</td>
+                        <td class="number">{{ "{:.1f}".format(browser.percentage) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="report-footer">
+        <p>Generated by 941 Analytics | {{ site_name }} | {{ generated_at[:10] }}</p>
+    </footer>
+</body>
+</html>
