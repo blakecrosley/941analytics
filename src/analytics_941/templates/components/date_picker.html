@@ -1,5 +1,11 @@
 {# Date range picker component #}
-<div class="controls" x-data="datePickerComponent()" @click.outside="customOpen = false" @keydown.escape.window="customOpen = false">
+<div class="controls"
+     x-data="datePickerComponent()"
+     data-start="{{ start_date or '' }}"
+     data-end="{{ end_date or '' }}"
+     data-active-tab="{{ active_tab }}"
+     @click.outside="customOpen = false"
+     @keydown.escape.window="customOpen = false">
     <div class="controls__group">
         {% for period in [
             ('24h', '24 hours'),

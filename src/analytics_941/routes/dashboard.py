@@ -15,6 +15,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Request, Response, Cookie, Query, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ..config import AnalyticsConfig, verify_passkey
@@ -230,6 +231,11 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
     # Add custom filters
     templates.env.filters["format_duration"] = _format_duration
+
+    # Mount static files with cache headers
+    static_dir = Path(__file__).parent.parent / "static"
+    if static_dir.exists():
+        router.mount("/static", StaticFiles(directory=str(static_dir)), name="analytics_static")
 
     # Pre-compute expected hash if passkey is set
     expected_hash = _hash_passkey(config.passkey, config.site_name) if config.passkey else None
