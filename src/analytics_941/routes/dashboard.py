@@ -480,6 +480,47 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         return templates.TemplateResponse("partials/overview_content.html", context)
 
+    @router.get("/partials/chart", response_class=HTMLResponse)
+    async def chart_partial(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        metric: str = "visitors",
+        period: str = "30d",
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        country: str | None = None,
+        region: str | None = None,
+        device: str | None = None,
+        browser: str | None = None,
+        source: str | None = None,
+        page: str | None = None,
+    ):
+        """HTMX partial for chart metric toggle (visitors, views, sessions)."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        # Validate metric
+        valid_metrics = {"visitors", "views", "sessions"}
+        if metric not in valid_metrics:
+            metric = "visitors"
+
+        start_date, end_date, _, _ = _parse_date_range(period, start, end)
+        filters = _get_filters(
+            country=country, region=region, device=device,
+            browser=browser, source=source, page=page
+        )
+
+        time_series = await client.get_time_series(start_date, end_date, "day", filters)
+
+        context = {
+            "request": request,
+            "time_series": time_series,
+            "chart_metric": metric,
+            "granularity": "day",
+        }
+
+        return templates.TemplateResponse("components/chart_area.html", context)
+
     @router.get("/sources", response_class=HTMLResponse)
     async def sources_page(
         request: Request,
@@ -856,8 +897,600 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         context = _get_common_context(request, "realtime")
         context["realtime"] = realtime
+        context["realtime_count"] = realtime.active_visitors
 
         return templates.TemplateResponse("pages/realtime.html", context)
+
+    # -------------------------------------------------------------------------
+    # Funnel Routes
+    # -------------------------------------------------------------------------
+
+    @router.get("/funnels", response_class=HTMLResponse)
+    async def funnels_page(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        period: str = "30d",
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        funnel_id: int | None = Query(None, description="Specific funnel to analyze"),
+    ):
+        """Render funnels page."""
+        if not _check_auth(auth):
+            return RedirectResponse(url="./login", status_code=303)
+
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
+        filters = _get_filters()
+
+        # Ensure preset funnels exist
+        await client.ensure_preset_funnels()
+
+        # Get all funnels
+        funnels = await client.get_funnels()
+
+        # Analyze selected funnel or first available
+        selected_funnel = None
+        funnel_result = None
+        if funnels:
+            if funnel_id:
+                selected_funnel = next((f for f in funnels if f.id == funnel_id), funnels[0])
+            else:
+                selected_funnel = funnels[0]
+
+            funnel_result = await client.analyze_funnel(
+                selected_funnel.id,
+                start_date,
+                end_date,
+            )
+
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+
+        context = _get_common_context(request, "funnels", period)
+        context.update({
+            "metrics": metrics,
+            "funnels": funnels,
+            "selected_funnel": selected_funnel,
+            "funnel_result": funnel_result,
+            "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        })
+
+        return templates.TemplateResponse("pages/funnels.html", context)
+
+    @router.get("/partials/funnels", response_class=HTMLResponse)
+    async def funnels_partial(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        period: str = "30d",
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        funnel_id: int | None = Query(None, description="Specific funnel to analyze"),
+    ):
+        """HTMX partial for funnels tab."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
+        filters = _get_filters()
+
+        # Ensure preset funnels exist
+        await client.ensure_preset_funnels()
+
+        # Get all funnels
+        funnels = await client.get_funnels()
+
+        # Analyze selected funnel or first available
+        selected_funnel = None
+        funnel_result = None
+        if funnels:
+            if funnel_id:
+                selected_funnel = next((f for f in funnels if f.id == funnel_id), funnels[0])
+            else:
+                selected_funnel = funnels[0]
+
+            funnel_result = await client.analyze_funnel(
+                selected_funnel.id,
+                start_date,
+                end_date,
+            )
+
+        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
+
+        context = _get_common_context(request, "funnels", period)
+        context.update({
+            "metrics": metrics,
+            "funnels": funnels,
+            "selected_funnel": selected_funnel,
+            "funnel_result": funnel_result,
+            "filters": filters,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        })
+
+        return templates.TemplateResponse("partials/funnels_content.html", context)
+
+    @router.post("/funnels/create", response_class=HTMLResponse)
+    async def create_funnel(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        name: str = Form(...),
+        description: str = Form(""),
+        steps: str = Form(...),  # JSON string of steps
+    ):
+        """Create a new custom funnel."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        import json
+        try:
+            steps_data = json.loads(steps)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid steps JSON")
+
+        from ..core.models import FunnelStep
+        funnel_steps = [FunnelStep(**step) for step in steps_data]
+
+        await client.create_funnel(name, description or None, funnel_steps)
+
+        # Redirect back to funnels page
+        return RedirectResponse(url="./funnels", status_code=303)
+
+    @router.delete("/funnels/{funnel_id}")
+    async def delete_funnel(
+        request: Request,
+        funnel_id: int,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Delete a funnel."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        await client.delete_funnel(funnel_id)
+        return {"status": "deleted"}
+
+    # -------------------------------------------------------------------------
+    # Goals Routes
+    # -------------------------------------------------------------------------
+
+    @router.get("/goals", response_class=HTMLResponse)
+    async def goals_page(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        period: str = "30d",
+        start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
+        end: str | None = Query(None, alias="end", description="Custom end date (YYYY-MM-DD)"),
+        goal_id: int | None = Query(None, description="Specific goal to highlight"),
+    ):
+        """Render goals page."""
+        if not _check_auth(auth):
+            return RedirectResponse(url="./login")
+
+        start_date, end_date = _parse_date_range(period, start, end)
+
+        # Ensure preset goals exist
+        await client.ensure_preset_goals()
+
+        # Get all goals
+        goals = await client.get_goals(active_only=False)
+
+        # Analyze all goals or just selected one
+        goal_results = []
+        selected_goal = None
+
+        if goal_id and goals:
+            selected_goal = next((g for g in goals if g.id == goal_id), None)
+            if selected_goal:
+                result = await client.analyze_goal(selected_goal, start_date, end_date)
+                goal_results = [result]
+        elif goals:
+            # Analyze all active goals
+            for goal in goals:
+                if goal.is_active:
+                    result = await client.analyze_goal(goal, start_date, end_date)
+                    goal_results.append(result)
+            # Select first as default
+            selected_goal = goals[0] if goals else None
+
+        context = _get_common_context(request, "goals")
+        context["period"] = period
+        context["start_date"] = start_date.isoformat()
+        context["end_date"] = end_date.isoformat()
+        context["goals"] = goals
+        context["selected_goal"] = selected_goal
+        context["goal_results"] = goal_results
+
+        return templates.TemplateResponse("pages/goals.html", context)
+
+    @router.get("/partials/goals", response_class=HTMLResponse)
+    async def goals_partial(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        period: str = "30d",
+        start: str | None = Query(None),
+        end: str | None = Query(None),
+        goal_id: int | None = Query(None),
+    ):
+        """HTMX partial for goals tab."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        start_date, end_date = _parse_date_range(period, start, end)
+
+        await client.ensure_preset_goals()
+        goals = await client.get_goals(active_only=False)
+
+        goal_results = []
+        selected_goal = None
+
+        if goal_id and goals:
+            selected_goal = next((g for g in goals if g.id == goal_id), None)
+            if selected_goal:
+                result = await client.analyze_goal(selected_goal, start_date, end_date)
+                goal_results = [result]
+        elif goals:
+            for goal in goals:
+                if goal.is_active:
+                    result = await client.analyze_goal(goal, start_date, end_date)
+                    goal_results.append(result)
+            selected_goal = goals[0] if goals else None
+
+        context = _get_common_context(request, "goals")
+        context["period"] = period
+        context["start_date"] = start_date.isoformat()
+        context["end_date"] = end_date.isoformat()
+        context["goals"] = goals
+        context["selected_goal"] = selected_goal
+        context["goal_results"] = goal_results
+
+        return templates.TemplateResponse("partials/goals_content.html", context)
+
+    @router.post("/goals/create", response_class=HTMLResponse)
+    async def create_goal(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        name: str = Form(...),
+        description: str = Form(""),
+        goal_type: str = Form(...),
+        goal_value: str = Form(...),
+        target_count: int | None = Form(None),
+    ):
+        """Create a new custom goal."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        from analytics_941.core.models import GoalDefinition
+
+        goal = GoalDefinition(
+            site=config.site_name,
+            name=name,
+            description=description if description else None,
+            goal_type=goal_type,
+            goal_value=goal_value,
+            target_count=target_count,
+            is_active=True,
+        )
+
+        await client.create_goal(goal)
+        return RedirectResponse(url="./goals", status_code=303)
+
+    @router.post("/goals/{goal_id}/toggle")
+    async def toggle_goal(
+        request: Request,
+        goal_id: int,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Toggle goal active status."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        # Toggle is_active status
+        goals = await client.get_goals(active_only=False)
+        goal = next((g for g in goals if g.id == goal_id), None)
+        if goal:
+            await client._query(
+                "UPDATE goals SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND site = ?",
+                [int(not goal.is_active), goal_id, config.site_name],
+            )
+        return {"status": "toggled"}
+
+    @router.delete("/goals/{goal_id}")
+    async def delete_goal(
+        request: Request,
+        goal_id: int,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Delete a goal."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        await client.delete_goal(goal_id)
+        return {"status": "deleted"}
+
+    # =========================================================================
+    # Saved Views Routes
+    # =========================================================================
+
+    @router.get("/views", response_class=HTMLResponse)
+    async def saved_views_list(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Get list of saved views as HTML."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        saved_views = await client.get_saved_views()
+
+        context = _get_common_context(request, "overview")
+        context["saved_views"] = saved_views
+
+        return templates.TemplateResponse("partials/saved_views_dropdown.html", context)
+
+    @router.post("/views/create", response_class=HTMLResponse)
+    async def create_saved_view(
+        request: Request,
+        name: str = Form(...),
+        description: str = Form(None),
+        date_preset: str = Form(None),
+        is_default: bool = Form(False),
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Create a new saved view from current filters."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        from analytics_941.core.models import SavedView
+
+        # Extract current filters from query params
+        filters = {}
+        filter_keys = ["country", "region", "city", "device", "browser", "os",
+                       "source", "source_type", "page", "utm_source", "utm_medium", "utm_campaign"]
+        for key in filter_keys:
+            value = request.query_params.get(key)
+            if value:
+                filters[key] = value
+
+        view = SavedView(
+            site=config.site_name,
+            name=name,
+            description=description,
+            filters=filters,
+            date_preset=date_preset,
+            is_default=is_default,
+        )
+
+        await client.create_saved_view(view)
+
+        # Return updated dropdown
+        saved_views = await client.get_saved_views()
+        context = _get_common_context(request, "overview")
+        context["saved_views"] = saved_views
+
+        return templates.TemplateResponse("partials/saved_views_dropdown.html", context)
+
+    @router.post("/views/{view_id}/default")
+    async def set_view_default(
+        request: Request,
+        view_id: int,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Set a view as the default."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        await client.set_default_view(view_id)
+        return {"status": "set_default"}
+
+    @router.delete("/views/{view_id}")
+    async def delete_saved_view(
+        request: Request,
+        view_id: int,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Delete a saved view."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        await client.delete_saved_view(view_id)
+        return {"status": "deleted"}
+
+    # =========================================================================
+    # Export Routes
+    # =========================================================================
+
+    @router.get("/export/pages.csv")
+    async def export_pages_csv(
+        request: Request,
+        period: str = "30d",
+        start: str | None = None,
+        end: str | None = None,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Export top pages data as CSV."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        import csv
+        from io import StringIO
+        from fastapi.responses import StreamingResponse
+
+        date_range = _parse_date_range(period, start, end)
+        pages = await client.get_top_pages(date_range.start, date_range.end, limit=1000)
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["URL", "Views", "Visitors", "Bounce Rate %", "Avg Time (s)", "Entries", "Exits"])
+
+        for page in pages:
+            writer.writerow([
+                page.url,
+                page.views,
+                page.visitors,
+                f"{page.bounce_rate:.1f}" if page.bounce_rate else "",
+                f"{page.avg_time:.0f}" if page.avg_time else "",
+                page.entries,
+                page.exits,
+            ])
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=pages_{date_range.start}_{date_range.end}.csv"}
+        )
+
+    @router.get("/export/sources.csv")
+    async def export_sources_csv(
+        request: Request,
+        period: str = "30d",
+        start: str | None = None,
+        end: str | None = None,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Export traffic sources data as CSV."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        import csv
+        from io import StringIO
+        from fastapi.responses import StreamingResponse
+
+        date_range = _parse_date_range(period, start, end)
+        sources = await client.get_sources(date_range.start, date_range.end)
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Source", "Type", "Visits", "Visitors", "Bounce Rate %"])
+
+        for source in sources:
+            writer.writerow([
+                source.source,
+                source.source_type,
+                source.visits,
+                source.visitors,
+                f"{source.bounce_rate:.1f}" if source.bounce_rate else "",
+            ])
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=sources_{date_range.start}_{date_range.end}.csv"}
+        )
+
+    @router.get("/export/geography.csv")
+    async def export_geography_csv(
+        request: Request,
+        period: str = "30d",
+        start: str | None = None,
+        end: str | None = None,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Export geography data as CSV."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        import csv
+        from io import StringIO
+        from fastapi.responses import StreamingResponse
+
+        date_range = _parse_date_range(period, start, end)
+        countries = await client.get_countries(date_range.start, date_range.end)
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Country Code", "Country Name", "Visits", "Visitors"])
+
+        for country in countries:
+            writer.writerow([
+                country.country_code,
+                country.country_name,
+                country.visits,
+                country.visitors,
+            ])
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=geography_{date_range.start}_{date_range.end}.csv"}
+        )
+
+    @router.get("/export/events.csv")
+    async def export_events_csv(
+        request: Request,
+        period: str = "30d",
+        start: str | None = None,
+        end: str | None = None,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Export events data as CSV."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        import csv
+        from io import StringIO
+        from fastapi.responses import StreamingResponse
+
+        date_range = _parse_date_range(period, start, end)
+        events = await client.get_events(date_range.start, date_range.end)
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Event Name", "Event Type", "Count", "Unique Sessions"])
+
+        for event in events:
+            writer.writerow([
+                event.event_name,
+                event.event_type,
+                event.count,
+                event.unique_sessions,
+            ])
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=events_{date_range.start}_{date_range.end}.csv"}
+        )
+
+    @router.get("/export/report", response_class=HTMLResponse)
+    async def export_report(
+        request: Request,
+        period: str = "30d",
+        start: str | None = None,
+        end: str | None = None,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+    ):
+        """Generate a printable/PDF-ready report."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        filters = DashboardFilters()
+        date_range = _parse_date_range(period, start, end)
+
+        # Get all report data
+        metrics = await client.get_core_metrics(date_range.start, date_range.end, filters)
+        pages = await client.get_top_pages(date_range.start, date_range.end, filters=filters, limit=20)
+        sources = await client.get_sources(date_range.start, date_range.end, filters=filters)
+        countries = await client.get_countries(date_range.start, date_range.end, filters=filters)
+        devices = await client.get_device_breakdown(date_range.start, date_range.end, filters=filters)
+        browsers = await client.get_browser_breakdown(date_range.start, date_range.end, filters=filters)
+
+        context = {
+            "request": request,
+            "site_name": config.effective_display_name,
+            "date_range": date_range,
+            "metrics": metrics,
+            "pages": pages,
+            "sources": sources,
+            "countries": countries,
+            "devices": devices,
+            "browsers": browsers,
+            "generated_at": datetime.now().isoformat(),
+        }
+
+        return templates.TemplateResponse("pages/export_report.html", context)
 
     @router.get("/partials/realtime", response_class=HTMLResponse)
     async def realtime_partial(
@@ -874,6 +1507,31 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         context["realtime"] = realtime
 
         return templates.TemplateResponse("partials/realtime_content.html", context)
+
+    @router.get("/partials/activity-feed", response_class=HTMLResponse)
+    async def activity_feed_partial(
+        request: Request,
+        auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
+        event_type: str | None = Query(None, description="Filter by event type"),
+    ):
+        """HTMX partial for activity feed (polled every 5s)."""
+        if not _check_auth(auth):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        active_count, activity = await client.get_activity_feed(
+            minutes=5, event_type=event_type
+        )
+
+        context = {
+            "request": request,
+            "active_count": active_count,
+            "activity": activity,
+            "event_type_filter": event_type or "all",
+        }
+
+        return templates.TemplateResponse(
+            "components/activity_feed.html", context
+        )
 
     # -------------------------------------------------------------------------
     # Export Routes
