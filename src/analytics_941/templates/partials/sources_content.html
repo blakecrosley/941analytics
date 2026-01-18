@@ -1,25 +1,34 @@
 {# Sources tab content - traffic source breakdown #}
+{# Layout: Primary (controls + KPIs) → Secondary (sources breakdown) #}
 
-{% include "components/date_picker.html" %}
+{# ===== PRIMARY ZONE: Controls & KPIs ===== #}
+<div class="analytics-zone-primary">
+    {% include "components/date_picker.html" %}
 
-{% include "components/stats_cards.html" %}
+    {% include "components/stats_cards.html" %}
+</div>
 
-<div class="grid-2">
+{# ===== SECONDARY ZONE: Sources Breakdown ===== #}
+<div class="analytics-zone-secondary">
+<div class="analytics-grid-2">
     {# All Sources #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">All Sources</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">All Sources</span>
+            <div class="analytics-section__actions">
+                {% include "components/export_button.html" with export_type="sources" %}
+            </div>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if sources|length > 0 %}
             {% set max_visits = sources|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Source</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">Visitors</th>
-                        <th class="text-right">Bounce</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">Visitors</th>
+                        <th class="analytics-text-right">Bounce</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -30,24 +39,24 @@
                                hx-get="./partials/sources?source={{ source.source|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?source={{ source.source|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ source.source or 'Direct' }}
                             </a>
-                            <span class="text-muted" style="font-size: 0.75rem; margin-left: 0.5rem;">{{ source.source_type }}</span>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (source.visits / max_visits * 100)|int }}%;"></div>
+                            <span class="analytics-text-muted" style="font-size: 0.75rem; margin-left: 0.5rem;">{{ source.source_type }}</span>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (source.visits / max_visits * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(source.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:,}".format(source.visitors) }}</td>
-                        <td class="text-right table__number">{{ "{:.0f}".format(source.bounce_rate or 0) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(source.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(source.visitors) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.0f}".format(source.bounce_rate or 0) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🔗</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🔗</div>
                 <p>No source data for this period</p>
             </div>
             {% endif %}
@@ -55,19 +64,19 @@
     </div>
 
     {# Source Types #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Source Types</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Source Types</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if source_types|length > 0 %}
             {% set max_type_visits = source_types|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Type</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -79,7 +88,7 @@
                                hx-get="./partials/sources?source_type={{ stype.source_type }}"
                                hx-target="#main-content"
                                hx-push-url="?source_type={{ stype.source_type }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {% if stype.source_type == 'direct' %}🎯
                                 {% elif stype.source_type == 'organic' %}🔍
                                 {% elif stype.source_type == 'social' %}📱
@@ -88,19 +97,19 @@
                                 {% else %}🌐{% endif %}
                                 {{ stype.source_type|capitalize }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (stype.visits / max_type_visits * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (stype.visits / max_type_visits * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(stype.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(stype.visits / total_visits * 100) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(stype.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(stype.visits / total_visits * 100) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📊</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📊</div>
                 <p>No source type data</p>
             </div>
             {% endif %}
@@ -108,20 +117,20 @@
     </div>
 </div>
 
-<div class="grid-2">
+<div class="analytics-grid-2">
     {# UTM Sources #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">UTM Sources</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">UTM Sources</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if utm_sources|length > 0 %}
             {% set max_utm = utm_sources|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>utm_source</th>
-                        <th class="text-right">Visits</th>
+                        <th class="analytics-text-right">Visits</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -132,21 +141,21 @@
                                hx-get="./partials/sources?utm_source={{ utm.utm_source|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?utm_source={{ utm.utm_source|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ utm.utm_source }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (utm.visits / max_utm * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (utm.visits / max_utm * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(utm.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(utm.visits) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🏷️</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🏷️</div>
                 <p>No UTM sources</p>
             </div>
             {% endif %}
@@ -154,18 +163,18 @@
     </div>
 
     {# UTM Campaigns #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">UTM Campaigns</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">UTM Campaigns</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if utm_campaigns|length > 0 %}
             {% set max_campaign = utm_campaigns|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>utm_campaign</th>
-                        <th class="text-right">Visits</th>
+                        <th class="analytics-text-right">Visits</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -176,24 +185,25 @@
                                hx-get="./partials/sources?utm_campaign={{ campaign.utm_campaign|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?utm_campaign={{ campaign.utm_campaign|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ campaign.utm_campaign }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (campaign.visits / max_campaign * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (campaign.visits / max_campaign * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(campaign.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(campaign.visits) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📣</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📣</div>
                 <p>No UTM campaigns</p>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
+</div>{# End analytics-zone-secondary #}

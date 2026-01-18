@@ -1,19 +1,25 @@
 {# Geography tab content - country/region breakdown with lazy-loaded globe #}
+{# Layout: Primary (controls + KPIs) → Globe → Secondary (breakdowns) #}
 
-{% include "components/date_picker.html" %}
+{# ===== PRIMARY ZONE: Controls & KPIs ===== #}
+<div class="analytics-zone-primary">
+    {% include "components/date_picker.html" %}
 
-{% include "components/stats_cards.html" %}
+    {% include "components/stats_cards.html" %}
+</div>
 
+{# ===== SECONDARY ZONE: Globe & Breakdowns ===== #}
+<div class="analytics-zone-secondary">
 {# Lazy-loaded 3D Globe #}
 {% if config.enable_globe %}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">Visitor Globe</span>
-        <button class="btn btn--small" onclick="loadGlobe()">Load 3D Globe</button>
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Visitor Globe</span>
+        <button class="analytics-btn analytics-btn--small" onclick="loadGlobe()">Load 3D Globe</button>
     </div>
-    <div class="section__content">
+    <div class="analytics-section__content">
         <div id="globe-container" style="width: 100%; height: 400px; display: flex; align-items: center; justify-content: center;">
-            <span class="text-muted">Click "Load 3D Globe" to view interactive visualization</span>
+            <span class="analytics-text-muted">Click "Load 3D Globe" to view interactive visualization</span>
         </div>
         <script type="application/json" id="globe-data">{{ globe_data|tojson|safe }}</script>
     </div>
@@ -87,7 +93,7 @@
             container.removeChild(container.firstChild);
         }
         const loadingDiv = document.createElement('div');
-        loadingDiv.className = 'loading';
+        loadingDiv.className = 'analytics-loading';
         loadingDiv.textContent = 'Loading 3D globe...';
         container.appendChild(loadingDiv);
         container.dataset.loaded = 'true';
@@ -127,12 +133,12 @@
 
         // Info text
         const info = document.createElement('p');
-        info.style.cssText = 'color: var(--muted); margin-bottom: 1rem;';
+        info.style.cssText = 'color: var(--941-color-text-muted); margin-bottom: 1rem;';
         info.textContent = 'Showing simplified view for better performance. ';
 
         // Toggle button
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'btn btn--small';
+        toggleBtn.className = 'analytics-btn analytics-btn--small';
         toggleBtn.style.marginLeft = '0.5rem';
         toggleBtn.textContent = 'Try 3D';
         toggleBtn.onclick = toggle3DGlobe;
@@ -147,7 +153,7 @@
         // Add country chips (safe DOM creation, no innerHTML)
         data.countries.slice(0, 10).forEach(function(c) {
             const chip = document.createElement('span');
-            chip.style.cssText = 'background: var(--surface); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem;';
+            chip.style.cssText = 'background: var(--941-color-surface); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem;';
             chip.textContent = c.country_name + ': ' + c.visits.toLocaleString();
             chipContainer.appendChild(chip);
         });
@@ -190,7 +196,7 @@
 
         // Add toggle button using safe DOM methods
         const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'btn btn--small';
+        toggleBtn.className = 'analytics-btn analytics-btn--small';
         toggleBtn.style.cssText = 'position: absolute; top: 0.5rem; right: 0.5rem; z-index: 10;';
         toggleBtn.textContent = 'Use 2D';
         toggleBtn.onclick = function() {
@@ -267,21 +273,24 @@
 </script>
 {% endif %}
 
-<div class="grid-2">
+<div class="analytics-grid-2">
     {# Countries #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Countries</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Countries</span>
+            <div class="analytics-section__actions">
+                {% include "components/export_button.html" with export_type="geography" %}
+            </div>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if countries|length > 0 %}
             {% set max_visits = countries|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Country</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">Visitors</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">Visitors</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -292,22 +301,22 @@
                                hx-get="./partials/geography?country={{ country.country_code }}"
                                hx-target="#main-content"
                                hx-push-url="?country={{ country.country_code }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ country.country_name }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (country.visits / max_visits * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (country.visits / max_visits * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(country.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:,}".format(country.visitors) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(country.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(country.visitors) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🌍</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🌍</div>
                 <p>No geographic data for this period</p>
             </div>
             {% endif %}
@@ -316,17 +325,17 @@
 
     {# Regions (if country filter is active) #}
     {% if filters.country and regions|length > 0 %}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Regions in {{ filters.country }}</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Regions in {{ filters.country }}</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% set max_region_visits = regions|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Region</th>
-                        <th class="text-right">Visits</th>
+                        <th class="analytics-text-right">Visits</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -337,14 +346,14 @@
                                hx-get="./partials/geography?country={{ filters.country }}&region={{ region.region|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?country={{ filters.country }}&region={{ region.region|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ region.region or '(Unknown)' }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (region.visits / max_region_visits * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (region.visits / max_region_visits * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(region.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(region.visits) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -353,13 +362,13 @@
     </div>
     {% elif not filters.country %}
     {# Show map placeholder or world regions summary when no country selected #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Regions</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Regions</span>
         </div>
-        <div class="section__content">
-            <div class="empty">
-                <div class="empty__icon">🗺️</div>
+        <div class="analytics-section__content">
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🗺️</div>
                 <p>Select a country to view regions</p>
             </div>
         </div>
@@ -369,17 +378,17 @@
 
 {# Cities (if region filter is active) #}
 {% if filters.region and cities|length > 0 %}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">Cities in {{ filters.region }}, {{ filters.country }}</span>
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Cities in {{ filters.region }}, {{ filters.country }}</span>
     </div>
-    <div class="section__content section__content--flush">
+    <div class="analytics-section__content analytics-section__content--flush">
         {% set max_city_visits = cities|map(attribute='visits')|max %}
-        <table class="table">
+        <table class="analytics-table">
             <thead>
                 <tr>
                     <th>City</th>
-                    <th class="text-right">Visits</th>
+                    <th class="analytics-text-right">Visits</th>
                 </tr>
             </thead>
             <tbody>
@@ -387,11 +396,11 @@
                 <tr>
                     <td>
                         {{ city.city or '(Unknown)' }}
-                        <div class="table__bar">
-                            <div class="table__bar-fill" style="width: {{ (city.visits / max_city_visits * 100)|int }}%;"></div>
+                        <div class="analytics-table__bar">
+                            <div class="analytics-table__bar-fill" style="width: {{ (city.visits / max_city_visits * 100)|int }}%;"></div>
                         </div>
                     </td>
-                    <td class="text-right table__number">{{ "{:,}".format(city.visits) }}</td>
+                    <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(city.visits) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -399,3 +408,4 @@
     </div>
 </div>
 {% endif %}
+</div>{# End analytics-zone-secondary #}

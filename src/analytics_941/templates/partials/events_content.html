@@ -1,14 +1,17 @@
 {# Events tab content - auto-tracked and custom events #}
+{# Layout: Primary (controls + KPIs) → Secondary (events breakdown) #}
 
-{% include "components/date_picker.html" %}
+{# ===== PRIMARY ZONE: Controls & KPIs ===== #}
+<div class="analytics-zone-primary">
+    {% include "components/date_picker.html" %}
 
-{% include "components/stats_cards.html" %}
+    {% include "components/stats_cards.html" %}
 
-{# Active Filters and Export #}
-<div class="section__header" style="margin-bottom: 1rem;">
+    {# Active Filters and Export #}
+    <div class="analytics-section__header">
     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
         {% if selected_event %}
-        <span class="filter-chip filter-chip--active">
+        <span class="analytics-filter-chip analytics-filter-chip--active">
             Event: {{ selected_event }}
             <a href="?"
                hx-get="./partials/events"
@@ -18,7 +21,7 @@
         </span>
         {% endif %}
         {% if selected_event_type %}
-        <span class="filter-chip filter-chip--active">
+        <span class="analytics-filter-chip analytics-filter-chip--active">
             Type: {{ selected_event_type }}
             <a href="?"
                hx-get="./partials/events"
@@ -28,60 +31,61 @@
         </span>
         {% endif %}
     </div>
-    <a href="./export/events.csv?period={{ period }}" class="btn btn--small" download>
-        📥 Export CSV
-    </a>
-</div>
-
-{# Events Over Time Chart #}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">Events Over Time</span>
+    {% include "components/export_button.html" with export_type="events" %}
     </div>
-    <div class="section__content">
+</div>{# End analytics-zone-primary #}
+
+{# ===== SECONDARY ZONE: Events Breakdown ===== #}
+<div class="analytics-zone-secondary">
+{# Events Over Time Chart #}
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Events Over Time</span>
+    </div>
+    <div class="analytics-section__content">
         {% if events_time_series|length > 0 %}
         {% set max_value = events_time_series|map(attribute='count')|max %}
         {% set max_value = max_value if max_value > 0 else 1 %}
-        <div class="chart">
+        <div class="analytics-chart">
             {% for point in events_time_series %}
             {% set height = (point.count / max_value * 100)|int %}
-            <div class="chart__bar" style="height: {{ height }}%;">
-                <div class="chart__tooltip">
+            <div class="analytics-chart__bar" style="height: {{ height }}%;">
+                <div class="analytics-chart__tooltip">
                     <strong>{{ point.date }}</strong><br>
                     {{ "{:,}".format(point.count) }} events
                 </div>
             </div>
             {% endfor %}
         </div>
-        <div class="chart__labels">
+        <div class="analytics-chart__labels">
             <span>{{ events_time_series[0].date }}</span>
             <span>{{ events_time_series[-1].date }}</span>
         </div>
         {% else %}
-        <div class="empty">
-            <div class="empty__icon">📈</div>
+        <div class="analytics-empty">
+            <div class="analytics-empty__icon">📈</div>
             <p>No events data for time series</p>
         </div>
         {% endif %}
     </div>
 </div>
 
-<div class="grid-2">
+<div class="analytics-grid-2">
     {# All Events with Trends #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Top Events</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Top Events</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if events|length > 0 %}
             {% set max_count = events|map(attribute='count')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Event</th>
                         <th>Type</th>
-                        <th class="text-right">Count</th>
-                        <th class="text-right">Trend</th>
+                        <th class="analytics-text-right">Count</th>
+                        <th class="analytics-text-right">Trend</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -92,28 +96,28 @@
                                hx-get="./partials/events?event={{ event.event_name|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?event={{ event.event_name|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ event.event_name }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (event.count / max_count * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (event.count / max_count * 100)|int }}%;"></div>
                             </div>
                         </td>
                         <td>
-                            <span class="filter-chip" style="font-size: 0.6875rem;">
+                            <span class="analytics-filter-chip" style="font-size: 0.6875rem;">
                                 {% if event.event_type == 'click' %}🖱️{% elif event.event_type == 'scroll' %}📜{% elif event.event_type == 'form' %}📝{% elif event.event_type == 'video' %}🎬{% elif event.event_type == 'error' %}⚠️{% elif event.event_type == 'custom' %}⚙️{% else %}📊{% endif %}
                                 {{ event.event_type }}
                             </span>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(event.count) }}</td>
-                        <td class="text-right table__number">
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(event.count) }}</td>
+                        <td class="analytics-text-right analytics-table__number">
                             {% if event.trend_direction %}
-                            <span class="trend trend--{{ event.trend_direction }}" style="font-size: 0.75rem;">
+                            <span class="analytics-trend analytics-trend--{{ event.trend_direction }}" style="font-size: 0.75rem;">
                                 {% if event.trend_direction == 'up' %}↑{% elif event.trend_direction == 'down' %}↓{% else %}→{% endif %}
                                 {{ "{:.1f}".format(event.trend_percent) }}%
                             </span>
                             {% else %}
-                            <span class="text-muted" style="font-size: 0.75rem;">—</span>
+                            <span class="analytics-text-muted" style="font-size: 0.75rem;">—</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -121,30 +125,30 @@
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📊</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📊</div>
                 <p>No events recorded for this period</p>
-                <p class="text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;">Events are auto-tracked: outbound clicks, downloads, scroll depth, forms, errors</p>
+                <p class="analytics-text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;">Events are auto-tracked: outbound clicks, downloads, scroll depth, forms, errors</p>
             </div>
             {% endif %}
         </div>
     </div>
 
     {# Event Type Breakdown Chart #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Event Type Breakdown</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Event Type Breakdown</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if event_types|length > 0 %}
             {% set total_events = event_types|map(attribute='count')|sum %}
             {% set max_type_count = event_types|map(attribute='count')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Type</th>
-                        <th class="text-right">Count</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Count</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -155,7 +159,7 @@
                                hx-get="./partials/events?event_type={{ etype.event_type }}"
                                hx-target="#main-content"
                                hx-push-url="?event_type={{ etype.event_type }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {% if etype.event_type == 'click' %}🖱️ Clicks
                                 {% elif etype.event_type == 'scroll' %}📜 Scroll
                                 {% elif etype.event_type == 'form' %}📝 Forms
@@ -165,19 +169,19 @@
                                 {% elif etype.event_type == 'custom' %}⚙️ Custom
                                 {% else %}📊 {{ etype.event_type|capitalize }}{% endif %}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (etype.count / max_type_count * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (etype.count / max_type_count * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(etype.count) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(etype.count / total_events * 100) if total_events > 0 else '0.0' }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(etype.count) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(etype.count / total_events * 100) if total_events > 0 else '0.0' }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📊</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📊</div>
                 <p>No event type data</p>
             </div>
             {% endif %}
@@ -187,30 +191,30 @@
 
 {# Event Properties Drill-down (shown when specific event is selected) #}
 {% if selected_event and event_properties|length > 0 %}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">Properties: {{ selected_event }}</span>
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Properties: {{ selected_event }}</span>
         <a href="?"
            hx-get="./partials/events"
            hx-target="#main-content"
            hx-push-url="?"
-           class="btn btn--small">Clear Selection</a>
+           class="analytics-btn analytics-btn--small">Clear Selection</a>
     </div>
-    <div class="section__content">
-        <div class="grid-2">
+    <div class="analytics-section__content">
+        <div class="analytics-grid-2">
             {% for prop in event_properties[:6] %}
             <div style="margin-bottom: 1rem;">
                 <strong style="font-size: 0.875rem;">{{ prop.property }}</strong>
-                <span class="text-muted" style="font-size: 0.75rem;">({{ "{:,}".format(prop.total) }} total)</span>
+                <span class="analytics-text-muted" style="font-size: 0.75rem;">({{ "{:,}".format(prop.total) }} total)</span>
                 <div style="margin-top: 0.5rem;">
                     {% set max_prop_count = prop.values|map(attribute='count')|max %}
                     {% for val in prop.values[:5] %}
                     <div style="display: flex; align-items: center; margin-bottom: 0.25rem; font-size: 0.75rem;">
-                        <span class="truncate" style="flex: 1; max-width: 150px;">{{ val.value }}</span>
-                        <div style="flex: 1; margin: 0 0.5rem; height: 4px; background: var(--border); border-radius: 2px;">
-                            <div style="height: 100%; width: {{ (val.count / max_prop_count * 100)|int }}%; background: var(--primary); border-radius: 2px;"></div>
+                        <span class="analytics-truncate" style="flex: 1; max-width: 150px;">{{ val.value }}</span>
+                        <div style="flex: 1; margin: 0 0.5rem; height: 4px; background: var(--941-color-border); border-radius: 2px;">
+                            <div style="height: 100%; width: {{ (val.count / max_prop_count * 100)|int }}%; background: var(--941-color-primary); border-radius: 2px;"></div>
                         </div>
-                        <span class="table__number" style="min-width: 50px; text-align: right;">{{ "{:,}".format(val.count) }}</span>
+                        <span class="analytics-table__number" style="min-width: 50px; text-align: right;">{{ "{:,}".format(val.count) }}</span>
                     </div>
                     {% endfor %}
                 </div>
@@ -221,20 +225,20 @@
 </div>
 {% endif %}
 
-<div class="grid-2">
+<div class="analytics-grid-2">
     {# Scroll Depth #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Scroll Depth</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Scroll Depth</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if scroll_depth %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Depth</th>
-                        <th class="text-right">Sessions</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Sessions</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -244,19 +248,19 @@
                     <tr>
                         <td>
                             {{ depth }}%
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (count / total_sessions * 100)|int if total_sessions > 0 else 0 }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (count / total_sessions * 100)|int if total_sessions > 0 else 0 }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(count) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(count / total_sessions * 100) if total_sessions > 0 else '0.0' }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(count) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(count / total_sessions * 100) if total_sessions > 0 else '0.0' }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📜</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📜</div>
                 <p>No scroll depth data</p>
             </div>
             {% endif %}
@@ -264,38 +268,38 @@
     </div>
 
     {# Scroll Depth by Page #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Avg Scroll by Page</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Avg Scroll by Page</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if scroll_depth_by_page|length > 0 %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Page</th>
-                        <th class="text-right">Avg</th>
-                        <th class="text-right">Sessions</th>
+                        <th class="analytics-text-right">Avg</th>
+                        <th class="analytics-text-right">Sessions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for page in scroll_depth_by_page %}
                     <tr>
                         <td>
-                            <span class="truncate" style="display: block; max-width: 200px;">{{ page.url }}</span>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ page.avg_depth|int }}%;"></div>
+                            <span class="analytics-truncate" style="display: block; max-width: 200px;">{{ page.url }}</span>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ page.avg_depth|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:.0f}".format(page.avg_depth) }}%</td>
-                        <td class="text-right table__number">{{ "{:,}".format(page.sessions) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.0f}".format(page.avg_depth) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(page.sessions) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📜</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📜</div>
                 <p>No scroll depth per page data</p>
             </div>
             {% endif %}
@@ -304,19 +308,19 @@
 </div>
 
 {# Outbound Clicks #}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">Top Outbound Links</span>
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Top Outbound Links</span>
     </div>
-    <div class="section__content section__content--flush">
+    <div class="analytics-section__content analytics-section__content--flush">
         {% if outbound_clicks|length > 0 %}
         {% set max_clicks = outbound_clicks|map(attribute='clicks')|max %}
-        <table class="table">
+        <table class="analytics-table">
             <thead>
                 <tr>
                     <th>Destination</th>
-                    <th class="text-right">Clicks</th>
-                    <th class="text-right">Sessions</th>
+                    <th class="analytics-text-right">Clicks</th>
+                    <th class="analytics-text-right">Sessions</th>
                 </tr>
             </thead>
             <tbody>
@@ -324,67 +328,67 @@
                 <tr>
                     <td>
                         <a href="{{ link.destination }}" target="_blank" rel="noopener"
-                           style="text-decoration: none; color: var(--muted);">
-                            <span class="truncate" style="display: block; max-width: 400px;">{{ link.destination }}</span>
+                           style="text-decoration: none; color: var(--941-color-text-muted);">
+                            <span class="analytics-truncate" style="display: block; max-width: 400px;">{{ link.destination }}</span>
                         </a>
                         {% if link.link_text %}
-                        <span class="text-muted" style="font-size: 0.6875rem;">{{ link.link_text }}</span>
+                        <span class="analytics-text-muted" style="font-size: 0.6875rem;">{{ link.link_text }}</span>
                         {% endif %}
-                        <div class="table__bar">
-                            <div class="table__bar-fill" style="width: {{ (link.clicks / max_clicks * 100)|int }}%;"></div>
+                        <div class="analytics-table__bar">
+                            <div class="analytics-table__bar-fill" style="width: {{ (link.clicks / max_clicks * 100)|int }}%;"></div>
                         </div>
                     </td>
-                    <td class="text-right table__number">{{ "{:,}".format(link.clicks) }}</td>
-                    <td class="text-right table__number">{{ "{:,}".format(link.sessions) }}</td>
+                    <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(link.clicks) }}</td>
+                    <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(link.sessions) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <div class="empty">
-            <div class="empty__icon">🔗</div>
+        <div class="analytics-empty">
+            <div class="analytics-empty__icon">🔗</div>
             <p>No outbound clicks recorded</p>
         </div>
         {% endif %}
     </div>
 </div>
 
-<div class="grid-2">
+<div class="analytics-grid-2">
     {# File Downloads #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">File Downloads</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">File Downloads</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if file_downloads|length > 0 %}
             {% set max_downloads = file_downloads|map(attribute='downloads')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>File</th>
-                        <th class="text-right">Downloads</th>
+                        <th class="analytics-text-right">Downloads</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for file in file_downloads[:10] %}
                     <tr>
                         <td>
-                            <span class="truncate" style="display: block; max-width: 200px;">
+                            <span class="analytics-truncate" style="display: block; max-width: 200px;">
                                 {% if file.extension == 'pdf' %}📄{% elif file.extension in ['zip', 'rar', '7z', 'gz', 'tar'] %}📦{% elif file.extension in ['doc', 'docx'] %}📝{% elif file.extension in ['xls', 'xlsx', 'csv'] %}📊{% elif file.extension in ['mp3', 'mp4', 'avi', 'mov'] %}🎬{% else %}📁{% endif %}
                                 {{ file.filename }}
                             </span>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (file.downloads / max_downloads * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (file.downloads / max_downloads * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(file.downloads) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(file.downloads) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📥</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📥</div>
                 <p>No file downloads recorded</p>
             </div>
             {% endif %}
@@ -392,40 +396,40 @@
     </div>
 
     {# Form Submissions #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Form Submissions</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Form Submissions</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if form_submissions|length > 0 %}
             {% set max_submissions = form_submissions|map(attribute='submissions')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Form</th>
-                        <th class="text-right">Submissions</th>
+                        <th class="analytics-text-right">Submissions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for form in form_submissions[:10] %}
                     <tr>
                         <td>
-                            <span class="truncate" style="display: block; max-width: 200px;">
+                            <span class="analytics-truncate" style="display: block; max-width: 200px;">
                                 {{ form.form_id or form.form_name or '(unnamed)' }}
                             </span>
-                            <span class="filter-chip" style="font-size: 0.6875rem;">{{ form.method }}</span>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (form.submissions / max_submissions * 100)|int }}%;"></div>
+                            <span class="analytics-filter-chip" style="font-size: 0.6875rem;">{{ form.method }}</span>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (form.submissions / max_submissions * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(form.submissions) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(form.submissions) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📝</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📝</div>
                 <p>No form submissions</p>
             </div>
             {% endif %}
@@ -434,47 +438,48 @@
 </div>
 
 {# JavaScript Errors #}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">JavaScript Errors</span>
+<div class="analytics-section">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">JavaScript Errors</span>
     </div>
-    <div class="section__content section__content--flush">
+    <div class="analytics-section__content analytics-section__content--flush">
         {% if js_errors|length > 0 %}
         {% set max_errors = js_errors|map(attribute='error_count')|max %}
-        <table class="table">
+        <table class="analytics-table">
             <thead>
                 <tr>
                     <th>Error Message</th>
-                    <th class="text-right">Count</th>
-                    <th class="text-right">Sessions</th>
+                    <th class="analytics-text-right">Count</th>
+                    <th class="analytics-text-right">Sessions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for error in js_errors[:10] %}
                 <tr>
                     <td>
-                        <span class="truncate" style="display: block; max-width: 400px; color: var(--danger, #dc3545);">
+                        <span class="analytics-truncate" style="display: block; max-width: 400px; color: var(--941-color-danger, #dc3545);">
                             {{ error.message }}
                         </span>
                         {% if error.source %}
-                        <span class="text-muted" style="font-size: 0.6875rem;">{{ error.source }}</span>
+                        <span class="analytics-text-muted" style="font-size: 0.6875rem;">{{ error.source }}</span>
                         {% endif %}
-                        <div class="table__bar">
-                            <div class="table__bar-fill" style="width: {{ (error.error_count / max_errors * 100)|int }}%; background: var(--danger, #dc3545);"></div>
+                        <div class="analytics-table__bar">
+                            <div class="analytics-table__bar-fill" style="width: {{ (error.error_count / max_errors * 100)|int }}%; background: var(--941-color-danger, #dc3545);"></div>
                         </div>
                     </td>
-                    <td class="text-right table__number">{{ "{:,}".format(error.error_count) }}</td>
-                    <td class="text-right table__number">{{ "{:,}".format(error.sessions) }}</td>
+                    <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(error.error_count) }}</td>
+                    <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(error.sessions) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <div class="empty">
-            <div class="empty__icon">✅</div>
+        <div class="analytics-empty">
+            <div class="analytics-empty__icon">✅</div>
             <p>No JavaScript errors recorded</p>
-            <p class="text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;">Errors are rate-limited to 10 per page load</p>
+            <p class="analytics-text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;">Errors are rate-limited to 10 per page load</p>
         </div>
         {% endif %}
     </div>
 </div>
+</div>{# End analytics-zone-secondary #}

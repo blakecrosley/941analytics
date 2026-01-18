@@ -1,23 +1,29 @@
 {# Technology tab content - device/browser/OS breakdown #}
+{# Layout: Primary (controls + KPIs) → Secondary (tech breakdown) #}
 
-{% include "components/date_picker.html" %}
+{# ===== PRIMARY ZONE: Controls & KPIs ===== #}
+<div class="analytics-zone-primary">
+    {% include "components/date_picker.html" %}
 
-{% include "components/stats_cards.html" %}
+    {% include "components/stats_cards.html" %}
+</div>
 
-<div class="grid-3">
+{# ===== SECONDARY ZONE: Technology Breakdown ===== #}
+<div class="analytics-zone-secondary">
+<div class="analytics-grid-3">
     {# Devices #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Devices</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Devices</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if devices|length > 0 %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Device</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -28,23 +34,23 @@
                                hx-get="./partials/technology?device={{ device.device_type }}"
                                hx-target="#main-content"
                                hx-push-url="?device={{ device.device_type }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {% if device.device_type == 'desktop' %}💻{% elif device.device_type == 'mobile' %}📱{% else %}📟{% endif %}
                                 {{ device.device_type|capitalize }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ device.percentage|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ device.percentage|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(device.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(device.percentage) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(device.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(device.percentage) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📱</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📱</div>
                 <p>No device data</p>
             </div>
             {% endif %}
@@ -52,18 +58,18 @@
     </div>
 
     {# Browsers #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Browsers</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Browsers</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if browsers|length > 0 %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Browser</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -74,22 +80,22 @@
                                hx-get="./partials/technology?browser={{ browser.browser|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?browser={{ browser.browser|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ browser.browser }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ browser.percentage|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ browser.percentage|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(browser.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(browser.percentage) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(browser.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(browser.percentage) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🌐</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🌐</div>
                 <p>No browser data</p>
             </div>
             {% endif %}
@@ -97,19 +103,19 @@
     </div>
 
     {# Operating Systems #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Operating Systems</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Operating Systems</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if operating_systems|length > 0 %}
             {% set total_os = operating_systems|map(attribute='visits')|sum %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>OS</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -120,23 +126,23 @@
                                hx-get="./partials/technology?os={{ os.os|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?os={{ os.os|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {% if 'Windows' in os.os %}🪟{% elif 'Mac' in os.os or 'iOS' in os.os %}🍎{% elif 'Android' in os.os %}🤖{% elif 'Linux' in os.os %}🐧{% else %}💻{% endif %}
                                 {{ os.os }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (os.visits / total_os * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (os.visits / total_os * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(os.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(os.visits / total_os * 100) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(os.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(os.visits / total_os * 100) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🖥️</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🖥️</div>
                 <p>No OS data</p>
             </div>
             {% endif %}
@@ -144,21 +150,21 @@
     </div>
 </div>
 
-<div class="grid-2">
+<div class="analytics-grid-2">
     {# Screen Sizes #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Screen Sizes</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Screen Sizes</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if screen_sizes|length > 0 %}
             {% set total_screens = screen_sizes|map(attribute='visits')|sum %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Resolution</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -166,19 +172,19 @@
                     <tr>
                         <td>
                             {{ screen.resolution }}
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (screen.visits / total_screens * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (screen.visits / total_screens * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(screen.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(screen.visits / total_screens * 100) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(screen.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(screen.visits / total_screens * 100) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📐</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📐</div>
                 <p>No screen size data</p>
             </div>
             {% endif %}
@@ -186,19 +192,19 @@
     </div>
 
     {# Languages #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Languages</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Languages</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if languages|length > 0 %}
             {% set total_langs = languages|map(attribute='visits')|sum %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Language</th>
-                        <th class="text-right">Visits</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">Visits</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -206,22 +212,23 @@
                     <tr>
                         <td>
                             {{ lang.language }}
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (lang.visits / total_langs * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (lang.visits / total_langs * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(lang.visits) }}</td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(lang.visits / total_langs * 100) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(lang.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(lang.visits / total_langs * 100) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🌍</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🌍</div>
                 <p>No language data</p>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
+</div>{# End analytics-zone-secondary #}

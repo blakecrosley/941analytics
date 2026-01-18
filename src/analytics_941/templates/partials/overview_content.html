@@ -1,27 +1,36 @@
 {# Overview tab content - loaded via HTMX or full page #}
+{# Layout: Primary (KPIs + Chart) → Secondary (Top Content) → Detail (Breakdowns) #}
 
-{% include "components/date_picker.html" %}
+{# ===== PRIMARY ZONE: Controls, KPIs, Main Chart ===== #}
+<div class="analytics-zone-primary">
+    {% include "components/date_picker.html" %}
 
-{% include "components/stats_cards.html" %}
+    {% include "components/stats_cards.html" %}
 
-{% include "components/chart.html" %}
+    {% include "components/chart.html" %}
+</div>
 
-<div class="grid-2">
+{# ===== SECONDARY ZONE: Top Content Insights ===== #}
+<div class="analytics-zone-secondary">
+<div class="analytics-grid-2">
     {# Top Pages #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Top Pages</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Top Pages</span>
+            <div class="analytics-section__actions">
+                {% include "components/export_button.html" with export_type="pages" %}
+            </div>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if top_pages|length > 0 %}
             {% set max_views = top_pages|map(attribute='views')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Page</th>
-                        <th class="text-right">Views</th>
-                        <th class="text-right">Visitors</th>
-                        <th class="text-right">Bounce</th>
+                        <th class="analytics-text-right">Views</th>
+                        <th class="analytics-text-right">Visitors</th>
+                        <th class="analytics-text-right">Bounce</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -32,23 +41,23 @@
                                hx-get="./partials/overview?page={{ page.url|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?page={{ page.url|urlencode }}"
-                               class="truncate" style="display: block; max-width: 300px; text-decoration: none; color: var(--muted);">
+                               class="analytics-truncate" style="display: block; max-width: 300px; text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ page.url }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (page.views / max_views * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (page.views / max_views * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(page.views) }}</td>
-                        <td class="text-right table__number">{{ "{:,}".format(page.visitors) }}</td>
-                        <td class="text-right table__number">{% if page.bounce_rate is not none %}{{ "{:.0f}".format(page.bounce_rate) }}%{% else %}—{% endif %}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(page.views) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(page.visitors) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{% if page.bounce_rate is not none %}{{ "{:.0f}".format(page.bounce_rate) }}%{% else %}—{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📄</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📄</div>
                 <p>No pageviews recorded</p>
             </div>
             {% endif %}
@@ -56,19 +65,22 @@
     </div>
 
     {# Top Sources #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Top Sources</span>
-            <a href="./sources" class="btn btn--small" hx-get="./partials/sources" hx-target="#main-content" hx-push-url="./sources">View All</a>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Top Sources</span>
+            <div class="analytics-section__actions">
+                {% include "components/export_button.html" with export_type="sources" %}
+                <a href="./sources" class="analytics-btn analytics-btn--small" hx-get="./partials/sources" hx-target="#main-content" hx-push-url="./sources">View All</a>
+            </div>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if sources|length > 0 %}
             {% set max_visits = sources|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Source</th>
-                        <th class="text-right">Visits</th>
+                        <th class="analytics-text-right">Visits</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -79,22 +91,22 @@
                                hx-get="./partials/overview?source={{ source.source|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?source={{ source.source|urlencode }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ source.source or 'Direct' }}
                             </a>
-                            <span class="text-muted" style="font-size: 0.75rem; margin-left: 0.5rem;">{{ source.source_type }}</span>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (source.visits / max_visits * 100)|int }}%;"></div>
+                            <span class="analytics-text-muted" style="font-size: 0.75rem; margin-left: 0.5rem;">{{ source.source_type }}</span>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (source.visits / max_visits * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(source.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(source.visits) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🔗</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🔗</div>
                 <p>No sources recorded</p>
             </div>
             {% endif %}
@@ -102,21 +114,21 @@
     </div>
 </div>
 
-<div class="grid-2">
+<div class="analytics-grid-2">
     {# Entry Pages #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Entry Pages</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Entry Pages</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if entry_pages|length > 0 %}
             {% set max_entries = entry_pages|map(attribute='entries')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Page</th>
-                        <th class="text-right">Sessions</th>
-                        <th class="text-right">Bounce</th>
+                        <th class="analytics-text-right">Sessions</th>
+                        <th class="analytics-text-right">Bounce</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -127,22 +139,22 @@
                                hx-get="./partials/overview?page={{ page.url|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?page={{ page.url|urlencode }}"
-                               class="truncate" style="display: block; max-width: 250px; text-decoration: none; color: var(--muted);">
+                               class="analytics-truncate" style="display: block; max-width: 250px; text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ page.url }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (page.entries / max_entries * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (page.entries / max_entries * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(page.entries) }}</td>
-                        <td class="text-right table__number">{% if page.bounce_rate is not none %}{{ "{:.0f}".format(page.bounce_rate) }}%{% else %}—{% endif %}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(page.entries) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{% if page.bounce_rate is not none %}{{ "{:.0f}".format(page.bounce_rate) }}%{% else %}—{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🚪</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🚪</div>
                 <p>No entry pages recorded</p>
             </div>
             {% endif %}
@@ -150,19 +162,19 @@
     </div>
 
     {# Exit Pages #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Exit Pages</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Exit Pages</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if exit_pages|length > 0 %}
             {% set max_exits = exit_pages|map(attribute='exits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Page</th>
-                        <th class="text-right">Exits</th>
-                        <th class="text-right">Exit %</th>
+                        <th class="analytics-text-right">Exits</th>
+                        <th class="analytics-text-right">Exit %</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -173,88 +185,94 @@
                                hx-get="./partials/overview?page={{ page.url|urlencode }}"
                                hx-target="#main-content"
                                hx-push-url="?page={{ page.url|urlencode }}"
-                               class="truncate" style="display: block; max-width: 250px; text-decoration: none; color: var(--muted);">
+                               class="analytics-truncate" style="display: block; max-width: 250px; text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ page.url }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (page.exits / max_exits * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (page.exits / max_exits * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(page.exits) }}</td>
-                        <td class="text-right table__number">{% if page.exit_rate is not none %}{{ "{:.0f}".format(page.exit_rate) }}%{% else %}—{% endif %}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(page.exits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{% if page.exit_rate is not none %}{{ "{:.0f}".format(page.exit_rate) }}%{% else %}—{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🚶</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🚶</div>
                 <p>No exit pages recorded</p>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
+</div>{# End analytics-zone-secondary #}
 
+{# ===== DETAIL ZONE: Flow Analysis & Breakdowns ===== #}
+<div class="analytics-zone-detail">
 {# Entry → Exit Flow #}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">Page Flow (Entry → Exit)</span>
+<div class="analytics-section analytics-section--standalone">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Page Flow (Entry → Exit)</span>
     </div>
-    <div class="section__content section__content--flush">
+    <div class="analytics-section__content analytics-section__content--flush">
         {% if entry_exit_flow|length > 0 %}
         {% set max_flow = entry_exit_flow|map(attribute='sessions')|max %}
-        <table class="table">
+        <table class="analytics-table">
             <thead>
                 <tr>
                     <th>Entry Page</th>
                     <th style="width: 40px; text-align: center;">→</th>
                     <th>Exit Page</th>
-                    <th class="text-right">Sessions</th>
+                    <th class="analytics-text-right">Sessions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for flow in entry_exit_flow[:10] %}
                 <tr>
                     <td>
-                        <span class="truncate" style="display: block; max-width: 200px;">{{ flow.entry_page }}</span>
+                        <span class="analytics-truncate" style="display: block; max-width: 200px;">{{ flow.entry_page }}</span>
                     </td>
-                    <td style="text-align: center; color: var(--muted);">→</td>
+                    <td style="text-align: center; color: var(--941-color-text-muted);">→</td>
                     <td>
-                        <span class="truncate" style="display: block; max-width: 200px;">{{ flow.exit_page }}</span>
-                        <div class="table__bar">
-                            <div class="table__bar-fill" style="width: {{ (flow.sessions / max_flow * 100)|int }}%;"></div>
+                        <span class="analytics-truncate" style="display: block; max-width: 200px;">{{ flow.exit_page }}</span>
+                        <div class="analytics-table__bar">
+                            <div class="analytics-table__bar-fill" style="width: {{ (flow.sessions / max_flow * 100)|int }}%;"></div>
                         </div>
                     </td>
-                    <td class="text-right table__number">{{ "{:,}".format(flow.sessions) }}</td>
+                    <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(flow.sessions) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <div class="empty">
-            <div class="empty__icon">🔄</div>
+        <div class="analytics-empty">
+            <div class="analytics-empty__icon">🔄</div>
             <p>No page flow data</p>
         </div>
         {% endif %}
     </div>
 </div>
 
-<div class="grid-3">
+<div class="analytics-grid-3">
     {# Countries #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Countries</span>
-            <a href="./geography" class="btn btn--small" hx-get="./partials/geography" hx-target="#main-content" hx-push-url="./geography">View All</a>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Countries</span>
+            <div class="analytics-section__actions">
+                {% include "components/export_button.html" with export_type="geography" %}
+                <a href="./geography" class="analytics-btn analytics-btn--small" hx-get="./partials/geography" hx-target="#main-content" hx-push-url="./geography">View All</a>
+            </div>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if countries|length > 0 %}
             {% set max_country_visits = countries|map(attribute='visits')|max %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Country</th>
-                        <th class="text-right">Visits</th>
+                        <th class="analytics-text-right">Visits</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -265,21 +283,21 @@
                                hx-get="./partials/overview?country={{ country.country_code }}"
                                hx-target="#main-content"
                                hx-push-url="?country={{ country.country_code }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ country.country_name }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ (country.visits / max_country_visits * 100)|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ (country.visits / max_country_visits * 100)|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:,}".format(country.visits) }}</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(country.visits) }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🌍</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🌍</div>
                 <p>No geographic data</p>
             </div>
             {% endif %}
@@ -287,17 +305,17 @@
     </div>
 
     {# Devices #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Devices</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Devices</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if devices|length > 0 %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Device</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -308,22 +326,22 @@
                                hx-get="./partials/overview?device={{ device.device_type }}"
                                hx-target="#main-content"
                                hx-push-url="?device={{ device.device_type }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {% if device.device_type == 'desktop' %}💻{% elif device.device_type == 'mobile' %}📱{% else %}📟{% endif %}
                                 {{ device.device_type|capitalize }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ device.percentage|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ device.percentage|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(device.percentage) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(device.percentage) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">📱</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">📱</div>
                 <p>No device data</p>
             </div>
             {% endif %}
@@ -331,17 +349,17 @@
     </div>
 
     {# Browsers #}
-    <div class="section">
-        <div class="section__header">
-            <span class="section__title">Browsers</span>
+    <div class="analytics-section">
+        <div class="analytics-section__header">
+            <span class="analytics-section__title">Browsers</span>
         </div>
-        <div class="section__content section__content--flush">
+        <div class="analytics-section__content analytics-section__content--flush">
             {% if browsers|length > 0 %}
-            <table class="table">
+            <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Browser</th>
-                        <th class="text-right">%</th>
+                        <th class="analytics-text-right">%</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -352,24 +370,25 @@
                                hx-get="./partials/overview?browser={{ browser.browser }}"
                                hx-target="#main-content"
                                hx-push-url="?browser={{ browser.browser }}"
-                               style="text-decoration: none; color: var(--muted);">
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
                                 {{ browser.browser }}
                             </a>
-                            <div class="table__bar">
-                                <div class="table__bar-fill" style="width: {{ browser.percentage|int }}%;"></div>
+                            <div class="analytics-table__bar">
+                                <div class="analytics-table__bar-fill" style="width: {{ browser.percentage|int }}%;"></div>
                             </div>
                         </td>
-                        <td class="text-right table__number">{{ "{:.1f}".format(browser.percentage) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(browser.percentage) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">
-                <div class="empty__icon">🌐</div>
+            <div class="analytics-empty">
+                <div class="analytics-empty__icon">🌐</div>
                 <p>No browser data</p>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
+</div>{# End analytics-zone-detail #}
