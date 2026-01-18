@@ -6,15 +6,18 @@ Uses Jinja2 templates for rendering, supports HTMX partial loading.
 
 import hashlib
 import secrets
+import time
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from threading import Lock
 from typing import Optional
 
 from fastapi import APIRouter, Request, Response, Cookie, Query, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from ..config import AnalyticsConfig
+from ..config import AnalyticsConfig, verify_passkey
 from ..core.client import AnalyticsClient
 from ..core.models import DashboardFilters, DateRange
 
@@ -22,6 +25,70 @@ from ..core.models import DashboardFilters, DateRange
 # Auth constants
 AUTH_COOKIE_NAME = "analytics_auth"
 AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+
+# Rate limiting constants (sec-2)
+RATE_LIMIT_MAX_ATTEMPTS = 5
+RATE_LIMIT_WINDOW_SEC = 15 * 60  # 15 minutes
+
+
+class LoginRateLimiter:
+    """In-memory rate limiter for login attempts.
+
+    Uses hashed IP addresses for privacy. Thread-safe.
+    """
+
+    def __init__(self, max_attempts: int = RATE_LIMIT_MAX_ATTEMPTS, window_sec: int = RATE_LIMIT_WINDOW_SEC):
+        self.max_attempts = max_attempts
+        self.window_sec = window_sec
+        self._attempts: dict[str, list[float]] = defaultdict(list)
+        self._lock = Lock()
+
+    def _hash_ip(self, ip: str, salt: str) -> str:
+        """Hash IP with salt for privacy (no raw IPs stored)."""
+        return hashlib.sha256(f"{salt}:{ip}".encode()).hexdigest()[:16]
+
+    def _cleanup(self, key: str, now: float) -> None:
+        """Remove expired attempts."""
+        cutoff = now - self.window_sec
+        self._attempts[key] = [t for t in self._attempts[key] if t > cutoff]
+
+    def is_rate_limited(self, ip: str, salt: str) -> bool:
+        """Check if IP is rate limited."""
+        key = self._hash_ip(ip, salt)
+        now = time.time()
+
+        with self._lock:
+            self._cleanup(key, now)
+            return len(self._attempts[key]) >= self.max_attempts
+
+    def record_attempt(self, ip: str, salt: str) -> None:
+        """Record a login attempt."""
+        key = self._hash_ip(ip, salt)
+        now = time.time()
+
+        with self._lock:
+            self._cleanup(key, now)
+            self._attempts[key].append(now)
+
+    def clear(self, ip: str, salt: str) -> None:
+        """Clear rate limit for IP (on successful login)."""
+        key = self._hash_ip(ip, salt)
+
+        with self._lock:
+            self._attempts.pop(key, None)
+
+    def get_remaining_attempts(self, ip: str, salt: str) -> int:
+        """Get remaining attempts before rate limit."""
+        key = self._hash_ip(ip, salt)
+        now = time.time()
+
+        with self._lock:
+            self._cleanup(key, now)
+            return max(0, self.max_attempts - len(self._attempts[key]))
+
+
+# Global rate limiter instance
+_login_rate_limiter = LoginRateLimiter()
 
 
 def _hash_passkey(passkey: str, site_name: str) -> str:
@@ -245,8 +312,26 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         response: Response,
         passkey: str = Form(...),
     ):
-        """Handle passkey login."""
-        if config.passkey and passkey == config.passkey:
+        """Handle passkey login with rate limiting (sec-2)."""
+        # Get client IP (use X-Forwarded-For if behind proxy)
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        if not client_ip:
+            client_ip = request.client.host if request.client else "unknown"
+
+        # Check rate limit before processing
+        if _login_rate_limiter.is_rate_limited(client_ip, config.site_name):
+            raise HTTPException(
+                status_code=429,
+                detail="Too many login attempts. Please try again in 15 minutes."
+            )
+
+        # Record this attempt
+        _login_rate_limiter.record_attempt(client_ip, config.site_name)
+
+        if config.passkey and verify_passkey(config.passkey, passkey):
+            # Clear rate limit on successful login (sec-2)
+            _login_rate_limiter.clear(client_ip, config.site_name)
+
             response = RedirectResponse(url="./", status_code=303)
             response.set_cookie(
                 AUTH_COOKIE_NAME,

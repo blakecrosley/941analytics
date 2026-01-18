@@ -22,7 +22,9 @@ interface Env {
   DB: D1Database;
   ANALYTICS_SECRET: string;
   ALLOWED_ORIGINS?: string; // Comma-separated list of allowed origins
+  ALLOWED_SITES?: string; // Comma-separated list of valid site identifiers
   RATE_LIMIT_KV?: KVNamespace; // Optional KV for rate limiting
+  LOGIN_RATE_LIMIT_KV?: KVNamespace; // KV for login rate limiting
 }
 
 interface PageViewData {
@@ -1052,6 +1054,19 @@ export default {
       // Validate required fields
       if (!data.site || !data.url) {
         return new Response("Missing required fields", { status: 400 });
+      }
+
+      // Validate site against allowlist (sec-1: strict site validation)
+      const allowedSites = (env.ALLOWED_SITES || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      if (allowedSites.length > 0) {
+        const siteNormalized = data.site.toLowerCase();
+        const isValidSite = allowedSites.some((allowed) =>
+          siteNormalized === allowed || siteNormalized.endsWith("." + allowed)
+        );
+        if (!isValidSite) {
+          console.log(`[SECURITY] Rejected invalid site: ${data.site}`);
+          return new Response("Invalid site", { status: 400 });
+        }
       }
 
       // Filter development/local traffic (don't pollute analytics with dev pageviews)

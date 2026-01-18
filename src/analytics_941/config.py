@@ -1,8 +1,56 @@
 """
 Configuration for 941 Analytics.
 """
+import hashlib
+import os
+import secrets
 from dataclasses import dataclass, field
 from typing import Optional
+
+
+def hash_passkey(passkey: str) -> str:
+    """Hash a passkey using PBKDF2-SHA256 (sec-3).
+
+    Returns a string in format: pbkdf2:iterations:salt_hex:hash_hex
+
+    Use this function to generate a hashed passkey for the config:
+
+        from analytics_941.config import hash_passkey
+        print(hash_passkey("your-secret-passkey"))
+
+    Then use the output as the passkey value in your config.
+    Legacy plaintext passkeys are still supported but deprecated.
+    """
+    salt = os.urandom(16)
+    iterations = 100_000
+    dk = hashlib.pbkdf2_hmac("sha256", passkey.encode(), salt, iterations)
+    return f"pbkdf2:{iterations}:{salt.hex()}:{dk.hex()}"
+
+
+def verify_passkey(stored: str, provided: str) -> bool:
+    """Verify a passkey using timing-safe comparison (sec-3).
+
+    Handles both hashed (pbkdf2:...) and legacy plaintext passkeys.
+    """
+    if stored.startswith("pbkdf2:"):
+        # Hashed passkey
+        try:
+            _, iterations_str, salt_hex, hash_hex = stored.split(":")
+            iterations = int(iterations_str)
+            salt = bytes.fromhex(salt_hex)
+            expected_hash = bytes.fromhex(hash_hex)
+
+            # Compute hash of provided passkey
+            dk = hashlib.pbkdf2_hmac("sha256", provided.encode(), salt, iterations)
+
+            # Timing-safe comparison
+            return secrets.compare_digest(dk, expected_hash)
+        except (ValueError, TypeError):
+            return False
+    else:
+        # Legacy plaintext passkey - use timing-safe comparison
+        # Note: This is less secure but maintains backward compatibility
+        return secrets.compare_digest(stored.encode(), provided.encode())
 
 
 @dataclass

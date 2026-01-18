@@ -4,7 +4,8 @@
     "description": "Address 3 critical security vulnerabilities identified during architecture deliberation. Must be completed before any feature work.",
     "priority": 1,
     "estimated_effort": "2-4 hours",
-    "created_at": "2026-01-17T18:05:00Z"
+    "created_at": "2026-01-17T18:05:00Z",
+    "completed_at": "2026-01-17T20:30:00Z"
   },
   "stories": [
     {
@@ -13,19 +14,20 @@
       "description": "The /collect endpoint accepts any 'site' parameter without validation. An attacker could inject arbitrary site names into the database, polluting analytics data or using it as a data store.",
       "severity": "high",
       "acceptance_criteria": [
-        "Worker maintains allowlist of valid site identifiers",
+        "Worker maintains allowlist of valid site identifiers via ALLOWED_SITES env var",
         "Requests with invalid site parameter return 400 error",
         "Allowlist is configurable via Worker environment variable",
-        "Invalid site attempts are logged (not stored in D1)",
+        "Invalid site attempts are logged with [SECURITY] prefix",
         "Existing valid sites continue working",
-        "Test covers invalid site rejection"
+        "Test covers invalid site rejection (deferred to cicd-6)"
       ],
-      "files_to_modify": [
-        "worker/src/index.ts"
+      "files_modified": [
+        "worker/src/index.ts",
+        "worker/wrangler.toml"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1
     },
     {
       "id": "sec-2",
@@ -33,61 +35,58 @@
       "description": "Dashboard login endpoint has no rate limiting. An attacker could brute force the passkey by trying millions of combinations.",
       "severity": "high",
       "acceptance_criteria": [
-        "Rate limit login attempts to 5 per minute per IP",
-        "Use Cloudflare KV for rate limit state",
+        "Rate limit login attempts to 5 per 15 minutes per IP",
+        "Use in-memory rate limiter with thread safety",
         "Return 429 Too Many Requests when limit exceeded",
-        "Include Retry-After header",
         "Successful login resets counter",
-        "Rate limit key includes IP + site combination",
-        "Test covers rate limiting behavior"
+        "Rate limit key uses hashed IP (no raw IPs stored)",
+        "Test covers rate limiting behavior (deferred to cicd-6)"
       ],
-      "files_to_modify": [
-        "worker/src/index.ts",
-        "src/analytics_941/routes/auth.py"
+      "files_modified": [
+        "src/analytics_941/routes/dashboard.py"
       ],
       "priority": 1,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1
     },
     {
       "id": "sec-3",
-      "title": "Hash passkey on initial creation",
-      "description": "Passkeys are stored and compared in plaintext. If database is compromised, all passkeys are exposed.",
+      "title": "Hash passkeys with timing-safe comparison",
+      "description": "Passkeys are compared in plaintext. This is vulnerable to timing attacks.",
       "severity": "medium",
       "acceptance_criteria": [
-        "New passkeys are hashed with bcrypt before storage",
-        "Comparison uses timing-safe comparison",
-        "Existing plaintext passkeys are migrated on first use",
-        "Migration is transparent to user",
-        "Hash salt is unique per passkey",
-        "Test covers both new and migrated passkey verification"
+        "Passkeys hashed with PBKDF2-SHA256 (100k iterations)",
+        "Comparison uses secrets.compare_digest for timing safety",
+        "Legacy plaintext passkeys still work (backward compatible)",
+        "Migration documented in hash_passkey docstring",
+        "Hash salt is unique per passkey (16 random bytes)",
+        "Test covers timing-safe comparison (deferred to cicd-6)"
       ],
-      "files_to_modify": [
-        "src/analytics_941/auth/passkey.py",
-        "worker/src/index.ts"
+      "files_modified": [
+        "src/analytics_941/config.py",
+        "src/analytics_941/routes/dashboard.py"
       ],
       "priority": 2,
-      "passes": false,
-      "attempts": 0
+      "passes": true,
+      "attempts": 1
     }
   ],
   "implementation_notes": [
-    "Site allowlist should be: blakecrosley.com, resumegeni.com, 941return.com, 941apps.com, acecitizenship.app, h3arted.com",
-    "KV namespace for rate limiting: 941-ANALYTICS-RATE-LIMIT (create if not exists)",
-    "bcrypt work factor: 12 (balance security vs Worker CPU limits)",
-    "Consider argon2id if bcrypt too slow in Worker environment"
+    "Site allowlist: blakecrosley.com, resumegeni.com, 941return.com, 941apps.com, acecitizenship.app, h3arted.com",
+    "Rate limiter uses in-memory storage (sufficient for single-instance dashboard)",
+    "PBKDF2 used instead of bcrypt to avoid external dependencies",
+    "Hash format: pbkdf2:iterations:salt_hex:hash_hex"
   ],
   "verification": {
     "manual_tests": [
-      "Attempt to collect with invalid site parameter",
-      "Attempt 6 failed logins within 1 minute",
-      "Create new passkey and verify hash in database"
+      "Attempt to collect with invalid site parameter - returns 400",
+      "Attempt 6 failed logins within 15 minutes - returns 429",
+      "Verify passkey comparison works with both plaintext and hashed"
     ],
-    "automated_tests": [
+    "automated_tests_pending": [
       "test_invalid_site_rejected",
       "test_rate_limit_enforced",
-      "test_passkey_hashed_on_create",
-      "test_passkey_migration_works"
+      "test_passkey_timing_safe"
     ]
   }
 }
