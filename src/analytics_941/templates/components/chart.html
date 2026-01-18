@@ -1,29 +1,43 @@
-{# Time series chart component - displays visitors/views/sessions over time #}
-<div class="section">
-    <div class="section__header">
-        <span class="section__title">Traffic Over Time</span>
-        <div class="controls__group">
-            <button class="btn btn--small{% if chart_metric == 'visitors' %} active{% endif %}"
+{# Time series chart component - primary area chart with smooth curves #}
+<div class="analytics-section analytics-section--primary"
+     x-data="{ activeMetric: '{{ chart_metric|default('visitors') }}' }">
+    <div class="analytics-section__header">
+        <span class="analytics-section__title">Traffic Over Time</span>
+        <div class="analytics-chart-toggles">
+            <button class="analytics-chart-toggle"
+                    :class="{ 'analytics-chart-toggle--active': activeMetric === 'visitors' }"
+                    @click="activeMetric = 'visitors'"
                     hx-get="./partials/chart?metric=visitors"
                     hx-target="#chart-container"
-                    hx-swap="innerHTML">
+                    hx-swap="innerHTML"
+                    hx-indicator="#chart-loading">
                 Visitors
             </button>
-            <button class="btn btn--small{% if chart_metric == 'views' %} active{% endif %}"
+            <button class="analytics-chart-toggle"
+                    :class="{ 'analytics-chart-toggle--active': activeMetric === 'views' }"
+                    @click="activeMetric = 'views'"
                     hx-get="./partials/chart?metric=views"
                     hx-target="#chart-container"
-                    hx-swap="innerHTML">
+                    hx-swap="innerHTML"
+                    hx-indicator="#chart-loading">
                 Views
             </button>
-            <button class="btn btn--small{% if chart_metric == 'sessions' %} active{% endif %}"
+            <button class="analytics-chart-toggle"
+                    :class="{ 'analytics-chart-toggle--active': activeMetric === 'sessions' }"
+                    @click="activeMetric = 'sessions'"
                     hx-get="./partials/chart?metric=sessions"
                     hx-target="#chart-container"
-                    hx-swap="innerHTML">
+                    hx-swap="innerHTML"
+                    hx-indicator="#chart-loading">
                 Sessions
             </button>
         </div>
     </div>
-    <div class="section__content" id="chart-container">
-        {% include "components/chart_bars.html" %}
+    <div class="analytics-section__content" id="chart-container">
+        {# Loading indicator #}
+        <div id="chart-loading" class="analytics-chart-loading htmx-indicator">
+            <div class="analytics-spinner"></div>
+        </div>
+        {% include "components/chart_area.html" %}
     </div>
 </div>

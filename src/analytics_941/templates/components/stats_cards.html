@@ -1,77 +1,89 @@
 {# Stats cards component - displays core metrics with comparison changes #}
-<div class="stats-grid">
-    <div class="stat-card">
-        <div class="stat-card__label">Visitors</div>
-        <div class="stat-card__value">{{ "{:,}".format(metrics.visitors.value) }}</div>
-        {% if metrics.visitors.change_percent is not none %}
-        <div class="stat-card__change stat-card__change--{{ metrics.visitors.change_direction }}">
-            {% if metrics.visitors.change_direction == 'up' %}↑{% elif metrics.visitors.change_direction == 'down' %}↓{% else %}→{% endif %}
-            {{ "{:.1f}".format(metrics.visitors.change_percent|abs) }}%
-        </div>
-        {% endif %}
-    </div>
+{# Enhanced KPI cards with large numbers, trend indicators, and comparison period #}
 
-    <div class="stat-card">
-        <div class="stat-card__label">Views</div>
-        <div class="stat-card__value">{{ "{:,}".format(metrics.views.value) }}</div>
-        {% if metrics.views.change_percent is not none %}
-        <div class="stat-card__change stat-card__change--{{ metrics.views.change_direction }}">
-            {% if metrics.views.change_direction == 'up' %}↑{% elif metrics.views.change_direction == 'down' %}↓{% else %}→{% endif %}
-            {{ "{:.1f}".format(metrics.views.change_percent|abs) }}%
-        </div>
-        {% endif %}
+{# Macro for consistent stat card rendering #}
+{% macro stat_card(label, value, change_percent=none, change_direction='same', inverted=false, sparkline_data=none) %}
+<div class="analytics-stat-card{% if inverted %} analytics-stat-card--inverted{% endif %}">
+    <div class="analytics-stat-card__label">{{ label }}</div>
+    <div class="analytics-stat-card__value">{{ value }}</div>
+    {% if change_percent is not none %}
+    <div class="analytics-stat-card__change-row">
+        <span class="analytics-stat-card__change analytics-stat-card__change--{{ change_direction }}">
+            {% if change_direction == 'up' %}↑{% elif change_direction == 'down' %}↓{% else %}→{% endif %}
+            {{ "{:.1f}".format(change_percent|abs) }}%
+        </span>
+        <span class="analytics-stat-card__period">vs prev. period</span>
     </div>
-
-    <div class="stat-card">
-        <div class="stat-card__label">Sessions</div>
-        <div class="stat-card__value">{{ "{:,}".format(metrics.sessions.value) }}</div>
-        {% if metrics.sessions.change_percent is not none %}
-        <div class="stat-card__change stat-card__change--{{ metrics.sessions.change_direction }}">
-            {% if metrics.sessions.change_direction == 'up' %}↑{% elif metrics.sessions.change_direction == 'down' %}↓{% else %}→{% endif %}
-            {{ "{:.1f}".format(metrics.sessions.change_percent|abs) }}%
-        </div>
-        {% endif %}
+    {% endif %}
+    {% if sparkline_data %}
+    <div class="analytics-stat-card__sparkline">
+        {{ sparkline_data|safe }}
     </div>
+    {% endif %}
+</div>
+{% endmacro %}
 
-    <div class="stat-card">
-        <div class="stat-card__label">Bounce Rate</div>
-        <div class="stat-card__value">{{ "{:.0f}".format(metrics.bounce_rate.value) }}%</div>
+<div class="analytics-stats-grid">
+    {# Visitors #}
+    {{ stat_card(
+        label='Visitors',
+        value="{:,}".format(metrics.visitors.value),
+        change_percent=metrics.visitors.change_percent,
+        change_direction=metrics.visitors.change_direction
+    ) }}
+
+    {# Views #}
+    {{ stat_card(
+        label='Views',
+        value="{:,}".format(metrics.views.value),
+        change_percent=metrics.views.change_percent,
+        change_direction=metrics.views.change_direction
+    ) }}
+
+    {# Sessions #}
+    {{ stat_card(
+        label='Sessions',
+        value="{:,}".format(metrics.sessions.value),
+        change_percent=metrics.sessions.change_percent,
+        change_direction=metrics.sessions.change_direction
+    ) }}
+
+    {# Bounce Rate - inverted because lower is better #}
+    <div class="analytics-stat-card analytics-stat-card--inverted">
+        <div class="analytics-stat-card__label">Bounce Rate</div>
+        <div class="analytics-stat-card__value">{{ "{:.0f}".format(metrics.bounce_rate.value) }}%</div>
         {% if metrics.bounce_rate.change_percent is not none %}
-        {# Lower bounce rate is better, so invert the direction #}
-        {% set bounce_direction = 'up' if metrics.bounce_rate.change_direction == 'down' else ('down' if metrics.bounce_rate.change_direction == 'up' else 'same') %}
-        <div class="stat-card__change stat-card__change--{{ bounce_direction }}">
-            {% if metrics.bounce_rate.change_direction == 'up' %}↑{% elif metrics.bounce_rate.change_direction == 'down' %}↓{% else %}→{% endif %}
-            {{ "{:.1f}".format(metrics.bounce_rate.change_percent|abs) }}%
+        <div class="analytics-stat-card__change-row">
+            <span class="analytics-stat-card__change analytics-stat-card__change--{{ metrics.bounce_rate.change_direction }}">
+                {% if metrics.bounce_rate.change_direction == 'up' %}↑{% elif metrics.bounce_rate.change_direction == 'down' %}↓{% else %}→{% endif %}
+                {{ "{:.1f}".format(metrics.bounce_rate.change_percent|abs) }}%
+            </span>
+            <span class="analytics-stat-card__period">vs prev. period</span>
         </div>
         {% endif %}
     </div>
 
-    <div class="stat-card">
-        <div class="stat-card__label">Avg. Duration</div>
-        <div class="stat-card__value">{{ format_duration(metrics.avg_duration.value) }}</div>
-        {% if metrics.avg_duration.change_percent is not none %}
-        <div class="stat-card__change stat-card__change--{{ metrics.avg_duration.change_direction }}">
-            {% if metrics.avg_duration.change_direction == 'up' %}↑{% elif metrics.avg_duration.change_direction == 'down' %}↓{% else %}→{% endif %}
-            {{ "{:.1f}".format(metrics.avg_duration.change_percent|abs) }}%
-        </div>
-        {% endif %}
-    </div>
+    {# Avg. Duration #}
+    {{ stat_card(
+        label='Avg. Duration',
+        value=format_duration(metrics.avg_duration.value),
+        change_percent=metrics.avg_duration.change_percent,
+        change_direction=metrics.avg_duration.change_direction
+    ) }}
 
-    <div class="stat-card">
-        <div class="stat-card__label">Pages/Session</div>
-        <div class="stat-card__value">{{ "{:.1f}".format(metrics.pages_per_session.value) }}</div>
-        {% if metrics.pages_per_session.change_percent is not none %}
-        <div class="stat-card__change stat-card__change--{{ metrics.pages_per_session.change_direction }}">
-            {% if metrics.pages_per_session.change_direction == 'up' %}↑{% elif metrics.pages_per_session.change_direction == 'down' %}↓{% else %}→{% endif %}
-            {{ "{:.1f}".format(metrics.pages_per_session.change_percent|abs) }}%
-        </div>
-        {% endif %}
-    </div>
+    {# Pages/Session #}
+    {{ stat_card(
+        label='Pages/Session',
+        value="{:.1f}".format(metrics.pages_per_session.value),
+        change_percent=metrics.pages_per_session.change_percent,
+        change_direction=metrics.pages_per_session.change_direction
+    ) }}
 
+    {# Bot Views - only shown if present #}
     {% if metrics.bot_views > 0 %}
-    <div class="stat-card">
-        <div class="stat-card__label">Bot Views</div>
-        <div class="stat-card__value text-muted">{{ "{:,}".format(metrics.bot_views) }}</div>
+    <div class="analytics-stat-card">
+        <div class="analytics-stat-card__label">Bot Views</div>
+        <div class="analytics-stat-card__value analytics-text-muted">{{ "{:,}".format(metrics.bot_views) }}</div>
     </div>
     {% endif %}
 </div>

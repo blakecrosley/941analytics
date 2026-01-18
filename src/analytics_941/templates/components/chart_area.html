@@ -1,0 +1,209 @@
+{# Area chart - SVG-based visualization with smooth curves #}
+{% set data = time_series if time_series else [] %}
+{% set metric = chart_metric if chart_metric else 'visitors' %}
+{% set max_value = data|map(attribute=metric)|max if data else 1 %}
+{% set max_value = max_value if max_value > 0 else 1 %}
+{% set padding = 10 %}
+
+{# Calculate Y-axis tick values (5 ticks) #}
+{% set y_step = (max_value / 4)|int %}
+{% set y_step = y_step if y_step > 0 else 1 %}
+
+<div class="analytics-chart-primary"
+     data-chart-data="{{ data|tojson|e }}"
+     data-chart-metric="{{ metric }}"
+     data-chart-max="{{ max_value }}"
+     data-chart-granularity="{{ granularity|default('day') }}"
+     role="img"
+     aria-label="Time series chart showing {{ metric }} over time{% if data %}, ranging from {{ data|map(attribute=metric)|min }} to {{ max_value }}{% endif %}">
+
+    <div class="analytics-chart-wrapper">
+        {# Main chart area with Y-axis and SVG #}
+        <div class="analytics-chart-area">
+            {# Y-axis labels #}
+            <div class="analytics-chart-yaxis">
+                {% for i in range(5) %}
+                {% set tick_value = max_value - (i * y_step) %}
+                <span>{{ "{:,.0f}".format(tick_value) if tick_value >= 1000 else tick_value }}</span>
+                {% endfor %}
+            </div>
+
+            {# SVG chart container #}
+            <div class="analytics-chart-svg" id="chart-svg-container">
+                {% if data|length > 1 %}
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                    {# Gradient definition #}
+                    <defs>
+                        <linearGradient id="chart-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:var(--941-color-primary);stop-opacity:0.4" />
+                            <stop offset="100%" style="stop-color:var(--941-color-primary);stop-opacity:0.05" />
+                        </linearGradient>
+                    </defs>
+
+                    {# Grid lines #}
+                    <g class="analytics-chart-grid">
+                        {% for i in range(5) %}
+                        <line x1="0" y1="{{ i * 25 }}" x2="100" y2="{{ i * 25 }}" />
+                        {% endfor %}
+                    </g>
+
+                    {# Calculate points #}
+                    {% set points = [] %}
+                    {% for point in data %}
+                    {% set x = (loop.index0 / (data|length - 1)) * 100 if data|length > 1 else 50 %}
+                    {% set value = point[metric] if metric in point else point.visitors %}
+                    {% set y = 100 - ((value / max_value) * 100) if max_value > 0 else 100 %}
+                    {% set _ = points.append({'x': x, 'y': y, 'value': value, 'date': point.timestamp}) %}
+                    {% endfor %}
+
+                    {# Area fill path - using straight lines for simplicity (JS will smooth) #}
+                    <path class="analytics-chart-area-fill"
+                          d="M {{ points[0].x }},100
+                             {% for p in points %}L {{ p.x }},{{ p.y }} {% endfor %}
+                             L {{ points[-1].x }},100 Z" />
+
+                    {# Line path #}
+                    <path class="analytics-chart-line"
+                          d="M {% for p in points %}{% if loop.first %}{{ p.x }},{{ p.y }}{% else %} L {{ p.x }},{{ p.y }}{% endif %}{% endfor %}" />
+
+                    {# Data points #}
+                    {% for p in points %}
+                    <circle class="analytics-chart-point"
+                            cx="{{ p.x }}" cy="{{ p.y }}"
+                            data-value="{{ p.value }}"
+                            data-date="{{ p.date.strftime('%b %d') if granularity == 'day' else p.date.strftime('%H:%M') }}"
+                            data-index="{{ loop.index0 }}" />
+                    {% endfor %}
+                </svg>
+
+                {# Tooltip (positioned by JS) #}
+                <div class="analytics-chart-tooltip" id="chart-tooltip">
+                    <div class="analytics-chart-tooltip__date"></div>
+                    <div class="analytics-chart-tooltip__value"></div>
+                    <div class="analytics-chart-tooltip__label">{{ metric }}</div>
+                </div>
+                {% else %}
+                <div class="analytics-empty">
+                    <div class="analytics-empty__icon">📈</div>
+                    <p>Not enough data to display chart</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# X-axis labels #}
+        {% if data|length > 0 %}
+        <div class="analytics-chart-xaxis">
+            <span>{{ data[0].timestamp.strftime('%b %d') }}</span>
+            {% if data|length > 2 %}
+            <span>{{ data[(data|length // 2)|int].timestamp.strftime('%b %d') }}</span>
+            {% endif %}
+            <span>{{ data[-1].timestamp.strftime('%b %d') }}</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# Chart interaction JavaScript (inline for HTMX partial loads) #}
+<script>
+(function() {
+    const container = document.getElementById('chart-svg-container');
+    if (!container) return;
+
+    const tooltip = document.getElementById('chart-tooltip');
+    const points = container.querySelectorAll('.analytics-chart-point');
+    const metric = '{{ metric }}';
+
+    // Format number with commas
+    function formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    // Show tooltip on point hover
+    points.forEach(function(point) {
+        point.addEventListener('mouseenter', function(e) {
+            const value = this.getAttribute('data-value');
+            const date = this.getAttribute('data-date');
+            const rect = container.getBoundingClientRect();
+            const cx = parseFloat(this.getAttribute('cx'));
+            const cy = parseFloat(this.getAttribute('cy'));
+
+            // Calculate position
+            const x = (cx / 100) * rect.width;
+            const y = (cy / 100) * rect.height;
+
+            // Update tooltip content
+            tooltip.querySelector('.analytics-chart-tooltip__date').textContent = date;
+            tooltip.querySelector('.analytics-chart-tooltip__value').textContent = formatNumber(value);
+
+            // Position tooltip
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = (y - 10) + 'px';
+            tooltip.classList.add('analytics-chart-tooltip--visible');
+
+            // Add active class to point
+            this.classList.add('analytics-chart-point--active');
+        });
+
+        point.addEventListener('mouseleave', function() {
+            tooltip.classList.remove('analytics-chart-tooltip--visible');
+            this.classList.remove('analytics-chart-point--active');
+        });
+    });
+
+    // Optional: Smooth the path using cubic bezier curves
+    // This creates a more visually appealing chart
+    function smoothPath(svg) {
+        const linePath = svg.querySelector('.analytics-chart-line');
+        const areaPath = svg.querySelector('.analytics-chart-area-fill');
+        if (!linePath || points.length < 3) return;
+
+        // Get all point coordinates
+        const coords = Array.from(points).map(function(p) {
+            return {
+                x: parseFloat(p.getAttribute('cx')),
+                y: parseFloat(p.getAttribute('cy'))
+            };
+        });
+
+        // Generate smooth curve using cardinal spline
+        function catmullRomSpline(p0, p1, p2, p3, t) {
+            const t2 = t * t;
+            const t3 = t2 * t;
+            return {
+                x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3),
+                y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3)
+            };
+        }
+
+        // Generate smooth path
+        let smoothLine = 'M ' + coords[0].x + ',' + coords[0].y;
+        let smoothArea = 'M ' + coords[0].x + ',100 L ' + coords[0].x + ',' + coords[0].y;
+
+        for (let i = 0; i < coords.length - 1; i++) {
+            const p0 = coords[Math.max(0, i - 1)];
+            const p1 = coords[i];
+            const p2 = coords[i + 1];
+            const p3 = coords[Math.min(coords.length - 1, i + 2)];
+
+            // Add intermediate points for smoothness
+            for (let t = 0; t <= 1; t += 0.1) {
+                const point = catmullRomSpline(p0, p1, p2, p3, t);
+                smoothLine += ' L ' + point.x.toFixed(2) + ',' + point.y.toFixed(2);
+                smoothArea += ' L ' + point.x.toFixed(2) + ',' + point.y.toFixed(2);
+            }
+        }
+
+        smoothArea += ' L ' + coords[coords.length - 1].x + ',100 Z';
+
+        linePath.setAttribute('d', smoothLine);
+        areaPath.setAttribute('d', smoothArea);
+    }
+
+    // Apply smooth path
+    const svg = container.querySelector('svg');
+    if (svg && points.length >= 3) {
+        smoothPath(svg);
+    }
+})();
+</script>
