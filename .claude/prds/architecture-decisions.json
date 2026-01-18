@@ -1,0 +1,157 @@
+{
+  "project": {
+    "name": "941analytics Architecture Decisions",
+    "description": "Master PRD documenting architecture decisions from multi-agent deliberation. Addresses 5 open questions from ARCHITECTURE_PROPOSAL.md with consensus from 10 research perspectives.",
+    "deliberation_date": "2026-01-17",
+    "confidence_score": 0.87,
+    "consensus_level": "strong"
+  },
+  "decisions": [
+    {
+      "id": "decision-1",
+      "question": "Scope: Personal vs Multi-Tenant?",
+      "decision": "Stay personal-use with standardized site configuration",
+      "rationale": [
+        "Multi-tenancy adds 60-80% complexity for minimal benefit",
+        "No business model requiring billing/user management",
+        "Personal use allows aggressive caching and simpler auth",
+        "Standardized config enables consistency across sites"
+      ],
+      "trade_offs": [
+        "Cannot easily share with others",
+        "No public dashboard option"
+      ],
+      "confidence": 0.92
+    },
+    {
+      "id": "decision-2",
+      "question": "Keep 3D globe or switch to 2D map?",
+      "decision": "Lazy-load 3D globe + add 2D fallback for mobile",
+      "rationale": [
+        "3D globe is unique differentiator worth preserving",
+        "500KB overhead unacceptable on initial load",
+        "Mobile devices (60-70% CPU usage) need simpler option",
+        "Lazy loading solves performance without losing feature"
+      ],
+      "implementation": [
+        "Load Three.js only when geography tab clicked",
+        "Detect mobile/low-power devices and show 2D by default",
+        "User preference saved in localStorage"
+      ],
+      "confidence": 0.88
+    },
+    {
+      "id": "decision-3",
+      "question": "How important is real-time (<1s)?",
+      "decision": "Keep 30-60 second polling; sub-second updates not critical",
+      "rationale": [
+        "Personal analytics don't require instant updates",
+        "SSE/WebSocket complexity not justified",
+        "Durable Objects add significant cost and complexity",
+        "HTMX hx-trigger='every 30s' is simple and effective"
+      ],
+      "trade_offs": [
+        "Cannot show true 'live' visitor count",
+        "30s delay acceptable for personal dashboard"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "decision-4",
+      "question": "How much auto-tracking for events?",
+      "decision": "Add session tracking, keep current auto-events minimal, document clearly",
+      "rationale": [
+        "Session tracking essential for bounce rate and duration",
+        "Current events (pageviews, UTM, referrer) are sufficient",
+        "Scroll depth/rage clicks add noise without clear value",
+        "Manual event API for specific needs",
+        "Clear documentation prevents confusion"
+      ],
+      "implementation": [
+        "Add heartbeat endpoint for session duration",
+        "Calculate bounce rate from session data",
+        "Document auto-tracked vs manual events clearly"
+      ],
+      "confidence": 0.85
+    },
+    {
+      "id": "decision-5",
+      "question": "Where should dashboard templates live?",
+      "decision": "Keep templates bundled in Python package, but refactor the 2,597-line monolith",
+      "rationale": [
+        "Bundled templates = zero deployment friction",
+        "Separate hosting adds operational complexity",
+        "Refactoring is essential regardless of location",
+        "Jinja2 templates with partials is maintainable"
+      ],
+      "implementation": [
+        "Extract HTML to templates/ directory",
+        "Extract CSS to static/css/",
+        "Extract JS to static/js/ with lazy loading",
+        "Use Jinja2 includes for components"
+      ],
+      "confidence": 0.90
+    }
+  ],
+  "implementation_priority": [
+    {
+      "rank": 1,
+      "id": "security-fixes",
+      "name": "Security Vulnerabilities",
+      "score": 95.0,
+      "rationale": "3 critical vulnerabilities must be fixed before any feature work"
+    },
+    {
+      "rank": 2,
+      "id": "monolith-refactor",
+      "name": "Refactor routes.py Monolith",
+      "score": 87.5,
+      "rationale": "Foundation for all future work; currently unmaintainable"
+    },
+    {
+      "rank": 3,
+      "id": "session-tracking",
+      "name": "Session Tracking & Bounce Rate",
+      "score": 89.0,
+      "rationale": "High-value metrics missing from current implementation"
+    },
+    {
+      "rank": 4,
+      "id": "config-standardization",
+      "name": "Standardize Site Configuration",
+      "score": 77.0,
+      "rationale": "Enables consistent cross-site experience"
+    },
+    {
+      "rank": 5,
+      "id": "globe-optimization",
+      "name": "Globe Performance Optimization",
+      "score": 73.0,
+      "rationale": "Performance improvement per decision-2"
+    },
+    {
+      "rank": 6,
+      "id": "cicd-pipeline",
+      "name": "CI/CD Pipeline",
+      "score": 70.0,
+      "rationale": "Long-term sustainability and deployment confidence"
+    }
+  ],
+  "research_perspectives": [
+    "Technical Architect: Modular architecture, clear interfaces",
+    "Security Analyst: 3 vulnerabilities identified, must fix first",
+    "Performance Engineer: Globe lazy-load, asset fingerprinting",
+    "UX Advocate: Mobile-first, progressive enhancement",
+    "Maintenance Pessimist: Technical debt in monolith is critical",
+    "Innovation Scout: HyperLogLog for unique counts at scale",
+    "Integration Specialist: Cloudflare-native, minimal dependencies",
+    "Cost Analyst: Free tier sufficient, no scaling cost concerns",
+    "Quality Guardian: 80 tests exist, need Worker tests",
+    "Documentation Reviewer: Document auto-tracking clearly"
+  ],
+  "metadata": {
+    "created_at": "2026-01-17T18:05:00Z",
+    "agents_spawned": 10,
+    "consensus_method": "weighted_synthesis"
+  }
+}

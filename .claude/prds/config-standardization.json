@@ -1,0 +1,121 @@
+{
+  "project": {
+    "name": "Standardize Site Configuration",
+    "description": "Create consistent configuration across all tracked sites. Currently each site has ad-hoc settings scattered across Worker environment and D1 database. Standardize into a unified configuration system.",
+    "priority": 4,
+    "estimated_effort": "4-6 hours",
+    "created_at": "2026-01-17T18:05:00Z"
+  },
+  "current_state": {
+    "sites": [
+      "blakecrosley.com",
+      "resumegeni.com",
+      "941return.com",
+      "941apps.com",
+      "acecitizenship.app",
+      "h3arted.com"
+    ],
+    "problems": [
+      "Site allowlist hardcoded in Worker",
+      "Per-site settings inconsistent",
+      "No dashboard customization per site",
+      "No per-site rate limits",
+      "No site-specific passkeys"
+    ]
+  },
+  "stories": [
+    {
+      "id": "config-1",
+      "title": "Create sites configuration table",
+      "description": "Add a D1 table to store per-site configuration with sensible defaults.",
+      "acceptance_criteria": [
+        "sites table with id, domain, display_name, timezone, created_at",
+        "site_settings table for key-value overrides",
+        "Default timezone is America/New_York",
+        "Migration script populates existing sites",
+        "Worker reads site config from D1 (cached)",
+        "Invalid sites rejected based on table, not hardcoded list"
+      ],
+      "schema": {
+        "sites": "id, domain, display_name, timezone, passkey_hash, is_active, created_at",
+        "site_settings": "id, site_id, key, value, updated_at"
+      },
+      "files_to_modify": [
+        "schema.sql",
+        "worker/src/index.ts"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "config-2",
+      "title": "Per-site dashboard display names",
+      "description": "Allow friendly display names for each site in the dashboard.",
+      "acceptance_criteria": [
+        "Dashboard shows display_name instead of domain",
+        "Site dropdown uses display_name",
+        "API still uses domain as identifier",
+        "Display names editable via dashboard settings"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/templates/base.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "config-3",
+      "title": "Per-site timezone support",
+      "description": "Display times in each site's configured timezone.",
+      "acceptance_criteria": [
+        "Daily stats aggregated in site's timezone",
+        "Dashboard charts show site's local time",
+        "Worker converts UTC to site timezone for aggregation",
+        "Date picker respects site timezone",
+        "Timezone dropdown in settings"
+      ],
+      "files_to_modify": [
+        "worker/src/index.ts",
+        "src/analytics_941/core/client.py",
+        "src/analytics_941/routes/dashboard.py"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "config-4",
+      "title": "Site-specific passkey management",
+      "description": "Move passkeys to site config table with proper hashing.",
+      "acceptance_criteria": [
+        "Passkey stored per-site in sites.passkey_hash",
+        "Global passkey deprecated with migration path",
+        "New passkeys must be 16+ characters",
+        "Passkey change requires current passkey",
+        "Integrates with sec-3 (passkey hashing)"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/auth/passkey.py",
+        "src/analytics_941/routes/auth.py"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    }
+  ],
+  "verification": {
+    "manual_tests": [
+      "Dashboard shows correct display name for each site",
+      "Times display in correct timezone",
+      "Can change passkey for individual site"
+    ],
+    "automated_tests": [
+      "test_site_config_loaded",
+      "test_timezone_conversion",
+      "test_site_specific_passkey"
+    ]
+  }
+}

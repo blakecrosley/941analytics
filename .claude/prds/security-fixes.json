@@ -1,0 +1,93 @@
+{
+  "project": {
+    "name": "Security Vulnerability Fixes",
+    "description": "Address 3 critical security vulnerabilities identified during architecture deliberation. Must be completed before any feature work.",
+    "priority": 1,
+    "estimated_effort": "2-4 hours",
+    "created_at": "2026-01-17T18:05:00Z"
+  },
+  "stories": [
+    {
+      "id": "sec-1",
+      "title": "Add site validation on Worker /collect endpoint",
+      "description": "The /collect endpoint accepts any 'site' parameter without validation. An attacker could inject arbitrary site names into the database, polluting analytics data or using it as a data store.",
+      "severity": "high",
+      "acceptance_criteria": [
+        "Worker maintains allowlist of valid site identifiers",
+        "Requests with invalid site parameter return 400 error",
+        "Allowlist is configurable via Worker environment variable",
+        "Invalid site attempts are logged (not stored in D1)",
+        "Existing valid sites continue working",
+        "Test covers invalid site rejection"
+      ],
+      "files_to_modify": [
+        "worker/src/index.ts"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "sec-2",
+      "title": "Add rate limiting on dashboard login",
+      "description": "Dashboard login endpoint has no rate limiting. An attacker could brute force the passkey by trying millions of combinations.",
+      "severity": "high",
+      "acceptance_criteria": [
+        "Rate limit login attempts to 5 per minute per IP",
+        "Use Cloudflare KV for rate limit state",
+        "Return 429 Too Many Requests when limit exceeded",
+        "Include Retry-After header",
+        "Successful login resets counter",
+        "Rate limit key includes IP + site combination",
+        "Test covers rate limiting behavior"
+      ],
+      "files_to_modify": [
+        "worker/src/index.ts",
+        "src/analytics_941/routes/auth.py"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "sec-3",
+      "title": "Hash passkey on initial creation",
+      "description": "Passkeys are stored and compared in plaintext. If database is compromised, all passkeys are exposed.",
+      "severity": "medium",
+      "acceptance_criteria": [
+        "New passkeys are hashed with bcrypt before storage",
+        "Comparison uses timing-safe comparison",
+        "Existing plaintext passkeys are migrated on first use",
+        "Migration is transparent to user",
+        "Hash salt is unique per passkey",
+        "Test covers both new and migrated passkey verification"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/auth/passkey.py",
+        "worker/src/index.ts"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    }
+  ],
+  "implementation_notes": [
+    "Site allowlist should be: blakecrosley.com, resumegeni.com, 941return.com, 941apps.com, acecitizenship.app, h3arted.com",
+    "KV namespace for rate limiting: 941-ANALYTICS-RATE-LIMIT (create if not exists)",
+    "bcrypt work factor: 12 (balance security vs Worker CPU limits)",
+    "Consider argon2id if bcrypt too slow in Worker environment"
+  ],
+  "verification": {
+    "manual_tests": [
+      "Attempt to collect with invalid site parameter",
+      "Attempt 6 failed logins within 1 minute",
+      "Create new passkey and verify hash in database"
+    ],
+    "automated_tests": [
+      "test_invalid_site_rejected",
+      "test_rate_limit_enforced",
+      "test_passkey_hashed_on_create",
+      "test_passkey_migration_works"
+    ]
+  }
+}

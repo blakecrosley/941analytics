@@ -20,9 +20,11 @@
       "priority": 1,
       "stack": "cloudflare",
       "tests_required": false,
-      "passes": false,
-      "attempts": 1,
-      "blocker": "API token lacks Page Rules and Redirect Rules permissions. Requires token update in Cloudflare dashboard.",
+      "passes": true,
+      "attempts": 2,
+      "blocker": null,
+      "completed_at": "2026-01-17T06:16:00Z",
+      "notes": "Implemented via Cloudflare Worker (www-redirect) + routes for all 4 zones. Verified 301 redirects working.",
       "created_at": "2026-01-16T21:58:00Z"
     },
     {
@@ -41,7 +43,9 @@
       "tests_required": true,
       "passes": true,
       "attempts": 1,
-      "blocker": "Awaiting deployment: run 'cd worker && wrangler login && npm run deploy'",
+      "blocker": null,
+      "completed_at": "2026-01-17T06:25:00Z",
+      "notes": "Deployed successfully. X-Dev-Traffic: filtered header confirms localhost/dev URLs are now rejected.",
       "created_at": "2026-01-16T21:58:00Z"
     }
   ]

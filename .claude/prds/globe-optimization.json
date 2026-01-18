@@ -1,0 +1,126 @@
+{
+  "project": {
+    "name": "Globe Performance Optimization",
+    "description": "Optimize the 3D globe visualization per architecture decision-2: lazy-load Three.js and add 2D fallback for mobile. Currently loads ~500KB on every dashboard visit and causes 60-70% CPU usage on mobile.",
+    "priority": 5,
+    "estimated_effort": "4-6 hours",
+    "created_at": "2026-01-17T18:05:00Z"
+  },
+  "current_state": {
+    "problems": [
+      "Three.js + TopoJSON loaded on every dashboard visit (~500KB)",
+      "Mobile devices experience 60-70% CPU usage",
+      "No lazy loading",
+      "No fallback for low-power devices",
+      "Globe renders even when not visible"
+    ]
+  },
+  "target_state": {
+    "improvements": [
+      "Three.js loaded only when geography tab clicked",
+      "Mobile/low-power devices get 2D map by default",
+      "User preference saved in localStorage",
+      "Globe canvas destroyed when tab switches"
+    ]
+  },
+  "stories": [
+    {
+      "id": "globe-1",
+      "title": "Lazy-load Three.js globe",
+      "description": "Load Three.js and globe.js only when geography tab is clicked.",
+      "acceptance_criteria": [
+        "Three.js not loaded on initial page load",
+        "Globe assets loaded via dynamic import when geography tab clicked",
+        "Loading indicator shown during globe initialization",
+        "Globe renders in under 2 seconds on desktop",
+        "Tab can be clicked again without reloading assets",
+        "Memory cleaned up when leaving geography tab"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/static/js/globe.js",
+        "src/analytics_941/templates/partials/_geography.html"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "globe-2",
+      "title": "Add 2D map fallback",
+      "description": "Create lightweight 2D map using CSS or SVG for mobile/low-power devices.",
+      "acceptance_criteria": [
+        "2D map shows country data with color gradients",
+        "Clickable countries show detail popover",
+        "Total size under 50KB (including SVG)",
+        "Works on all browsers including mobile Safari",
+        "Accessible with keyboard navigation",
+        "Same data as 3D globe, different visualization"
+      ],
+      "files_to_create": [
+        "src/analytics_941/static/js/map2d.js",
+        "src/analytics_941/static/svg/world.svg"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "globe-3",
+      "title": "Auto-detect device capability",
+      "description": "Automatically choose 2D or 3D based on device capability.",
+      "acceptance_criteria": [
+        "Mobile devices default to 2D map",
+        "Detect low CPU/GPU capability via navigator.deviceMemory or GPU info",
+        "Respect prefers-reduced-motion media query",
+        "User can override auto-detection",
+        "Preference saved in localStorage",
+        "Toggle button in geography tab header"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/static/js/dashboard.js",
+        "src/analytics_941/templates/partials/_geography.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "globe-4",
+      "title": "Optimize Three.js bundle",
+      "description": "Reduce Three.js payload by importing only needed modules.",
+      "acceptance_criteria": [
+        "Import only required Three.js modules (Scene, Camera, Renderer, Sphere)",
+        "Use tree-shaking to eliminate unused code",
+        "TopoJSON data embedded only in globe.js",
+        "Total globe bundle under 200KB gzipped",
+        "Consider hosting on CDN with cache headers"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/static/js/globe.js"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    }
+  ],
+  "performance_targets": {
+    "initial_dashboard_load": "No globe assets loaded",
+    "globe_tab_first_click": "< 3 seconds to interactive",
+    "globe_tab_subsequent": "< 500ms (cached)",
+    "mobile_2d_map": "< 1 second to interactive",
+    "3d_globe_bundle": "< 200KB gzipped"
+  },
+  "verification": {
+    "manual_tests": [
+      "Load dashboard, verify no Three.js network requests",
+      "Click geography tab, verify globe loads",
+      "Test on mobile device, verify 2D map shown",
+      "Toggle between 2D/3D, verify preference saved"
+    ],
+    "automated_tests": [
+      "test_globe_lazy_loaded",
+      "test_2d_map_renders",
+      "test_preference_persistence"
+    ]
+  }
+}

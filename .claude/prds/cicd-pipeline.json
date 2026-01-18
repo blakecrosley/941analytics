@@ -1,0 +1,154 @@
+{
+  "project": {
+    "name": "CI/CD Pipeline",
+    "description": "Implement continuous integration and deployment pipeline for 941analytics. Currently deployment is manual and there are no automated checks. This is critical for long-term sustainability.",
+    "priority": 6,
+    "estimated_effort": "4-6 hours",
+    "created_at": "2026-01-17T18:05:00Z"
+  },
+  "current_state": {
+    "problems": [
+      "No automated tests on PR",
+      "Manual Worker deployment via wrangler",
+      "No Python package versioning",
+      "No type checking in CI",
+      "80 tests exist but not run automatically"
+    ]
+  },
+  "stories": [
+    {
+      "id": "cicd-1",
+      "title": "GitHub Actions for Python tests",
+      "description": "Run pytest on every push and PR.",
+      "acceptance_criteria": [
+        "Workflow runs on push to main and all PRs",
+        "Python 3.11 environment with dependencies installed",
+        "pytest runs with coverage report",
+        "Fail if coverage drops below 70%",
+        "Status badge in README",
+        "Test results visible in PR checks"
+      ],
+      "files_to_create": [
+        ".github/workflows/test.yml"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "cicd-2",
+      "title": "Type checking with mypy",
+      "description": "Add type checking to catch errors before runtime.",
+      "acceptance_criteria": [
+        "mypy runs in CI with strict mode",
+        "All public functions have type hints",
+        "Type errors block merge",
+        "pyproject.toml configured for mypy",
+        "IDE gets proper type hints"
+      ],
+      "files_to_modify": [
+        ".github/workflows/test.yml",
+        "pyproject.toml"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "cicd-3",
+      "title": "Linting with ruff",
+      "description": "Enforce code style consistency.",
+      "acceptance_criteria": [
+        "ruff runs in CI",
+        "Style violations block merge",
+        "Pre-commit hook for local linting",
+        "pyproject.toml configured for ruff",
+        "Compatible with existing code style"
+      ],
+      "files_to_modify": [
+        ".github/workflows/test.yml",
+        "pyproject.toml"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "cicd-4",
+      "title": "Worker deployment automation",
+      "description": "Automatically deploy Worker on merge to main.",
+      "acceptance_criteria": [
+        "Worker deploys after tests pass on main",
+        "Uses wrangler deploy command",
+        "Cloudflare API token stored in GitHub secrets",
+        "Deployment status visible in GitHub",
+        "Can rollback via previous commit",
+        "Only deploys if worker/ files changed"
+      ],
+      "files_to_create": [
+        ".github/workflows/deploy-worker.yml"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "cicd-5",
+      "title": "Python package versioning",
+      "description": "Automate version bumping and PyPI publication.",
+      "acceptance_criteria": [
+        "Version in pyproject.toml is source of truth",
+        "Tag creation triggers version bump",
+        "Changelog generated from commit messages",
+        "Package builds successfully in CI",
+        "Optional: publish to PyPI on release"
+      ],
+      "files_to_modify": [
+        "pyproject.toml"
+      ],
+      "files_to_create": [
+        ".github/workflows/release.yml"
+      ],
+      "priority": 4,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "cicd-6",
+      "title": "Worker tests",
+      "description": "Add tests for Cloudflare Worker (currently 0 tests).",
+      "acceptance_criteria": [
+        "Test framework set up (vitest or jest)",
+        "Tests for /collect endpoint validation",
+        "Tests for rate limiting logic",
+        "Tests for bot detection",
+        "Tests run in CI before deployment",
+        "At least 60% coverage target"
+      ],
+      "files_to_create": [
+        "worker/vitest.config.ts",
+        "worker/src/__tests__/collect.test.ts",
+        "worker/src/__tests__/ratelimit.test.ts"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    }
+  ],
+  "github_secrets_required": [
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_ACCOUNT_ID"
+  ],
+  "verification": {
+    "manual_tests": [
+      "Push to feature branch triggers CI",
+      "Merge to main deploys Worker",
+      "Failed tests block merge"
+    ],
+    "automated_tests": [
+      "CI workflow syntax is valid",
+      "All tests pass in CI",
+      "Coverage report generated"
+    ]
+  }
+}

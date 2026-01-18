@@ -1,0 +1,224 @@
+{
+  "project": {
+    "name": "Refactor routes.py Monolith",
+    "description": "Split the 2,597-line routes.py into maintainable components. This is the foundation for all future dashboard improvements. Currently contains all HTML, CSS, JavaScript embedded in Python - impossible to maintain or extend.",
+    "priority": 2,
+    "estimated_effort": "2-3 days",
+    "created_at": "2026-01-17T18:05:00Z"
+  },
+  "current_state": {
+    "file": "src/analytics_941/routes.py",
+    "lines": 2597,
+    "problems": [
+      "All HTML inline in Python strings",
+      "All CSS inline in HTML strings",
+      "All JavaScript inline (including Three.js globe)",
+      "Single function spans 1,643 lines",
+      "No separation of concerns",
+      "No caching of static assets",
+      "Every page load re-renders everything"
+    ]
+  },
+  "target_state": {
+    "structure": [
+      "src/analytics_941/routes/",
+      "  __init__.py        # Router factory",
+      "  dashboard.py       # Main dashboard routes",
+      "  api.py             # JSON API endpoints",
+      "  auth.py            # Auth endpoints",
+      "  export.py          # CSV/data export",
+      "",
+      "src/analytics_941/templates/",
+      "  base.html          # Base layout with nav",
+      "  dashboard.html     # Main dashboard",
+      "  login.html         # Login page",
+      "  components/        # Reusable partials",
+      "    _stats_card.html",
+      "    _chart.html",
+      "    _table.html",
+      "    _globe.html",
+      "    _filters.html",
+      "  partials/          # Tab content",
+      "    _overview.html",
+      "    _sources.html",
+      "    _geography.html",
+      "    _technology.html",
+      "",
+      "src/analytics_941/static/",
+      "  css/",
+      "    dashboard.css    # Main styles",
+      "    components.css   # Component styles",
+      "  js/",
+      "    dashboard.js     # Core interactivity",
+      "    charts.js        # Chart rendering",
+      "    globe.js         # 3D globe (lazy loaded)"
+    ]
+  },
+  "stories": [
+    {
+      "id": "refactor-1",
+      "title": "Create base template and layout",
+      "description": "Extract the base HTML structure into Jinja2 template with proper head, nav, and content blocks.",
+      "acceptance_criteria": [
+        "base.html with HTML5 doctype and proper meta tags",
+        "Navigation component extracted",
+        "Content block for page-specific content",
+        "CSS and JS properly linked (not inline)",
+        "HTMX and Alpine.js loaded from CDN",
+        "Dark mode support preserved"
+      ],
+      "files_to_create": [
+        "src/analytics_941/templates/base.html"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "refactor-2",
+      "title": "Extract CSS to static files",
+      "description": "Move all inline CSS to separate stylesheet files with proper organization.",
+      "acceptance_criteria": [
+        "dashboard.css contains all main dashboard styles",
+        "components.css contains reusable component styles",
+        "CSS custom properties for theming",
+        "Mobile-first responsive breakpoints",
+        "No inline styles remaining in templates",
+        "Styles work with asset fingerprinting"
+      ],
+      "files_to_create": [
+        "src/analytics_941/static/css/dashboard.css",
+        "src/analytics_941/static/css/components.css"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "refactor-3",
+      "title": "Extract JavaScript to static files",
+      "description": "Move all inline JavaScript to separate files with proper module structure.",
+      "acceptance_criteria": [
+        "dashboard.js contains core interactivity",
+        "charts.js contains chart rendering logic",
+        "globe.js contains Three.js globe (separate for lazy loading)",
+        "No inline scripts remaining in templates",
+        "Scripts use ES modules where appropriate",
+        "HTMX event handlers properly set up"
+      ],
+      "files_to_create": [
+        "src/analytics_941/static/js/dashboard.js",
+        "src/analytics_941/static/js/charts.js",
+        "src/analytics_941/static/js/globe.js"
+      ],
+      "priority": 1,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "refactor-4",
+      "title": "Create component templates",
+      "description": "Extract reusable UI components into Jinja2 partials.",
+      "acceptance_criteria": [
+        "_stats_card.html for metric display",
+        "_chart.html for chart containers",
+        "_table.html for data tables",
+        "_filters.html for filter UI",
+        "Components accept parameters via Jinja2 context",
+        "Components are self-contained (no external dependencies)"
+      ],
+      "files_to_create": [
+        "src/analytics_941/templates/components/_stats_card.html",
+        "src/analytics_941/templates/components/_chart.html",
+        "src/analytics_941/templates/components/_table.html",
+        "src/analytics_941/templates/components/_filters.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "refactor-5",
+      "title": "Create tab content partials",
+      "description": "Extract each dashboard tab into its own partial for HTMX loading.",
+      "acceptance_criteria": [
+        "_overview.html for main stats view",
+        "_sources.html for traffic sources",
+        "_geography.html for geographic data",
+        "_technology.html for device/browser data",
+        "Each partial can be loaded independently via HTMX",
+        "Proper hx-target and hx-swap attributes"
+      ],
+      "files_to_create": [
+        "src/analytics_941/templates/partials/_overview.html",
+        "src/analytics_941/templates/partials/_sources.html",
+        "src/analytics_941/templates/partials/_geography.html",
+        "src/analytics_941/templates/partials/_technology.html"
+      ],
+      "priority": 2,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "refactor-6",
+      "title": "Split routes into modules",
+      "description": "Split monolithic routes.py into focused route modules.",
+      "acceptance_criteria": [
+        "routes/__init__.py creates combined router",
+        "routes/dashboard.py handles page rendering",
+        "routes/api.py handles JSON endpoints",
+        "routes/auth.py handles authentication",
+        "Original routes.py deprecated with import redirects",
+        "All existing tests pass"
+      ],
+      "files_to_create": [
+        "src/analytics_941/routes/__init__.py",
+        "src/analytics_941/routes/dashboard.py",
+        "src/analytics_941/routes/api.py",
+        "src/analytics_941/routes/auth.py"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    },
+    {
+      "id": "refactor-7",
+      "title": "Configure static file serving",
+      "description": "Set up proper static file serving with caching and fingerprinting.",
+      "acceptance_criteria": [
+        "FastAPI StaticFiles mount for /static/",
+        "Asset fingerprinting for cache busting",
+        "Cache-Control headers for static assets",
+        "Jinja2 helper for versioned asset URLs",
+        "Works in development (no caching)",
+        "Works in production (aggressive caching)"
+      ],
+      "files_to_modify": [
+        "src/analytics_941/__init__.py",
+        "src/analytics_941/templates/base.html"
+      ],
+      "priority": 3,
+      "passes": false,
+      "attempts": 0
+    }
+  ],
+  "performance_targets": {
+    "initial_load": "< 100KB (excluding globe)",
+    "time_to_interactive": "< 1 second",
+    "globe_lazy_load": "Only when geography tab clicked"
+  },
+  "verification": {
+    "manual_tests": [
+      "Dashboard loads and displays data correctly",
+      "Tab navigation works via HTMX",
+      "Styles render correctly",
+      "Charts render correctly",
+      "Globe loads only on geography tab"
+    ],
+    "automated_tests": [
+      "All existing tests pass",
+      "Static files served with correct content-type",
+      "Templates render without errors"
+    ]
+  }
+}
