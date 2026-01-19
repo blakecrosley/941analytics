@@ -4,7 +4,9 @@ Dashboard routes for 941 Analytics.
 Uses Jinja2 templates for rendering, supports HTMX partial loading.
 """
 
+import asyncio
 import hashlib
+import logging
 import secrets
 import time
 from collections import defaultdict
@@ -13,6 +15,8 @@ from pathlib import Path
 from threading import Lock
 
 from fastapi import APIRouter, Cookie, Form, HTTPException, Query, Request, Response
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -354,6 +358,31 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             utm_campaign=utm_campaign,
         )
 
+    async def _parallel_queries(**queries: dict) -> dict:
+        """Execute multiple async queries in parallel with error handling.
+
+        Args:
+            **queries: Named coroutines to execute (e.g., metrics=client.get_metrics(...))
+
+        Returns:
+            Dict with same keys, values are either results or None on failure.
+            Failed queries are logged but don't fail the entire request.
+        """
+        names = list(queries.keys())
+        coros = list(queries.values())
+
+        results = await asyncio.gather(*coros, return_exceptions=True)
+
+        output = {}
+        for name, result in zip(names, results):
+            if isinstance(result, Exception):
+                logger.error(f"Query '{name}' failed: {result}")
+                output[name] = None
+            else:
+                output[name] = result
+
+        return output
+
     # -------------------------------------------------------------------------
     # Auth Routes
     # -------------------------------------------------------------------------
@@ -450,32 +479,34 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             browser=browser, source=source, page=page
         )
 
-        # Fetch data
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        time_series = await client.get_time_series(start_date, end_date, "day", filters)
-        top_pages = await client.get_top_pages(start_date, end_date, 10, filters)
-        entry_pages = await client.get_entry_pages(start_date, end_date, 10, filters)
-        exit_pages = await client.get_exit_pages(start_date, end_date, 10, filters)
-        entry_exit_flow = await client.get_entry_exit_flow(start_date, end_date, 10, filters)
-        sources = await client.get_sources(start_date, end_date, 10, filters)
-        countries = await client.get_countries(start_date, end_date, 10, filters)
-        devices = await client.get_devices(start_date, end_date, filters)
-        browsers = await client.get_browsers(start_date, end_date, 10, filters)
+        # Fetch data in parallel - all queries are independent
+        data = await _parallel_queries(
+            metrics=client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            time_series=client.get_time_series(start_date, end_date, "day", filters),
+            top_pages=client.get_top_pages(start_date, end_date, 10, filters),
+            entry_pages=client.get_entry_pages(start_date, end_date, 10, filters),
+            exit_pages=client.get_exit_pages(start_date, end_date, 10, filters),
+            entry_exit_flow=client.get_entry_exit_flow(start_date, end_date, 10, filters),
+            sources=client.get_sources(start_date, end_date, 10, filters),
+            countries=client.get_countries(start_date, end_date, 10, filters),
+            devices=client.get_devices(start_date, end_date, filters),
+            browsers=client.get_browsers(start_date, end_date, 10, filters),
+        )
 
         context = _get_common_context(request, "overview", period)
         context.update({
-            "metrics": metrics,
-            "time_series": time_series,
+            "metrics": data["metrics"],
+            "time_series": data["time_series"] or [],
             "chart_metric": "visitors",
             "granularity": "day",
-            "top_pages": top_pages,
-            "entry_pages": entry_pages,
-            "exit_pages": exit_pages,
-            "entry_exit_flow": entry_exit_flow,
-            "sources": sources,
-            "countries": countries,
-            "devices": devices,
-            "browsers": browsers,
+            "top_pages": data["top_pages"] or [],
+            "entry_pages": data["entry_pages"] or [],
+            "exit_pages": data["exit_pages"] or [],
+            "entry_exit_flow": data["entry_exit_flow"] or [],
+            "sources": data["sources"] or [],
+            "countries": data["countries"] or [],
+            "devices": data["devices"] or {},
+            "browsers": data["browsers"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -486,6 +517,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/overview", response_class=HTMLResponse)
     async def overview_partial(
         request: Request,
+        response: Response,
         auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
         start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
@@ -507,36 +539,41 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             browser=browser, source=source, page=page
         )
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        time_series = await client.get_time_series(start_date, end_date, "day", filters)
-        top_pages = await client.get_top_pages(start_date, end_date, 10, filters)
-        entry_pages = await client.get_entry_pages(start_date, end_date, 10, filters)
-        exit_pages = await client.get_exit_pages(start_date, end_date, 10, filters)
-        entry_exit_flow = await client.get_entry_exit_flow(start_date, end_date, 10, filters)
-        sources = await client.get_sources(start_date, end_date, 10, filters)
-        countries = await client.get_countries(start_date, end_date, 10, filters)
-        devices = await client.get_devices(start_date, end_date, filters)
-        browsers = await client.get_browsers(start_date, end_date, 10, filters)
+        # Fetch data in parallel - all queries are independent
+        data = await _parallel_queries(
+            metrics=client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            time_series=client.get_time_series(start_date, end_date, "day", filters),
+            top_pages=client.get_top_pages(start_date, end_date, 10, filters),
+            entry_pages=client.get_entry_pages(start_date, end_date, 10, filters),
+            exit_pages=client.get_exit_pages(start_date, end_date, 10, filters),
+            entry_exit_flow=client.get_entry_exit_flow(start_date, end_date, 10, filters),
+            sources=client.get_sources(start_date, end_date, 10, filters),
+            countries=client.get_countries(start_date, end_date, 10, filters),
+            devices=client.get_devices(start_date, end_date, filters),
+            browsers=client.get_browsers(start_date, end_date, 10, filters),
+        )
 
         context = _get_common_context(request, "overview", period)
         context.update({
-            "metrics": metrics,
-            "time_series": time_series,
+            "metrics": data["metrics"],
+            "time_series": data["time_series"] or [],
             "chart_metric": "visitors",
             "granularity": "day",
-            "top_pages": top_pages,
-            "entry_pages": entry_pages,
-            "exit_pages": exit_pages,
-            "entry_exit_flow": entry_exit_flow,
-            "sources": sources,
-            "countries": countries,
-            "devices": devices,
-            "browsers": browsers,
+            "top_pages": data["top_pages"] or [],
+            "entry_pages": data["entry_pages"] or [],
+            "exit_pages": data["exit_pages"] or [],
+            "entry_exit_flow": data["entry_exit_flow"] or [],
+            "sources": data["sources"] or [],
+            "countries": data["countries"] or [],
+            "devices": data["devices"] or {},
+            "browsers": data["browsers"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
         })
 
+        # Cache dashboard partials for 60 seconds (private to avoid shared caching)
+        response.headers["Cache-Control"] = "private, max-age=60"
         return templates.TemplateResponse("partials/overview_content.html", context)
 
     @router.get("/partials/chart", response_class=HTMLResponse)
@@ -602,19 +639,22 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             utm_source=utm_source, utm_campaign=utm_campaign
         )
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        sources_list = await client.get_sources(start_date, end_date, 50, filters)
-        source_types = await client.get_source_types(start_date, end_date, filters)
-        utm_sources = await client.get_utm_sources(start_date, end_date, 20, filters)
-        utm_campaigns = await client.get_utm_campaigns(start_date, end_date, 20, filters)
+        # Fetch data in parallel
+        data = await _parallel_queries(
+            metrics=client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            sources_list=client.get_sources(start_date, end_date, 50, filters),
+            source_types=client.get_source_types(start_date, end_date, filters),
+            utm_sources=client.get_utm_sources(start_date, end_date, 20, filters),
+            utm_campaigns=client.get_utm_campaigns(start_date, end_date, 20, filters),
+        )
 
         context = _get_common_context(request, "sources", period)
         context.update({
-            "metrics": metrics,
-            "sources": sources_list,
-            "source_types": source_types,
-            "utm_sources": utm_sources,
-            "utm_campaigns": utm_campaigns,
+            "metrics": data["metrics"],
+            "sources": data["sources_list"] or [],
+            "source_types": data["source_types"] or [],
+            "utm_sources": data["utm_sources"] or [],
+            "utm_campaigns": data["utm_campaigns"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -625,6 +665,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/sources", response_class=HTMLResponse)
     async def sources_partial(
         request: Request,
+        response: Response,
         auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
         start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
@@ -644,24 +685,28 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             utm_source=utm_source, utm_campaign=utm_campaign
         )
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        sources_list = await client.get_sources(start_date, end_date, 50, filters)
-        source_types = await client.get_source_types(start_date, end_date, filters)
-        utm_sources = await client.get_utm_sources(start_date, end_date, 20, filters)
-        utm_campaigns = await client.get_utm_campaigns(start_date, end_date, 20, filters)
+        # Fetch data in parallel
+        data = await _parallel_queries(
+            metrics=client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            sources_list=client.get_sources(start_date, end_date, 50, filters),
+            source_types=client.get_source_types(start_date, end_date, filters),
+            utm_sources=client.get_utm_sources(start_date, end_date, 20, filters),
+            utm_campaigns=client.get_utm_campaigns(start_date, end_date, 20, filters),
+        )
 
         context = _get_common_context(request, "sources", period)
         context.update({
-            "metrics": metrics,
-            "sources": sources_list,
-            "source_types": source_types,
-            "utm_sources": utm_sources,
-            "utm_campaigns": utm_campaigns,
+            "metrics": data["metrics"],
+            "sources": data["sources_list"] or [],
+            "source_types": data["source_types"] or [],
+            "utm_sources": data["utm_sources"] or [],
+            "utm_campaigns": data["utm_campaigns"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
         })
 
+        response.headers["Cache-Control"] = "private, max-age=60"
         return templates.TemplateResponse("partials/sources_content.html", context)
 
     @router.get("/geography", response_class=HTMLResponse)
@@ -681,25 +726,29 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(country=country, region=region)
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        countries = await client.get_countries(start_date, end_date, 50, filters)
-        globe_data = await client.get_globe_data(start_date, end_date, filters)
+        # Build base queries (always run)
+        queries = {
+            "metrics": client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            "countries": client.get_countries(start_date, end_date, 50, filters),
+            "globe_data": client.get_globe_data(start_date, end_date, filters),
+        }
 
-        # Get regions if country is selected
-        regions = []
-        cities = []
+        # Add conditional queries based on filters
         if country:
-            regions = await client.get_regions(start_date, end_date, country, 30)
+            queries["regions"] = client.get_regions(start_date, end_date, country, 30)
             if region:
-                cities = await client.get_cities(start_date, end_date, country, region, 30)
+                queries["cities"] = client.get_cities(start_date, end_date, country, region, 30)
+
+        # Execute all queries in parallel
+        data = await _parallel_queries(**queries)
 
         context = _get_common_context(request, "geography", period)
         context.update({
-            "metrics": metrics,
-            "countries": countries,
-            "regions": regions,
-            "cities": cities,
-            "globe_data": globe_data.model_dump(),
+            "metrics": data["metrics"],
+            "countries": data["countries"] or [],
+            "regions": data.get("regions") or [],
+            "cities": data.get("cities") or [],
+            "globe_data": data["globe_data"].model_dump() if data["globe_data"] else {},
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -710,6 +759,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/geography", response_class=HTMLResponse)
     async def geography_partial(
         request: Request,
+        response: Response,
         auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
         start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
@@ -724,29 +774,35 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(country=country, region=region)
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        countries = await client.get_countries(start_date, end_date, 50, filters)
-        globe_data = await client.get_globe_data(start_date, end_date, filters)
+        # Build base queries (always run)
+        queries = {
+            "metrics": client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            "countries": client.get_countries(start_date, end_date, 50, filters),
+            "globe_data": client.get_globe_data(start_date, end_date, filters),
+        }
 
-        regions = []
-        cities = []
+        # Add conditional queries based on filters
         if country:
-            regions = await client.get_regions(start_date, end_date, country, 30)
+            queries["regions"] = client.get_regions(start_date, end_date, country, 30)
             if region:
-                cities = await client.get_cities(start_date, end_date, country, region, 30)
+                queries["cities"] = client.get_cities(start_date, end_date, country, region, 30)
+
+        # Execute all queries in parallel
+        data = await _parallel_queries(**queries)
 
         context = _get_common_context(request, "geography", period)
         context.update({
-            "metrics": metrics,
-            "countries": countries,
-            "regions": regions,
-            "cities": cities,
-            "globe_data": globe_data.model_dump(),
+            "metrics": data["metrics"],
+            "countries": data["countries"] or [],
+            "regions": data.get("regions") or [],
+            "cities": data.get("cities") or [],
+            "globe_data": data["globe_data"].model_dump() if data["globe_data"] else {},
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
         })
 
+        response.headers["Cache-Control"] = "private, max-age=60"
         return templates.TemplateResponse("partials/geography_content.html", context)
 
     @router.get("/technology", response_class=HTMLResponse)
@@ -767,21 +823,24 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(device=device, browser=browser)
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        devices = await client.get_devices(start_date, end_date, filters)
-        browsers_list = await client.get_browsers(start_date, end_date, 20, filters)
-        operating_systems = await client.get_operating_systems(start_date, end_date, 20, filters)
-        screen_sizes = await client.get_screen_sizes(start_date, end_date, 20, filters)
-        languages = await client.get_languages(start_date, end_date, 20, filters)
+        # Fetch data in parallel
+        data = await _parallel_queries(
+            metrics=client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            devices=client.get_devices(start_date, end_date, filters),
+            browsers_list=client.get_browsers(start_date, end_date, 20, filters),
+            operating_systems=client.get_operating_systems(start_date, end_date, 20, filters),
+            screen_sizes=client.get_screen_sizes(start_date, end_date, 20, filters),
+            languages=client.get_languages(start_date, end_date, 20, filters),
+        )
 
         context = _get_common_context(request, "technology", period)
         context.update({
-            "metrics": metrics,
-            "devices": devices,
-            "browsers": browsers_list,
-            "operating_systems": operating_systems,
-            "screen_sizes": screen_sizes,
-            "languages": languages,
+            "metrics": data["metrics"],
+            "devices": data["devices"] or {},
+            "browsers": data["browsers_list"] or [],
+            "operating_systems": data["operating_systems"] or [],
+            "screen_sizes": data["screen_sizes"] or [],
+            "languages": data["languages"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
@@ -792,6 +851,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/technology", response_class=HTMLResponse)
     async def technology_partial(
         request: Request,
+        response: Response,
         auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
         start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
@@ -807,26 +867,30 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters(device=device, browser=browser)
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        devices = await client.get_devices(start_date, end_date, filters)
-        browsers_list = await client.get_browsers(start_date, end_date, 20, filters)
-        operating_systems = await client.get_operating_systems(start_date, end_date, 20, filters)
-        screen_sizes = await client.get_screen_sizes(start_date, end_date, 20, filters)
-        languages = await client.get_languages(start_date, end_date, 20, filters)
+        # Fetch data in parallel
+        data = await _parallel_queries(
+            metrics=client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            devices=client.get_devices(start_date, end_date, filters),
+            browsers_list=client.get_browsers(start_date, end_date, 20, filters),
+            operating_systems=client.get_operating_systems(start_date, end_date, 20, filters),
+            screen_sizes=client.get_screen_sizes(start_date, end_date, 20, filters),
+            languages=client.get_languages(start_date, end_date, 20, filters),
+        )
 
         context = _get_common_context(request, "technology", period)
         context.update({
-            "metrics": metrics,
-            "devices": devices,
-            "browsers": browsers_list,
-            "operating_systems": operating_systems,
-            "screen_sizes": screen_sizes,
-            "languages": languages,
+            "metrics": data["metrics"],
+            "devices": data["devices"] or {},
+            "browsers": data["browsers_list"] or [],
+            "operating_systems": data["operating_systems"] or [],
+            "screen_sizes": data["screen_sizes"] or [],
+            "languages": data["languages"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
         })
 
+        response.headers["Cache-Control"] = "private, max-age=60"
         return templates.TemplateResponse("partials/technology_content.html", context)
 
     @router.get("/events", response_class=HTMLResponse)
@@ -846,37 +910,42 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters()
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        events = await client.get_events_with_trend(
-            start_date, end_date, compare_start, compare_end, 50, event_type, filters
-        )
-        events_time_series = await client.get_events_time_series(start_date, end_date, event_type, filters)
-        scroll_depth = await client.get_scroll_depth(start_date, end_date)
-        scroll_depth_by_page = await client.get_scroll_depth_by_page(start_date, end_date, 10, filters)
-        outbound_clicks = await client.get_outbound_clicks(start_date, end_date, 20, filters)
-        file_downloads = await client.get_file_downloads(start_date, end_date, 20, filters)
-        form_submissions = await client.get_form_submissions(start_date, end_date, 20, filters)
-        js_errors = await client.get_js_errors(start_date, end_date, 20, filters)
-        event_types_list = await client.get_event_types(start_date, end_date)
+        # Build queries dict for parallel execution
+        queries = {
+            "metrics": client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            "events": client.get_events_with_trend(
+                start_date, end_date, compare_start, compare_end, 50, event_type, filters
+            ),
+            "events_time_series": client.get_events_time_series(start_date, end_date, event_type, filters),
+            "scroll_depth": client.get_scroll_depth(start_date, end_date),
+            "scroll_depth_by_page": client.get_scroll_depth_by_page(start_date, end_date, 10, filters),
+            "outbound_clicks": client.get_outbound_clicks(start_date, end_date, 20, filters),
+            "file_downloads": client.get_file_downloads(start_date, end_date, 20, filters),
+            "form_submissions": client.get_form_submissions(start_date, end_date, 20, filters),
+            "js_errors": client.get_js_errors(start_date, end_date, 20, filters),
+            "event_types_list": client.get_event_types(start_date, end_date),
+        }
 
-        # Get event properties if a specific event is selected
-        event_properties = []
+        # Add conditional query for event properties
         if event:
-            event_properties = await client.get_event_properties(event, start_date, end_date, 100, filters)
+            queries["event_properties"] = client.get_event_properties(event, start_date, end_date, 100, filters)
+
+        # Execute all queries in parallel
+        data = await _parallel_queries(**queries)
 
         context = _get_common_context(request, "events", period)
         context.update({
-            "metrics": metrics,
-            "events": events,
-            "events_time_series": events_time_series,
-            "scroll_depth": scroll_depth,
-            "scroll_depth_by_page": scroll_depth_by_page,
-            "outbound_clicks": outbound_clicks,
-            "file_downloads": file_downloads,
-            "form_submissions": form_submissions,
-            "js_errors": js_errors,
-            "event_types": event_types_list,
-            "event_properties": event_properties,
+            "metrics": data["metrics"],
+            "events": data["events"] or [],
+            "events_time_series": data["events_time_series"] or [],
+            "scroll_depth": data["scroll_depth"],
+            "scroll_depth_by_page": data["scroll_depth_by_page"] or [],
+            "outbound_clicks": data["outbound_clicks"] or [],
+            "file_downloads": data["file_downloads"] or [],
+            "form_submissions": data["form_submissions"] or [],
+            "js_errors": data["js_errors"] or [],
+            "event_types": data["event_types_list"] or [],
+            "event_properties": data.get("event_properties") or [],
             "selected_event": event,
             "selected_event_type": event_type,
             "filters": filters,
@@ -889,6 +958,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     @router.get("/partials/events", response_class=HTMLResponse)
     async def events_partial(
         request: Request,
+        response: Response,
         auth: str | None = Cookie(None, alias=AUTH_COOKIE_NAME),
         period: str = "30d",
         start: str | None = Query(None, alias="start", description="Custom start date (YYYY-MM-DD)"),
@@ -903,37 +973,42 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         start_date, end_date, compare_start, compare_end = _parse_date_range(period, start, end)
         filters = _get_filters()
 
-        metrics = await client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters)
-        events = await client.get_events_with_trend(
-            start_date, end_date, compare_start, compare_end, 50, event_type, filters
-        )
-        events_time_series = await client.get_events_time_series(start_date, end_date, event_type, filters)
-        scroll_depth = await client.get_scroll_depth(start_date, end_date)
-        scroll_depth_by_page = await client.get_scroll_depth_by_page(start_date, end_date, 10, filters)
-        outbound_clicks = await client.get_outbound_clicks(start_date, end_date, 20, filters)
-        file_downloads = await client.get_file_downloads(start_date, end_date, 20, filters)
-        form_submissions = await client.get_form_submissions(start_date, end_date, 20, filters)
-        js_errors = await client.get_js_errors(start_date, end_date, 20, filters)
-        event_types_list = await client.get_event_types(start_date, end_date)
+        # Build queries dict for parallel execution
+        queries = {
+            "metrics": client.get_core_metrics(start_date, end_date, compare_start, compare_end, filters),
+            "events": client.get_events_with_trend(
+                start_date, end_date, compare_start, compare_end, 50, event_type, filters
+            ),
+            "events_time_series": client.get_events_time_series(start_date, end_date, event_type, filters),
+            "scroll_depth": client.get_scroll_depth(start_date, end_date),
+            "scroll_depth_by_page": client.get_scroll_depth_by_page(start_date, end_date, 10, filters),
+            "outbound_clicks": client.get_outbound_clicks(start_date, end_date, 20, filters),
+            "file_downloads": client.get_file_downloads(start_date, end_date, 20, filters),
+            "form_submissions": client.get_form_submissions(start_date, end_date, 20, filters),
+            "js_errors": client.get_js_errors(start_date, end_date, 20, filters),
+            "event_types_list": client.get_event_types(start_date, end_date),
+        }
 
-        # Get event properties if a specific event is selected
-        event_properties = []
+        # Add conditional query for event properties
         if event:
-            event_properties = await client.get_event_properties(event, start_date, end_date, 100, filters)
+            queries["event_properties"] = client.get_event_properties(event, start_date, end_date, 100, filters)
+
+        # Execute all queries in parallel
+        data = await _parallel_queries(**queries)
 
         context = _get_common_context(request, "events", period)
         context.update({
-            "metrics": metrics,
-            "events": events,
-            "events_time_series": events_time_series,
-            "scroll_depth": scroll_depth,
-            "scroll_depth_by_page": scroll_depth_by_page,
-            "outbound_clicks": outbound_clicks,
-            "file_downloads": file_downloads,
-            "form_submissions": form_submissions,
-            "js_errors": js_errors,
-            "event_types": event_types_list,
-            "event_properties": event_properties,
+            "metrics": data["metrics"],
+            "events": data["events"] or [],
+            "events_time_series": data["events_time_series"] or [],
+            "scroll_depth": data["scroll_depth"],
+            "scroll_depth_by_page": data["scroll_depth_by_page"] or [],
+            "outbound_clicks": data["outbound_clicks"] or [],
+            "file_downloads": data["file_downloads"] or [],
+            "form_submissions": data["form_submissions"] or [],
+            "js_errors": data["js_errors"] or [],
+            "event_types": data["event_types_list"] or [],
+            "event_properties": data.get("event_properties") or [],
             "selected_event": event,
             "selected_event_type": event_type,
             "filters": filters,
@@ -941,6 +1016,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "end_date": end_date.isoformat(),
         })
 
+        response.headers["Cache-Control"] = "private, max-age=60"
         return templates.TemplateResponse("partials/events_content.html", context)
 
     @router.get("/realtime", response_class=HTMLResponse)
