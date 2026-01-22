@@ -830,6 +830,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             browsers_list=client.get_browsers(start_date, end_date, 20, filters),
             operating_systems=client.get_operating_systems(start_date, end_date, 20, filters),
             screen_sizes=client.get_screen_sizes(start_date, end_date, 20, filters),
+            screen_breakpoints=client.get_screen_breakpoints(start_date, end_date, filters),
             languages=client.get_languages(start_date, end_date, 20, filters),
         )
 
@@ -840,6 +841,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "browsers": data["browsers_list"] or [],
             "operating_systems": data["operating_systems"] or [],
             "screen_sizes": data["screen_sizes"] or [],
+            "screen_breakpoints": data["screen_breakpoints"] or [],
             "languages": data["languages"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),
@@ -874,6 +876,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             browsers_list=client.get_browsers(start_date, end_date, 20, filters),
             operating_systems=client.get_operating_systems(start_date, end_date, 20, filters),
             screen_sizes=client.get_screen_sizes(start_date, end_date, 20, filters),
+            screen_breakpoints=client.get_screen_breakpoints(start_date, end_date, filters),
             languages=client.get_languages(start_date, end_date, 20, filters),
         )
 
@@ -884,6 +887,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "browsers": data["browsers_list"] or [],
             "operating_systems": data["operating_systems"] or [],
             "screen_sizes": data["screen_sizes"] or [],
+            "screen_breakpoints": data["screen_breakpoints"] or [],
             "languages": data["languages"] or [],
             "filters": filters,
             "start_date": start_date.isoformat(),

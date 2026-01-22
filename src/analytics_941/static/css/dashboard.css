@@ -2635,6 +2635,112 @@
 }
 
 /* ==========================================================================
+   Breakpoint Summary Bars
+   ========================================================================== */
+
+.analytics-breakpoints {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: var(--941-space-4);
+}
+
+.analytics-breakpoint {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.analytics-breakpoint__label {
+    flex: 0 0 140px;
+    font-size: 0.8125rem;
+    color: var(--941-color-text-muted);
+}
+
+.analytics-breakpoint__bar {
+    flex: 1;
+    height: 22px;
+    background: var(--941-color-surface);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.analytics-breakpoint__fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.analytics-breakpoint__fill--mobile {
+    background: #3b82f6;
+}
+
+.analytics-breakpoint__fill--tablet {
+    background: #a855f7;
+}
+
+.analytics-breakpoint__fill--desktop {
+    background: #22c55e;
+}
+
+.analytics-breakpoint__fill--large {
+    background: #f97316;
+}
+
+.analytics-breakpoint__value {
+    flex: 0 0 50px;
+    text-align: right;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--941-color-text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Breakpoint Badges
+   ========================================================================== */
+
+.analytics-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    border-radius: 4px;
+    text-transform: capitalize;
+    letter-spacing: 0.01em;
+}
+
+.analytics-badge--mobile {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+}
+
+.analytics-badge--tablet {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+}
+
+.analytics-badge--desktop {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.analytics-badge--large {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+}
+
+/* ==========================================================================
+   Divider
+   ========================================================================== */
+
+.analytics-divider {
+    border: none;
+    border-top: 1px solid var(--941-color-border);
+    margin: 0;
+}
+
+/* ==========================================================================
    Theme Override Support
 
    Host sites can override theme by setting CSS variables on .analytics-root:

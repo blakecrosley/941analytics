@@ -174,6 +174,34 @@ class BrowserStats(BaseModel):
     percentage: float
 
 
+class ScreenSizeStats(BaseModel):
+    """Stats for a single screen resolution."""
+    resolution: str  # "1920x1080"
+    width: int
+    height: int
+    visits: int
+    percentage: float
+    breakpoint: str  # "mobile", "tablet", "desktop", "large"
+
+
+class BreakpointStats(BaseModel):
+    """Stats for a responsive breakpoint group."""
+    breakpoint: str  # "mobile", "tablet", "desktop", "large"
+    label: str  # "Mobile (<768px)"
+    visits: int
+    percentage: float
+    resolutions: list["ScreenSizeStats"] = []
+
+
+class LanguageStats(BaseModel):
+    """Stats for browser language."""
+    code: str  # "en-US"
+    name: str  # "English (United States)"
+    base_language: str  # "en"
+    visits: int
+    percentage: float
+
+
 class EventStats(BaseModel):
     """Stats for an event type."""
     event_name: str

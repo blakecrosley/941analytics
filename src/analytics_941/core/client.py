@@ -11,6 +11,7 @@ import httpx
 
 from .models import (
     ActivityEvent,
+    BreakpointStats,
     BrowserStats,
     CoreMetrics,
     CountryStats,
@@ -25,12 +26,144 @@ from .models import (
     GlobeData,
     GoalDefinition,
     GoalResult,
+    LanguageStats,
     MetricChange,
     PageStats,
     RealtimeData,
+    ScreenSizeStats,
     SourceStats,
     TimeSeriesPoint,
 )
+
+
+# =============================================================================
+# Language Name Lookup
+# =============================================================================
+
+LANGUAGE_NAMES: dict[str, str] = {
+    "en": "English",
+    "en-US": "English (US)",
+    "en-GB": "English (UK)",
+    "en-AU": "English (Australia)",
+    "en-CA": "English (Canada)",
+    "es": "Spanish",
+    "es-ES": "Spanish (Spain)",
+    "es-MX": "Spanish (Mexico)",
+    "es-AR": "Spanish (Argentina)",
+    "fr": "French",
+    "fr-FR": "French (France)",
+    "fr-CA": "French (Canada)",
+    "de": "German",
+    "de-DE": "German (Germany)",
+    "de-AT": "German (Austria)",
+    "de-CH": "German (Switzerland)",
+    "it": "Italian",
+    "it-IT": "Italian (Italy)",
+    "pt": "Portuguese",
+    "pt-BR": "Portuguese (Brazil)",
+    "pt-PT": "Portuguese (Portugal)",
+    "ja": "Japanese",
+    "ja-JP": "Japanese (Japan)",
+    "ko": "Korean",
+    "ko-KR": "Korean (Korea)",
+    "zh": "Chinese",
+    "zh-CN": "Chinese (Simplified)",
+    "zh-TW": "Chinese (Traditional)",
+    "zh-HK": "Chinese (Hong Kong)",
+    "ru": "Russian",
+    "ru-RU": "Russian (Russia)",
+    "ar": "Arabic",
+    "ar-SA": "Arabic (Saudi Arabia)",
+    "hi": "Hindi",
+    "hi-IN": "Hindi (India)",
+    "nl": "Dutch",
+    "nl-NL": "Dutch (Netherlands)",
+    "pl": "Polish",
+    "pl-PL": "Polish (Poland)",
+    "sv": "Swedish",
+    "sv-SE": "Swedish (Sweden)",
+    "da": "Danish",
+    "da-DK": "Danish (Denmark)",
+    "fi": "Finnish",
+    "fi-FI": "Finnish (Finland)",
+    "no": "Norwegian",
+    "nb": "Norwegian Bokmål",
+    "nb-NO": "Norwegian (Norway)",
+    "tr": "Turkish",
+    "tr-TR": "Turkish (Turkey)",
+    "he": "Hebrew",
+    "he-IL": "Hebrew (Israel)",
+    "th": "Thai",
+    "th-TH": "Thai (Thailand)",
+    "vi": "Vietnamese",
+    "vi-VN": "Vietnamese (Vietnam)",
+    "id": "Indonesian",
+    "id-ID": "Indonesian (Indonesia)",
+    "ms": "Malay",
+    "ms-MY": "Malay (Malaysia)",
+    "uk": "Ukrainian",
+    "uk-UA": "Ukrainian (Ukraine)",
+    "cs": "Czech",
+    "cs-CZ": "Czech (Czech Republic)",
+    "el": "Greek",
+    "el-GR": "Greek (Greece)",
+    "hu": "Hungarian",
+    "hu-HU": "Hungarian (Hungary)",
+    "ro": "Romanian",
+    "ro-RO": "Romanian (Romania)",
+    "sk": "Slovak",
+    "sk-SK": "Slovak (Slovakia)",
+    "bg": "Bulgarian",
+    "bg-BG": "Bulgarian (Bulgaria)",
+    "hr": "Croatian",
+    "hr-HR": "Croatian (Croatia)",
+    "sl": "Slovenian",
+    "sl-SI": "Slovenian (Slovenia)",
+    "et": "Estonian",
+    "et-EE": "Estonian (Estonia)",
+    "lv": "Latvian",
+    "lv-LV": "Latvian (Latvia)",
+    "lt": "Lithuanian",
+    "lt-LT": "Lithuanian (Lithuania)",
+}
+
+
+def _get_language_name(code: str) -> str:
+    """Convert language code to human-readable name."""
+    if not code:
+        return "Unknown"
+    # Try exact match first
+    if code in LANGUAGE_NAMES:
+        return LANGUAGE_NAMES[code]
+    # Try base language
+    base = code.split("-")[0].lower()
+    if base in LANGUAGE_NAMES:
+        # If we have a region, append it
+        if "-" in code:
+            region = code.split("-")[-1].upper()
+            return f"{LANGUAGE_NAMES[base]} ({region})"
+        return LANGUAGE_NAMES[base]
+    return code
+
+
+def _classify_breakpoint(width: int) -> str:
+    """Classify screen width into responsive breakpoint."""
+    if width < 768:
+        return "mobile"
+    elif width < 1024:
+        return "tablet"
+    elif width < 1920:
+        return "desktop"
+    else:
+        return "large"
+
+
+BREAKPOINT_LABELS: dict[str, str] = {
+    "mobile": "Mobile (<768px)",
+    "tablet": "Tablet (768-1024px)",
+    "desktop": "Desktop (1024-1920px)",
+    "large": "Large (>1920px)",
+}
 
 
 class AnalyticsClient:
@@ -1132,8 +1265,8 @@ class AnalyticsClient:
         end_date: date,
         limit: int = 10,
         filters: DashboardFilters | None = None,
-    ) -> list[dict[str, Any]]:
-        """Get language breakdown."""
+    ) -> list[LanguageStats]:
+        """Get language breakdown with human-readable names."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
 
@@ -1153,37 +1286,101 @@ class AnalyticsClient:
             [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
-        return results
+        total = sum(r["visits"] for r in results) if results else 0
+
+        return [
+            LanguageStats(
+                code=r["language"],
+                name=_get_language_name(r["language"]),
+                base_language=r["language"].split("-")[0].lower() if r["language"] else "unknown",
+                visits=r["visits"],
+                percentage=round((r["visits"] / total) * 100, 1) if total > 0 else 0,
+            )
+            for r in results
+        ]
 
     async def get_screen_sizes(
         self,
         start_date: date,
         end_date: date,
-        limit: int = 10,
+        limit: int = 20,
         filters: DashboardFilters | None = None,
-    ) -> list[dict[str, Any]]:
-        """Get screen size breakdown."""
+    ) -> list[ScreenSizeStats]:
+        """Get screen size breakdown with breakpoint classification."""
 
         filter_sql, filter_params = self._build_filter_sql(filters)
 
         results = await self._query(
             f"""
             SELECT
-                (screen_width || 'x' || screen_height) as resolution,
+                screen_width,
+                screen_height,
                 COUNT(*) as visits
             FROM page_views
             WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
                 AND is_bot = 0
                 AND screen_width IS NOT NULL AND screen_height IS NOT NULL
+                AND screen_width > 0 AND screen_height > 0
                 {filter_sql}
-            GROUP BY resolution
+            GROUP BY screen_width, screen_height
             ORDER BY visits DESC
             LIMIT ?
             """,
             [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
         )
 
-        return results
+        total = sum(r["visits"] for r in results) if results else 0
+
+        return [
+            ScreenSizeStats(
+                resolution=f"{r['screen_width']}x{r['screen_height']}",
+                width=r["screen_width"],
+                height=r["screen_height"],
+                visits=r["visits"],
+                percentage=round((r["visits"] / total) * 100, 1) if total > 0 else 0,
+                breakpoint=_classify_breakpoint(r["screen_width"]),
+            )
+            for r in results
+        ]
+
+    async def get_screen_breakpoints(
+        self,
+        start_date: date,
+        end_date: date,
+        filters: DashboardFilters | None = None,
+    ) -> list[BreakpointStats]:
+        """Get screen sizes grouped by responsive breakpoints."""
+
+        # Fetch more resolutions to get accurate grouping
+        screen_sizes = await self.get_screen_sizes(start_date, end_date, limit=100, filters=filters)
+
+        if not screen_sizes:
+            return []
+
+        # Group by breakpoint
+        groups: dict[str, list[ScreenSizeStats]] = {}
+        for ss in screen_sizes:
+            bp = ss.breakpoint
+            if bp not in groups:
+                groups[bp] = []
+            groups[bp].append(ss)
+
+        total = sum(ss.visits for ss in screen_sizes)
+
+        # Build results in consistent order
+        result = []
+        for bp in ["mobile", "tablet", "desktop", "large"]:
+            if bp in groups:
+                group_visits = sum(ss.visits for ss in groups[bp])
+                result.append(BreakpointStats(
+                    breakpoint=bp,
+                    label=BREAKPOINT_LABELS[bp],
+                    visits=group_visits,
+                    percentage=round((group_visits / total) * 100, 1) if total > 0 else 0,
+                    resolutions=sorted(groups[bp], key=lambda x: x.visits, reverse=True)[:5],
+                ))
+
+        return result
 
     # =========================================================================
     # EVENTS

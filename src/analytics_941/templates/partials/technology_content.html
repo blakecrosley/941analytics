@@ -151,18 +151,35 @@
 </div>
 
 <div class="analytics-grid-2">
-    {# Screen Sizes #}
+    {# Screen Sizes - Enhanced with Breakpoint Summary #}
     <div class="analytics-section">
         <div class="analytics-section__header">
             <span class="analytics-section__title">Screen Sizes</span>
         </div>
-        <div class="analytics-section__content analytics-section__content--flush">
+        <div class="analytics-section__content">
+            {# Breakpoint Summary Bars #}
+            {% if screen_breakpoints|length > 0 %}
+            <div class="analytics-breakpoints">
+                {% for bp in screen_breakpoints %}
+                <div class="analytics-breakpoint">
+                    <div class="analytics-breakpoint__label">{{ bp.label }}</div>
+                    <div class="analytics-breakpoint__bar">
+                        <div class="analytics-breakpoint__fill analytics-breakpoint__fill--{{ bp.breakpoint }}" style="width: {{ bp.percentage }}%;"></div>
+                    </div>
+                    <div class="analytics-breakpoint__value">{{ "{:.1f}".format(bp.percentage) }}%</div>
+                </div>
+                {% endfor %}
+            </div>
+            <hr class="analytics-divider">
+            {% endif %}
+
+            {# Detailed Resolution Table #}
             {% if screen_sizes|length > 0 %}
-            {% set total_screens = screen_sizes|map(attribute='visits')|sum %}
             <table class="analytics-table">
                 <thead>
                     <tr>
                         <th>Resolution</th>
+                        <th>Type</th>
                         <th class="analytics-text-right">Visits</th>
                         <th class="analytics-text-right">%</th>
                     </tr>
@@ -173,11 +190,16 @@
                         <td>
                             {{ screen.resolution }}
                             <div class="analytics-table__bar">
-                                <div class="analytics-table__bar-fill" style="width: {{ (screen.visits / total_screens * 100)|int }}%;"></div>
+                                <div class="analytics-table__bar-fill" style="width: {{ screen.percentage|int }}%;"></div>
                             </div>
                         </td>
+                        <td>
+                            <span class="analytics-badge analytics-badge--{{ screen.breakpoint }}">
+                                {{ screen.breakpoint|capitalize }}
+                            </span>
+                        </td>
                         <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(screen.visits) }}</td>
-                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(screen.visits / total_screens * 100) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(screen.percentage) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -191,14 +213,13 @@
         </div>
     </div>
 
-    {# Languages #}
+    {# Languages - Enhanced with Human-Readable Names #}
     <div class="analytics-section">
         <div class="analytics-section__header">
             <span class="analytics-section__title">Languages</span>
         </div>
         <div class="analytics-section__content analytics-section__content--flush">
             {% if languages|length > 0 %}
-            {% set total_langs = languages|map(attribute='visits')|sum %}
             <table class="analytics-table">
                 <thead>
                     <tr>
@@ -211,13 +232,21 @@
                     {% for lang in languages[:10] %}
                     <tr>
                         <td>
-                            {{ lang.language }}
+                            <a href="?language={{ lang.code|urlencode }}"
+                               hx-get="./partials/technology?language={{ lang.code|urlencode }}"
+                               hx-target="#main-content"
+                               hx-push-url="?language={{ lang.code|urlencode }}"
+                               style="text-decoration: none; color: var(--941-color-text-muted);">
+                                {{ lang.name }}
+                                <br>
+                                <small class="analytics-text-muted">{{ lang.code }}</small>
+                            </a>
                             <div class="analytics-table__bar">
-                                <div class="analytics-table__bar-fill" style="width: {{ (lang.visits / total_langs * 100)|int }}%;"></div>
+                                <div class="analytics-table__bar-fill" style="width: {{ lang.percentage|int }}%;"></div>
                             </div>
                         </td>
                         <td class="analytics-text-right analytics-table__number">{{ "{:,}".format(lang.visits) }}</td>
-                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(lang.visits / total_langs * 100) }}%</td>
+                        <td class="analytics-text-right analytics-table__number">{{ "{:.1f}".format(lang.percentage) }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
