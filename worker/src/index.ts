@@ -1440,9 +1440,9 @@ const TRACKING_SCRIPT = `
     // Normalize message for grouping (remove variable parts like line numbers, URLs)
     if (!message) return 'Unknown error';
     return message
-      .replace(/at line \d+/gi, 'at line X')
-      .replace(/:\d+:\d+/g, ':X:X')
-      .replace(/https?:\/\/[^\s]+/g, '[URL]')
+      .replace(/at line \\d+/gi, 'at line X')
+      .replace(/:\\d+:\\d+/g, ':X:X')
+      .replace(/https?:\\/\\/[^\\s]+/g, '[URL]')
       .substring(0, 200);
   }
 
