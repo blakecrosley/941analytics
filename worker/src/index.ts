@@ -54,6 +54,9 @@ interface PageViewData {
   title: string;
   ref: string;
   w: number;
+  sw: number;       // Screen width
+  sh: number;       // Screen height
+  lang: string;     // Browser language
   sid: string;      // Session ID (client-generated)
   type: string;     // 'pageview' or 'heartbeat'
 }
@@ -1075,6 +1078,9 @@ const TRACKING_SCRIPT = `
       title: document.title || '',
       ref: document.referrer || '',
       w: String(window.innerWidth || 0),
+      sw: String(screen.width || 0),
+      sh: String(screen.height || 0),
+      lang: navigator.language || '',
       sid: sid,
       type: (extra && extra.type) || 'pageview'
     });
@@ -1896,6 +1902,9 @@ export default {
         title: params.get("title") || "",
         ref: params.get("ref") || "",
         w: parseInt(params.get("w") || "0", 10),
+        sw: parseInt(params.get("sw") || "0", 10),
+        sh: parseInt(params.get("sh") || "0", 10),
+        lang: params.get("lang") || "",
         sid: params.get("sid") || "",
         type: params.get("type") || "pageview",
       };
@@ -1997,6 +2006,7 @@ export default {
             referrer, referrer_type, referrer_domain,
             country, region, city, latitude, longitude,
             device_type, user_agent, browser, browser_version, os, os_version,
+            screen_width, screen_height, language,
             is_bot, bot_name, bot_category,
             utm_source, utm_medium, utm_campaign, utm_term, utm_content,
             visitor_hash, session_id
@@ -2005,6 +2015,7 @@ export default {
             ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?,
+            ?, ?, ?,
             ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?
@@ -2027,6 +2038,9 @@ export default {
           deviceInfo.browserVersion,
           deviceInfo.os,
           deviceInfo.osVersion,
+          data.sw || null,
+          data.sh || null,
+          data.lang || null,
           botInfo.isBot ? 1 : 0,
           botInfo.name,
           botInfo.category,
