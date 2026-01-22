@@ -537,35 +537,39 @@ async function upsertSession(
   } else {
     // Create new session (only on pageview, not heartbeat)
     if (!isHeartbeat) {
-      await db.prepare(`
-        INSERT INTO sessions (
-          site, session_id, visitor_hash,
-          started_at, last_activity_at,
-          entry_page, exit_page, pageview_count, is_bounce,
-          referrer, referrer_type, referrer_domain,
-          utm_source, utm_medium, utm_campaign,
-          country, region, device_type, browser, os
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        data.site,
-        data.sessionId,
-        data.visitorHash,
-        now,
-        now,
-        data.entryPage,
-        data.entryPage, // Initially, entry = exit
-        data.referrer,
-        data.referrerType,
-        data.referrerDomain,
-        data.utmSource,
-        data.utmMedium,
-        data.utmCampaign,
-        data.country,
-        data.region,
-        data.deviceType,
-        data.browser,
-        data.os
-      ).run();
+      try {
+        await db.prepare(`
+          INSERT INTO sessions (
+            site, session_id, visitor_hash,
+            started_at, last_activity_at,
+            entry_page, exit_page, pageview_count, is_bounce,
+            referrer_type, referrer_domain,
+            utm_source, utm_campaign,
+            country, region, device_type, browser, os
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          data.site,
+          data.sessionId,
+          data.visitorHash,
+          now,
+          now,
+          data.entryPage,
+          data.entryPage, // Initially, entry = exit
+          data.referrerType,
+          data.referrerDomain,
+          data.utmSource,
+          data.utmCampaign,
+          data.country,
+          data.region,
+          data.deviceType,
+          data.browser,
+          data.os
+        ).run();
+        console.log(`[SESSION] Created session ${data.sessionId} for ${data.site}`);
+      } catch (err) {
+        console.error(`[SESSION] Failed to create session ${data.sessionId}:`, err);
+        throw err; // Re-throw to surface the error
+      }
     }
   }
 }
