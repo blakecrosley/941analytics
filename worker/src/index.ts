@@ -1239,6 +1239,10 @@ const TRACKING_SCRIPT = `
     if (!href) return false;
     try {
       var linkUrl = new URL(href, window.location.href);
+      // Only http(s) URLs can be outbound pages. blob:/data:/mailto:/tel:
+      // etc. have no host, which made them look "different host" and get
+      // intercepted - killing <a download href="blob:..."> file saves.
+      if (linkUrl.protocol !== 'http:' && linkUrl.protocol !== 'https:') return false;
       // Check if different host (outbound)
       return linkUrl.host !== window.location.host;
     } catch (e) {
@@ -1263,6 +1267,10 @@ const TRACKING_SCRIPT = `
   function trackOutboundClick(event) {
     var link = event.target.closest('a');
     if (!link) return;
+
+    // Anchors with the download attribute are file saves, not navigation -
+    // preventDefault() + location.href re-navigation breaks the download.
+    if (link.hasAttribute('download')) return;
 
     var href = link.href;
     if (!isOutboundLink(href)) return;
