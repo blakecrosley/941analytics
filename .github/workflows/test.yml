@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege GITHUB_TOKEN. Without this the token inherits the
+# repository default, which is broader than this workflow needs.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Python Tests
