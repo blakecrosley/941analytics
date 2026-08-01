@@ -78,7 +78,10 @@ jobs:
           echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-initial}...$GITHUB_REF_NAME" >> CHANGELOG.md
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        # Pinned to the commit v1 resolves to today. This job holds contents: write and a
+        # GITHUB_TOKEN, so a silently-repointed tag could write to the repo. Behaviour is
+        # unchanged; only the mutable tag is removed.
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           body_path: CHANGELOG.md
           files: dist/*
