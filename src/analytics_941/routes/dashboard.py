@@ -221,6 +221,20 @@ def _parse_date_range(
     return ParsedDateRange(start, end, compare_start, compare_end)
 
 
+def _rows_to_csv(rows: list[dict[str, Any]]) -> str:
+    """Serialize export rows to CSV text (header from the first row's keys)."""
+    if not rows:
+        return ""
+    import csv
+    from io import StringIO
+
+    buf = StringIO()
+    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    return buf.getvalue()
+
+
 def _format_duration(seconds: int) -> str:
     """Format duration in seconds to human readable string."""
     if seconds < 60:
@@ -410,6 +424,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
     async def login_page(request: Request, error: str = ""):
         """Render login page."""
         return templates.TemplateResponse(
+            request,
             "pages/login.html",
             {
                 "request": request,
@@ -535,7 +550,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             }
         )
 
-        return templates.TemplateResponse("pages/overview.html", context)
+        return templates.TemplateResponse(request, "pages/overview.html", context)
 
     @router.get("/partials/overview", response_class=HTMLResponse)
     async def overview_partial(
@@ -602,7 +617,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         # Cache dashboard partials for 60 seconds (private to avoid shared caching)
         response.headers["Cache-Control"] = "private, max-age=60"
-        return templates.TemplateResponse("partials/overview_content.html", context)
+        return templates.TemplateResponse(request, "partials/overview_content.html", context)
 
     @router.get("/partials/chart", response_class=HTMLResponse)
     async def chart_partial(
@@ -644,7 +659,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "granularity": "day",
         }
 
-        return templates.TemplateResponse("components/chart_area.html", context)
+        return templates.TemplateResponse(request, "components/chart_area.html", context)
 
     @router.get("/sources", response_class=HTMLResponse)
     async def sources_page(
@@ -694,7 +709,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             }
         )
 
-        return templates.TemplateResponse("pages/sources.html", context)
+        return templates.TemplateResponse(request, "pages/sources.html", context)
 
     @router.get("/partials/sources", response_class=HTMLResponse)
     async def sources_partial(
@@ -746,7 +761,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         )
 
         response.headers["Cache-Control"] = "private, max-age=60"
-        return templates.TemplateResponse("partials/sources_content.html", context)
+        return templates.TemplateResponse(request, "partials/sources_content.html", context)
 
     @router.get("/geography", response_class=HTMLResponse)
     async def geography_page(
@@ -799,7 +814,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             }
         )
 
-        return templates.TemplateResponse("pages/geography.html", context)
+        return templates.TemplateResponse(request, "pages/geography.html", context)
 
     @router.get("/partials/geography", response_class=HTMLResponse)
     async def geography_partial(
@@ -854,7 +869,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         )
 
         response.headers["Cache-Control"] = "private, max-age=60"
-        return templates.TemplateResponse("partials/geography_content.html", context)
+        return templates.TemplateResponse(request, "partials/geography_content.html", context)
 
     @router.get("/technology", response_class=HTMLResponse)
     async def technology_page(
@@ -905,7 +920,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             }
         )
 
-        return templates.TemplateResponse("pages/technology.html", context)
+        return templates.TemplateResponse(request, "pages/technology.html", context)
 
     @router.get("/partials/technology", response_class=HTMLResponse)
     async def technology_partial(
@@ -958,7 +973,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         )
 
         response.headers["Cache-Control"] = "private, max-age=60"
-        return templates.TemplateResponse("partials/technology_content.html", context)
+        return templates.TemplateResponse(request, "partials/technology_content.html", context)
 
     @router.get("/events", response_class=HTMLResponse)
     async def events_page(
@@ -1032,7 +1047,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             }
         )
 
-        return templates.TemplateResponse("pages/events.html", context)
+        return templates.TemplateResponse(request, "pages/events.html", context)
 
     @router.get("/partials/events", response_class=HTMLResponse)
     async def events_partial(
@@ -1108,7 +1123,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         )
 
         response.headers["Cache-Control"] = "private, max-age=60"
-        return templates.TemplateResponse("partials/events_content.html", context)
+        return templates.TemplateResponse(request, "partials/events_content.html", context)
 
     @router.get("/realtime", response_class=HTMLResponse)
     async def realtime_page(
@@ -1125,7 +1140,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         context["realtime"] = realtime
         context["realtime_count"] = realtime.active_visitors
 
-        return templates.TemplateResponse("pages/realtime.html", context)
+        return templates.TemplateResponse(request, "pages/realtime.html", context)
 
     # -------------------------------------------------------------------------
     # Funnel Routes
@@ -1189,7 +1204,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             }
         )
 
-        return templates.TemplateResponse("pages/funnels.html", context)
+        return templates.TemplateResponse(request, "pages/funnels.html", context)
 
     @router.get("/partials/funnels", response_class=HTMLResponse)
     async def funnels_partial(
@@ -1249,7 +1264,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             }
         )
 
-        return templates.TemplateResponse("partials/funnels_content.html", context)
+        return templates.TemplateResponse(request, "partials/funnels_content.html", context)
 
     @router.post("/funnels/create", response_class=HTMLResponse)
     async def create_funnel(
@@ -1352,7 +1367,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         context["selected_goal"] = selected_goal
         context["goal_results"] = goal_results
 
-        return templates.TemplateResponse("pages/goals.html", context)
+        return templates.TemplateResponse(request, "pages/goals.html", context)
 
     @router.get("/partials/goals", response_class=HTMLResponse)
     async def goals_partial(
@@ -1395,7 +1410,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         context["selected_goal"] = selected_goal
         context["goal_results"] = goal_results
 
-        return templates.TemplateResponse("partials/goals_content.html", context)
+        return templates.TemplateResponse(request, "partials/goals_content.html", context)
 
     @router.post("/goals/create", response_class=HTMLResponse)
     async def create_goal(
@@ -1477,7 +1492,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         context = _get_common_context(request, "overview")
         context["saved_views"] = saved_views
 
-        return templates.TemplateResponse("partials/saved_views_dropdown.html", context)
+        return templates.TemplateResponse(request, "partials/saved_views_dropdown.html", context)
 
     @router.post("/views/create", response_class=HTMLResponse)
     async def create_saved_view(
@@ -1531,7 +1546,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         context = _get_common_context(request, "overview")
         context["saved_views"] = saved_views
 
-        return templates.TemplateResponse("partials/saved_views_dropdown.html", context)
+        return templates.TemplateResponse(request, "partials/saved_views_dropdown.html", context)
 
     @router.post("/views/{view_id}/default")
     async def set_view_default(
@@ -1757,7 +1772,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         date_range = _parse_date_range(period, start, end)
 
         # Get all report data
-        metrics = await client.get_core_metrics(date_range.start, date_range.end, filters)
+        metrics = await client.get_core_metrics(date_range.start, date_range.end, filters=filters)
         pages = await client.get_top_pages(
             date_range.start, date_range.end, filters=filters, limit=20
         )
@@ -1784,7 +1799,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "generated_at": datetime.now().isoformat(),
         }
 
-        return templates.TemplateResponse("pages/export_report.html", context)
+        return templates.TemplateResponse(request, "pages/export_report.html", context)
 
     @router.get("/partials/realtime", response_class=HTMLResponse)
     async def realtime_partial(
@@ -1800,7 +1815,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         context = _get_common_context(request, "realtime")
         context["realtime"] = realtime
 
-        return templates.TemplateResponse("partials/realtime_content.html", context)
+        return templates.TemplateResponse(request, "partials/realtime_content.html", context)
 
     @router.get("/partials/activity-feed", response_class=HTMLResponse)
     async def activity_feed_partial(
@@ -1821,7 +1836,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             "event_type_filter": event_type or "all",
         }
 
-        return templates.TemplateResponse("components/activity_feed.html", context)
+        return templates.TemplateResponse(request, "components/activity_feed.html", context)
 
     # -------------------------------------------------------------------------
     # Export Routes
@@ -1842,7 +1857,10 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
         start_date, end_date, _, _ = _parse_date_range(period, start, end)
-        csv_data = await client.export_pageviews(start_date, end_date)
+        rows = await client.export_pageviews(start_date, end_date)
+        # export_pageviews returns list[dict]; streaming that raw was a
+        # TypeError -- StreamingResponse needs str/bytes chunks.
+        csv_data = _rows_to_csv(rows)
 
         return StreamingResponse(
             iter([csv_data]),
@@ -1867,7 +1885,8 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
         start_date, end_date, _, _ = _parse_date_range(period, start, end)
-        csv_data = await client.export_events(start_date, end_date)
+        rows = await client.export_events(start_date, end_date)
+        csv_data = _rows_to_csv(rows)
 
         return StreamingResponse(
             iter([csv_data]),
