@@ -10,9 +10,11 @@ import logging
 import secrets
 import time
 from collections import defaultdict
+from collections.abc import Coroutine
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from threading import Lock
+from typing import Any, NamedTuple
 
 from fastapi import APIRouter, Cookie, Form, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -107,11 +109,29 @@ def _verify_auth(auth_cookie: str | None, expected_hash: str) -> bool:
     return secrets.compare_digest(auth_cookie, expected_hash)
 
 
+class ParsedDateRange(NamedTuple):
+    """Result of _parse_date_range.
+
+    A NamedTuple deliberately: 12 call sites unpack it positionally
+    (`start, end, cs, ce = _parse_date_range(...)`) while the CSV-export and
+    report endpoints access `.start` / `.end` on the returned value. The plain
+    tuple this used to be made every one of those attribute accesses an
+    AttributeError at runtime -- /export/pages.csv, /export/sources.csv,
+    /export/geography.csv, /export/events.csv, and /export/report were all
+    hard-broken until mypy surfaced it (28 attr-defined errors).
+    """
+
+    start: date
+    end: date
+    compare_start: date | None
+    compare_end: date | None
+
+
 def _parse_date_range(
     period: str,
     custom_start: str | None = None,
     custom_end: str | None = None,
-) -> tuple[date, date, date | None, date | None]:
+) -> ParsedDateRange:
     """Parse period string or custom dates into date range with comparison period.
 
     Args:
@@ -120,12 +140,14 @@ def _parse_date_range(
         custom_end: Custom end date in YYYY-MM-DD format
 
     Returns:
-        Tuple of (start_date, end_date, compare_start, compare_end)
+        ParsedDateRange(start, end, compare_start, compare_end)
 
     Raises:
         HTTPException: If custom dates are invalid
     """
     today = date.today()
+    compare_start: date | None
+    compare_end: date | None
 
     # Handle custom date range
     if period == "custom" or (custom_start and custom_end):
@@ -155,7 +177,7 @@ def _parse_date_range(
         compare_end = start - timedelta(days=1)
         compare_start = compare_end - timedelta(days=duration - 1)
 
-        return start, end, compare_start, compare_end
+        return ParsedDateRange(start, end, compare_start, compare_end)
 
     # Handle preset periods
     if period == "24h":
@@ -196,7 +218,7 @@ def _parse_date_range(
         compare_start = start - timedelta(days=30)
         compare_end = start
 
-    return start, end, compare_start, compare_end
+    return ParsedDateRange(start, end, compare_start, compare_end)
 
 
 def _format_duration(seconds: int) -> str:
@@ -353,7 +375,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             utm_campaign=utm_campaign,
         )
 
-    async def _parallel_queries(**queries: dict) -> dict:
+    async def _parallel_queries(**queries: Coroutine[Any, Any, Any]) -> dict[str, Any]:
         """Execute multiple async queries in parallel with error handling.
 
         Args:
@@ -368,7 +390,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         results = await asyncio.gather(*coros, return_exceptions=True)
 
-        output = {}
+        output: dict[str, Any] = {}
         # strict=True asserts the 1:1 invariant: names and coros come from the same
         # dict, and gather() returns exactly one result per coroutine.
         for name, result in zip(names, results, strict=True):
@@ -1142,8 +1164,10 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             else:
                 selected_funnel = funnels[0]
 
+            # analyze_funnel takes the FunnelDefinition itself, not its id --
+            # passing the int made funnel.steps an AttributeError on every render.
             funnel_result = await client.analyze_funnel(
-                selected_funnel.id,
+                selected_funnel,
                 start_date,
                 end_date,
             )
@@ -1200,8 +1224,10 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
             else:
                 selected_funnel = funnels[0]
 
+            # analyze_funnel takes the FunnelDefinition itself, not its id --
+            # passing the int made funnel.steps an AttributeError on every render.
             funnel_result = await client.analyze_funnel(
-                selected_funnel.id,
+                selected_funnel,
                 start_date,
                 end_date,
             )
@@ -1244,11 +1270,18 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid steps JSON") from None
 
-        from ..core.models import FunnelStep
+        from ..core.models import FunnelDefinition, FunnelStep
 
         funnel_steps = [FunnelStep(**step) for step in steps_data]
 
-        await client.create_funnel(name, description or None, funnel_steps)
+        await client.create_funnel(
+            FunnelDefinition(
+                site=config.site_name,
+                name=name,
+                description=description or None,
+                steps=funnel_steps,
+            )
+        )
 
         # Redirect back to funnels page
         return RedirectResponse(url="./funnels", status_code=303)
@@ -1285,7 +1318,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             return RedirectResponse(url="./login")
 
-        start_date, end_date = _parse_date_range(period, start, end)
+        start_date, end_date, _, _ = _parse_date_range(period, start, end)
 
         # Ensure preset goals exist
         await client.ensure_preset_goals()
@@ -1334,7 +1367,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         if not _check_auth(auth):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        start_date, end_date = _parse_date_range(period, start, end)
+        start_date, end_date, _, _ = _parse_date_range(period, start, end)
 
         await client.ensure_preset_goals()
         goals = await client.get_goals(active_only=False)
@@ -1730,12 +1763,13 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         )
         sources = await client.get_sources(date_range.start, date_range.end, filters=filters)
         countries = await client.get_countries(date_range.start, date_range.end, filters=filters)
-        devices = await client.get_device_breakdown(
-            date_range.start, date_range.end, filters=filters
-        )
-        browsers = await client.get_browser_breakdown(
-            date_range.start, date_range.end, filters=filters
-        )
+        # get_device_breakdown / get_browser_breakdown never existed on
+        # AnalyticsClient -- the real methods are get_devices / get_browsers
+        # (used by every dashboard partial). Third independent bug in this
+        # endpoint: date_range.start on a plain tuple, datetime.now() without
+        # the import, and these phantom methods. It has never run end-to-end.
+        devices = await client.get_devices(date_range.start, date_range.end, filters=filters)
+        browsers = await client.get_browsers(date_range.start, date_range.end, filters=filters)
 
         context = {
             "request": request,

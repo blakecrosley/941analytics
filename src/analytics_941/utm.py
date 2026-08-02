@@ -59,7 +59,7 @@ class UTMParams:
 
     def to_dict(self) -> dict[str, str | None]:
         """Convert to dictionary, excluding None values."""
-        result = {}
+        result: dict[str, str | None] = {}
         if self.source:
             result["source"] = self.source
         if self.medium:

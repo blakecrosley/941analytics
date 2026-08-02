@@ -44,7 +44,8 @@ class AnalyticsClient:
             # D1 returns results in a specific format
             results = data.get("result", [])
             if results and len(results) > 0:
-                return results[0].get("results", [])
+                rows: list[dict] = results[0].get("results", [])
+                return rows
             return []
 
     async def get_dashboard_data(
@@ -796,7 +797,7 @@ class AnalyticsClient:
         if not result:
             return None
 
-        challenge = result[0]["challenge"]
+        challenge: str = result[0]["challenge"]
         challenge_id = result[0]["id"]
 
         # Delete the consumed challenge

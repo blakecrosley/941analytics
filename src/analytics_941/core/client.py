@@ -202,12 +202,42 @@ class AnalyticsClient:
 
             results = data.get("result", [])
             if results and len(results) > 0:
-                return results[0].get("results", [])
+                rows: list[dict] = results[0].get("results", [])
+                return rows
             return []
 
     async def _execute(self, sql: str, params: list | None = None) -> None:
         """Execute a SQL statement without returning results."""
         await self._query(sql, params)
+
+    async def _execute_with_meta(self, sql: str, params: list | None = None) -> dict:
+        """Execute a write statement and return D1's meta dict.
+
+        _query returns only the row list and discards meta, and _execute returns
+        None outright -- yet the saved-view writers need meta.last_row_id and
+        meta.changes. They used to call _execute and then .get() on its None,
+        so every saved-view create/update/delete raised AttributeError at
+        runtime (surfaced by mypy as four func-returns-value errors).
+        """
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self.base_url}/query",
+                headers={
+                    "Authorization": f"Bearer {self.api_token}",
+                    "Content-Type": "application/json",
+                },
+                json={"sql": sql, "params": params or []},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if not data.get("success"):
+                raise Exception(f"D1 query failed: {data.get('errors')}")
+
+            results = data.get("result", [])
+            if results and len(results) > 0:
+                return results[0].get("meta", {}) or {}
+            return {}
 
     # =========================================================================
     # CORE METRICS
@@ -1482,7 +1512,7 @@ class AnalyticsClient:
         filter_sql, filter_params = self._build_event_filter_sql(filters)
         type_filter = "AND event_type = ?" if event_type else ""
 
-        params = [self.site_name, start_date.isoformat(), end_date.isoformat()]
+        params: list[str | int] = [self.site_name, start_date.isoformat(), end_date.isoformat()]
         if event_type:
             params.append(event_type)
         params.extend(filter_params)
@@ -1676,7 +1706,7 @@ class AnalyticsClient:
         type_filter = "AND event_type = ?" if event_type else ""
 
         # Build params for current period
-        params = [self.site_name, start_date.isoformat(), end_date.isoformat()]
+        params: list[str | int] = [self.site_name, start_date.isoformat(), end_date.isoformat()]
         if event_type:
             params.append(event_type)
         params.extend(filter_params)
@@ -2480,7 +2510,7 @@ class AnalyticsClient:
         if not result:
             return None
 
-        challenge = result[0]["challenge"]
+        challenge: str = result[0]["challenge"]
         challenge_id = result[0]["id"]
 
         await self._query(
@@ -3045,7 +3075,7 @@ class AnalyticsClient:
                 [self.site_name],
             )
 
-        result = await self._execute(
+        result = await self._execute_with_meta(
             """
             INSERT INTO saved_views (site, name, description, filters, date_preset, is_default, is_shared)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -3060,7 +3090,7 @@ class AnalyticsClient:
                 1 if view.is_shared else 0,
             ],
         )
-        return result.get("meta", {}).get("last_row_id", 0)
+        return int(result.get("last_row_id", 0))
 
     async def update_saved_view(self, view_id: int, view: "SavedView") -> bool:
         """Update an existing saved view."""
@@ -3073,7 +3103,7 @@ class AnalyticsClient:
                 [self.site_name, view_id],
             )
 
-        result = await self._execute(
+        result = await self._execute_with_meta(
             """
             UPDATE saved_views
             SET name = ?, description = ?, filters = ?, date_preset = ?,
@@ -3091,15 +3121,15 @@ class AnalyticsClient:
                 self.site_name,
             ],
         )
-        return result.get("meta", {}).get("changes", 0) > 0
+        return int(result.get("changes", 0)) > 0
 
     async def delete_saved_view(self, view_id: int) -> bool:
         """Delete a saved view."""
-        result = await self._execute(
+        result = await self._execute_with_meta(
             "DELETE FROM saved_views WHERE id = ? AND site = ?",
             [view_id, self.site_name],
         )
-        return result.get("meta", {}).get("changes", 0) > 0
+        return int(result.get("changes", 0)) > 0
 
     async def set_default_view(self, view_id: int) -> bool:
         """Set a view as the default, clearing any existing default."""
@@ -3110,8 +3140,8 @@ class AnalyticsClient:
         )
 
         # Set new default
-        result = await self._execute(
+        result = await self._execute_with_meta(
             "UPDATE saved_views SET is_default = 1 WHERE id = ? AND site = ?",
             [view_id, self.site_name],
         )
-        return result.get("meta", {}).get("changes", 0) > 0
+        return int(result.get("changes", 0)) > 0

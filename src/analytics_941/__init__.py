@@ -62,9 +62,9 @@ def setup_analytics(
     d1_database_id: str,
     cf_account_id: str,
     cf_api_token: str,
-    passkey: str = None,
-    rp_id: str = None,
-    rp_origin: str = None,
+    passkey: str | None = None,
+    rp_id: str | None = None,
+    rp_origin: str | None = None,
 ) -> Analytics:
     """
     Set up analytics for a site.
