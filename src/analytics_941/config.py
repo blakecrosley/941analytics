@@ -1,6 +1,7 @@
 """
 Configuration for 941 Analytics.
 """
+
 import hashlib
 import logging
 import os
@@ -16,6 +17,7 @@ MIN_PASSKEY_LENGTH = 16
 
 class PasskeyTooShortError(ValueError):
     """Raised when a passkey doesn't meet minimum length requirements."""
+
     pass
 
 
@@ -106,19 +108,19 @@ class ThemeColors:
     """
 
     # Core colors
-    bg: str | None = None              # Background (#000000)
-    surface: str | None = None          # Card/section background (#111111)
-    surface_elevated: str | None = None # Elevated surfaces (#1a1a1a)
-    border: str | None = None           # Border color (rgba(255,255,255,0.1))
-    text: str | None = None             # Primary text (#ffffff)
-    text_muted: str | None = None       # Secondary text (rgba(255,255,255,0.65))
+    bg: str | None = None  # Background (#000000)
+    surface: str | None = None  # Card/section background (#111111)
+    surface_elevated: str | None = None  # Elevated surfaces (#1a1a1a)
+    border: str | None = None  # Border color (rgba(255,255,255,0.1))
+    text: str | None = None  # Primary text (#ffffff)
+    text_muted: str | None = None  # Secondary text (rgba(255,255,255,0.65))
 
     # Semantic colors
-    accent: str | None = None           # Accent/primary color (#ffffff)
-    success: str | None = None          # Success/positive (#22c55e)
-    warning: str | None = None          # Warning (#f59e0b)
-    error: str | None = None            # Error/negative (#ef4444)
-    info: str | None = None             # Info (#3b82f6)
+    accent: str | None = None  # Accent/primary color (#ffffff)
+    success: str | None = None  # Success/positive (#22c55e)
+    warning: str | None = None  # Warning (#f59e0b)
+    error: str | None = None  # Error/negative (#ef4444)
+    info: str | None = None  # Info (#3b82f6)
 
     def to_css(self) -> str:
         """Convert theme colors to CSS variable overrides.
@@ -226,7 +228,7 @@ class AnalyticsConfig:
                 f"  from analytics_941.config import hash_passkey\n"
                 f"  print(hash_passkey('your-passkey'))",
                 DeprecationWarning,
-                stacklevel=3
+                stacklevel=3,
             )
             # Still validate length for plaintext passkeys
             if len(self.passkey) < MIN_PASSKEY_LENGTH:

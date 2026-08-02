@@ -578,10 +578,7 @@ def create_dashboard_router(
         return HTMLResponse(content=_render_login_page(error, show_register=show_register))
 
     @router.post("/login")
-    async def login_submit(
-        request: Request,
-        passkey_input: str = Form(..., alias="passkey")
-    ):
+    async def login_submit(request: Request, passkey_input: str = Form(..., alias="passkey")):
         """Handle login form submission."""
         if not passkey:
             return RedirectResponse(url="./", status_code=302)
@@ -603,7 +600,7 @@ def create_dashboard_router(
                         max_age=AUTH_COOKIE_MAX_AGE,
                         httponly=True,
                         secure=is_secure,
-                        samesite="lax"
+                        samesite="lax",
                     )
                     return redirect
 
@@ -615,15 +612,12 @@ def create_dashboard_router(
                 max_age=AUTH_COOKIE_MAX_AGE,
                 httponly=True,
                 secure=is_secure,
-                samesite="lax"
+                samesite="lax",
             )
             return redirect
         else:
             # Invalid passkey
-            return HTMLResponse(
-                content=_render_login_page("Invalid passkey"),
-                status_code=401
-            )
+            return HTMLResponse(content=_render_login_page("Invalid passkey"), status_code=401)
 
     @router.get("/logout")
     async def logout():
@@ -647,8 +641,7 @@ def create_dashboard_router(
 
     @router.post("/auth/register/options")
     async def webauthn_register_options(
-        request: Request,
-        analytics_auth: str | None = Cookie(None)
+        request: Request, analytics_auth: str | None = Cookie(None)
     ):
         """Generate WebAuthn registration options.
 
@@ -656,10 +649,7 @@ def create_dashboard_router(
         OR an existing WebAuthn passkey session for adding additional passkeys.
         """
         if not rp_id or not rp_origin:
-            return JSONResponse(
-                {"error": "WebAuthn not configured"},
-                status_code=400
-            )
+            return JSONResponse({"error": "WebAuthn not configured"}, status_code=400)
 
         # Must be authenticated to register passkeys
         if passkey and not _verify_auth(analytics_auth, expected_hash):
@@ -682,10 +672,7 @@ def create_dashboard_router(
         )
 
         # Store challenge for verification
-        await client.store_challenge(
-            bytes_to_base64url(options.challenge),
-            "registration"
-        )
+        await client.store_challenge(bytes_to_base64url(options.challenge), "registration")
 
         return JSONResponse(json.loads(options_to_json(options)))
 
@@ -693,10 +680,7 @@ def create_dashboard_router(
     async def webauthn_register_verify(request: Request):
         """Verify WebAuthn registration response and store credential."""
         if not rp_id or not rp_origin:
-            return JSONResponse(
-                {"error": "WebAuthn not configured"},
-                status_code=400
-            )
+            return JSONResponse({"error": "WebAuthn not configured"}, status_code=400)
 
         body = await request.json()
         credential = body.get("credential")
@@ -708,10 +692,7 @@ def create_dashboard_router(
         # Get stored challenge
         challenge_b64 = await client.consume_challenge("registration")
         if not challenge_b64:
-            return JSONResponse(
-                {"error": "Challenge expired or not found"},
-                status_code=400
-            )
+            return JSONResponse({"error": "Challenge expired or not found"}, status_code=400)
 
         try:
             # Verify the registration response
@@ -733,28 +714,19 @@ def create_dashboard_router(
             return JSONResponse({"status": "ok", "device_name": device_name})
 
         except Exception as e:
-            return JSONResponse(
-                {"error": f"Registration failed: {str(e)}"},
-                status_code=400
-            )
+            return JSONResponse({"error": f"Registration failed: {str(e)}"}, status_code=400)
 
     @router.post("/auth/login/options")
     async def webauthn_login_options():
         """Generate WebAuthn authentication options."""
         if not rp_id or not rp_origin:
-            return JSONResponse(
-                {"error": "WebAuthn not configured"},
-                status_code=400
-            )
+            return JSONResponse({"error": "WebAuthn not configured"}, status_code=400)
 
         # Get existing passkeys for this site
         passkeys = await client.get_passkeys()
 
         if not passkeys:
-            return JSONResponse(
-                {"error": "No passkeys registered"},
-                status_code=400
-            )
+            return JSONResponse({"error": "No passkeys registered"}, status_code=400)
 
         # Build credential descriptors
         allow_credentials = [
@@ -776,10 +748,7 @@ def create_dashboard_router(
         )
 
         # Store challenge for verification
-        await client.store_challenge(
-            bytes_to_base64url(options.challenge),
-            "authentication"
-        )
+        await client.store_challenge(bytes_to_base64url(options.challenge), "authentication")
 
         return JSONResponse(json.loads(options_to_json(options)))
 
@@ -787,10 +756,7 @@ def create_dashboard_router(
     async def webauthn_login_verify(request: Request):
         """Verify WebAuthn authentication response and create session."""
         if not rp_id or not rp_origin:
-            return JSONResponse(
-                {"error": "WebAuthn not configured"},
-                status_code=400
-            )
+            return JSONResponse({"error": "WebAuthn not configured"}, status_code=400)
 
         body = await request.json()
         credential = body.get("credential")
@@ -801,10 +767,7 @@ def create_dashboard_router(
         # Get stored challenge
         challenge_b64 = await client.consume_challenge("authentication")
         if not challenge_b64:
-            return JSONResponse(
-                {"error": "Challenge expired or not found"},
-                status_code=400
-            )
+            return JSONResponse({"error": "Challenge expired or not found"}, status_code=400)
 
         # Find the passkey by credential ID
         credential_id_b64 = credential.get("id", "")
@@ -826,8 +789,7 @@ def create_dashboard_router(
 
             # Update sign count
             await client.update_passkey_sign_count(
-                stored_passkey["id"],
-                verification.new_sign_count
+                stored_passkey["id"], verification.new_sign_count
             )
 
             # Create session token
@@ -843,17 +805,16 @@ def create_dashboard_router(
             )
 
             # Return token (client will set as cookie)
-            return JSONResponse({
-                "status": "ok",
-                "token": token_hash,
-                "device_name": stored_passkey.get("device_name", "Unknown"),
-            })
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "token": token_hash,
+                    "device_name": stored_passkey.get("device_name", "Unknown"),
+                }
+            )
 
         except Exception as e:
-            return JSONResponse(
-                {"error": f"Authentication failed: {str(e)}"},
-                status_code=400
-            )
+            return JSONResponse({"error": f"Authentication failed: {str(e)}"}, status_code=400)
 
     @router.get("/auth/passkeys")
     async def list_passkeys(analytics_auth: str | None = Cookie(None)):
@@ -878,10 +839,7 @@ def create_dashboard_router(
         return JSONResponse({"passkeys": safe_passkeys})
 
     @router.delete("/auth/passkeys/{passkey_id}")
-    async def delete_passkey_endpoint(
-        passkey_id: int,
-        analytics_auth: str | None = Cookie(None)
-    ):
+    async def delete_passkey_endpoint(passkey_id: int, analytics_auth: str | None = Cookie(None)):
         """Delete a registered passkey."""
         # Must be authenticated
         if passkey and not _verify_auth(analytics_auth, expected_hash):
@@ -892,10 +850,7 @@ def create_dashboard_router(
         # Check if this is the last passkey
         passkeys = await client.get_passkeys()
         if len(passkeys) <= 1:
-            return JSONResponse(
-                {"error": "Cannot delete the last passkey"},
-                status_code=400
-            )
+            return JSONResponse({"error": "Cannot delete the last passkey"}, status_code=400)
 
         success = await client.delete_passkey(passkey_id)
         if success:
@@ -922,9 +877,7 @@ def create_dashboard_router(
     @router.get("", response_class=HTMLResponse)
     @router.get("/", response_class=HTMLResponse)
     async def dashboard(
-        request: Request,
-        period: str = "7d",
-        analytics_auth: str | None = Cookie(None)
+        request: Request, period: str = "7d", analytics_auth: str | None = Cookie(None)
     ):
         """Render the analytics dashboard."""
         # Check auth if passkey is configured
@@ -956,38 +909,42 @@ def create_dashboard_router(
         max_views = max((c["views"] for c in data.countries), default=1)
 
         for c in data.countries:
-            country_rows.append(
-                f'<tr><td>{c["country"]}</td><td>{c["views"]:,}</td></tr>'
-            )
+            country_rows.append(f'<tr><td>{c["country"]}</td><td>{c["views"]:,}</td></tr>')
             # Normalize for globe visualization (0-1 scale)
-            globe_data.append({
-                "country": c["country"],
-                "views": c["views"],
-                "normalized": c["views"] / max_views if max_views > 0 else 0
-            })
+            globe_data.append(
+                {
+                    "country": c["country"],
+                    "views": c["views"],
+                    "normalized": c["views"] / max_views if max_views > 0 else 0,
+                }
+            )
 
         # Build region data for drill-down (states for US, etc.) - include lat/lon from MaxMind
         region_data = []
         for r in data.regions:
-            region_data.append({
-                "country": r["country"],
-                "region": r["region"],
-                "views": r["views"],
-                "lat": r.get("lat"),
-                "lon": r.get("lon")
-            })
+            region_data.append(
+                {
+                    "country": r["country"],
+                    "region": r["region"],
+                    "views": r["views"],
+                    "lat": r.get("lat"),
+                    "lon": r.get("lon"),
+                }
+            )
 
         # Build city data for further drill-down - include lat/lon from MaxMind
         city_data = []
         for city in data.cities:
-            city_data.append({
-                "country": city["country"],
-                "region": city["region"],
-                "city": city["city"],
-                "views": city["views"],
-                "lat": city.get("lat"),
-                "lon": city.get("lon")
-            })
+            city_data.append(
+                {
+                    "country": city["country"],
+                    "region": city["region"],
+                    "city": city["city"],
+                    "views": city["views"],
+                    "lat": city.get("lat"),
+                    "lon": city.get("lon"),
+                }
+            )
 
         # Simple HTML dashboard
         html = f"""
@@ -2565,10 +2522,7 @@ def create_dashboard_router(
         return HTMLResponse(content=html)
 
     @router.get("/api/stats")
-    async def api_stats(
-        period: str = "7d",
-        analytics_auth: str | None = Cookie(None)
-    ):
+    async def api_stats(period: str = "7d", analytics_auth: str | None = Cookie(None)):
         """API endpoint for dashboard data."""
         if not await _check_auth(analytics_auth):
             return {"error": "unauthorized"}, 401
@@ -2585,7 +2539,9 @@ def create_dashboard_router(
         count = await client.get_realtime_count()
         # Return styled count with pulse indicator if visitors are present
         if count > 0:
-            return HTMLResponse(content=f'<span style="display: flex; align-items: center; gap: 8px;">{count:,} <span class="loading-dot"></span></span>')
+            return HTMLResponse(
+                content=f'<span style="display: flex; align-items: center; gap: 8px;">{count:,} <span class="loading-dot"></span></span>'
+            )
         return HTMLResponse(content=f'<span>{count:,}</span>')
 
     return router

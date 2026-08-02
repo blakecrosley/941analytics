@@ -21,13 +21,13 @@ from urllib.parse import urlparse
 class ReferrerType(str, Enum):
     """Traffic source classification."""
 
-    DIRECT = "direct"        # No referrer (bookmarks, typed URLs, dark social)
-    ORGANIC = "organic"      # Search engine results
-    SOCIAL = "social"        # Social media platforms
-    EMAIL = "email"          # Email clients and newsletters
-    REFERRAL = "referral"    # Other websites
-    PAID = "paid"            # Paid advertising (detected via UTM or ad domain)
-    INTERNAL = "internal"    # Same-site navigation
+    DIRECT = "direct"  # No referrer (bookmarks, typed URLs, dark social)
+    ORGANIC = "organic"  # Search engine results
+    SOCIAL = "social"  # Social media platforms
+    EMAIL = "email"  # Email clients and newsletters
+    REFERRAL = "referral"  # Other websites
+    PAID = "paid"  # Paid advertising (detected via UTM or ad domain)
+    INTERNAL = "internal"  # Same-site navigation
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,7 @@ class ReferrerInfo:
         source_name: Human-readable source name (e.g., "Google", "Facebook")
         is_search: Whether this is a search engine
     """
+
     type: ReferrerType
     domain: str | None = None
     source_name: str | None = None
@@ -56,18 +57,14 @@ SEARCH_ENGINES = {
     # Google (many TLDs)
     "google.": "Google",
     "googlesyndication.com": "Google Ads",
-
     # Microsoft/Bing
     "bing.com": "Bing",
     "msn.com": "MSN/Bing",
-
     # Yahoo
     "yahoo.": "Yahoo",
     "search.yahoo": "Yahoo",
-
     # DuckDuckGo
     "duckduckgo.com": "DuckDuckGo",
-
     # Other search engines
     "baidu.com": "Baidu",
     "yandex.": "Yandex",
@@ -106,53 +103,42 @@ SOCIAL_PLATFORMS = {
     "l.instagram.com": "Instagram",
     "threads.net": "Threads",
     "messenger.com": "Messenger",
-
     # Twitter/X
     "twitter.com": "Twitter/X",
     "x.com": "Twitter/X",
     "t.co": "Twitter/X",
     "mobile.twitter.com": "Twitter/X",
-
     # LinkedIn
     "linkedin.com": "LinkedIn",
     "lnkd.in": "LinkedIn",
-
     # YouTube
     "youtube.com": "YouTube",
     "youtu.be": "YouTube",
     "m.youtube.com": "YouTube",
-
     # TikTok
     "tiktok.com": "TikTok",
     "vm.tiktok.com": "TikTok",
-
     # Reddit
     "reddit.com": "Reddit",
     "old.reddit.com": "Reddit",
     "amp.reddit.com": "Reddit",
     "out.reddit.com": "Reddit",
-
     # Pinterest
     "pinterest.com": "Pinterest",
     "pin.it": "Pinterest",
-
     # Snapchat
     "snapchat.com": "Snapchat",
-
     # Discord
     "discord.com": "Discord",
     "discord.gg": "Discord",
     "discordapp.com": "Discord",
-
     # Telegram
     "telegram.org": "Telegram",
     "t.me": "Telegram",
-
     # WhatsApp
     "whatsapp.com": "WhatsApp",
     "wa.me": "WhatsApp",
     "api.whatsapp.com": "WhatsApp",
-
     # Other social
     "mastodon.social": "Mastodon",
     "tumblr.com": "Tumblr",
@@ -184,7 +170,6 @@ EMAIL_PROVIDERS = {
     "icloud.com/mail": "iCloud Mail",
     "hey.com": "HEY",
     "tutanota.com": "Tutanota",
-
     # Email marketing platforms (when clicked from email)
     "mailchimp.com": "Mailchimp",
     "campaign-archive.com": "Mailchimp",
@@ -269,10 +254,7 @@ def _extract_domain(referrer: str) -> str | None:
         return None
 
 
-def classify_referrer(
-    referrer: str,
-    current_domain: str | None = None
-) -> ReferrerInfo:
+def classify_referrer(referrer: str, current_domain: str | None = None) -> ReferrerInfo:
     """
     Classify a referrer URL into a traffic source category.
 
@@ -307,62 +289,37 @@ def classify_referrer(
     if current_domain:
         current_normalized = _normalize_domain(current_domain)
         if domain == current_normalized or domain.endswith("." + current_normalized):
-            return ReferrerInfo(
-                type=ReferrerType.INTERNAL,
-                domain=domain
-            )
+            return ReferrerInfo(type=ReferrerType.INTERNAL, domain=domain)
 
     # Check paid ad domains first (before search engines)
     for pattern, name in PAID_AD_DOMAINS.items():
         if pattern in domain or pattern in referrer_lower:
-            return ReferrerInfo(
-                type=ReferrerType.PAID,
-                domain=domain,
-                source_name=name
-            )
+            return ReferrerInfo(type=ReferrerType.PAID, domain=domain, source_name=name)
 
     # Check email providers BEFORE search engines (mail.google.com should be email, not organic)
     for pattern, name in EMAIL_PROVIDERS.items():
         if pattern in domain or pattern in referrer_lower:
-            return ReferrerInfo(
-                type=ReferrerType.EMAIL,
-                domain=domain,
-                source_name=name
-            )
+            return ReferrerInfo(type=ReferrerType.EMAIL, domain=domain, source_name=name)
 
     # Check generic email indicators
     for indicator in EMAIL_INDICATORS:
         if indicator in domain or indicator in referrer_lower:
-            return ReferrerInfo(
-                type=ReferrerType.EMAIL,
-                domain=domain,
-                source_name="Email"
-            )
+            return ReferrerInfo(type=ReferrerType.EMAIL, domain=domain, source_name="Email")
 
     # Check search engines (organic)
     for pattern, name in SEARCH_ENGINES.items():
         if pattern in domain:
             return ReferrerInfo(
-                type=ReferrerType.ORGANIC,
-                domain=domain,
-                source_name=name,
-                is_search=True
+                type=ReferrerType.ORGANIC, domain=domain, source_name=name, is_search=True
             )
 
     # Check social platforms
     for pattern, name in SOCIAL_PLATFORMS.items():
         if pattern in domain:
-            return ReferrerInfo(
-                type=ReferrerType.SOCIAL,
-                domain=domain,
-                source_name=name
-            )
+            return ReferrerInfo(type=ReferrerType.SOCIAL, domain=domain, source_name=name)
 
     # Default to referral (other websites)
-    return ReferrerInfo(
-        type=ReferrerType.REFERRAL,
-        domain=domain
-    )
+    return ReferrerInfo(type=ReferrerType.REFERRAL, domain=domain)
 
 
 def get_traffic_source_summary(referrer_infos: list[ReferrerInfo]) -> dict[str, int]:
@@ -395,7 +352,7 @@ def get_top_referrers(
     referrer_infos: list[ReferrerInfo],
     limit: int = 10,
     exclude_direct: bool = True,
-    exclude_internal: bool = True
+    exclude_internal: bool = True,
 ) -> list[tuple[str, int]]:
     """
     Get the most common referrer sources.

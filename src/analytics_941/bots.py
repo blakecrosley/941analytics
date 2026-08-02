@@ -22,17 +22,17 @@ from enum import Enum
 class BotCategory(str, Enum):
     """Categories of automated traffic."""
 
-    SEARCH_ENGINE = "search_engine"      # Google, Bing, etc.
-    AI_CRAWLER = "ai_crawler"            # GPTBot, ClaudeBot, etc.
-    SEO_TOOL = "seo_tool"                # Ahrefs, SEMrush, etc.
-    SOCIAL_PREVIEW = "social_preview"    # Facebook, Twitter previews
-    MONITORING = "monitoring"            # Uptime/health checks
-    FEED_READER = "feed_reader"          # RSS readers
-    SECURITY = "security"                # Security scanners
-    ARCHIVER = "archiver"                # Internet Archive, etc.
-    HEADLESS = "headless"                # Headless browsers
-    LIBRARY = "library"                  # HTTP libraries (curl, requests)
-    UNKNOWN = "unknown"                  # Generic bot patterns matched
+    SEARCH_ENGINE = "search_engine"  # Google, Bing, etc.
+    AI_CRAWLER = "ai_crawler"  # GPTBot, ClaudeBot, etc.
+    SEO_TOOL = "seo_tool"  # Ahrefs, SEMrush, etc.
+    SOCIAL_PREVIEW = "social_preview"  # Facebook, Twitter previews
+    MONITORING = "monitoring"  # Uptime/health checks
+    FEED_READER = "feed_reader"  # RSS readers
+    SECURITY = "security"  # Security scanners
+    ARCHIVER = "archiver"  # Internet Archive, etc.
+    HEADLESS = "headless"  # Headless browsers
+    LIBRARY = "library"  # HTTP libraries (curl, requests)
+    UNKNOWN = "unknown"  # Generic bot patterns matched
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,7 @@ class BotInfo:
         category: Classification for analytics grouping
         confidence: How confident we are (1.0 = exact match, 0.7 = generic pattern)
     """
+
     is_bot: bool
     name: str | None = None
     category: BotCategory | None = None
@@ -74,13 +75,11 @@ SEARCH_ENGINE_BOTS = {
     "apis-google": "Google APIs",
     "feedfetcher-google": "Google Feeds",
     "google-read-aloud": "Google Read Aloud",
-
     # Microsoft/Bing
     "bingbot": "Bing",
     "bingpreview": "Bing Preview",
     "msnbot": "MSN/Bing",
     "adidxbot": "Bing Ads",
-
     # Other search engines
     "yandexbot": "Yandex",
     "yandex.com/bots": "Yandex",
@@ -106,12 +105,10 @@ AI_CRAWLER_BOTS = {
     "gptbot": "OpenAI GPT",
     "chatgpt-user": "ChatGPT",
     "oai-searchbot": "OpenAI Search",
-
     # Anthropic
     "anthropic-ai": "Anthropic",
     "claude-web": "Claude",
     "claudebot": "Claude",
-
     # Other AI
     "perplexitybot": "Perplexity",
     "cohere-ai": "Cohere",
@@ -137,7 +134,6 @@ SEO_TOOL_BOTS = {
     "dotbot": "Moz",
     "rogerbot": "Moz",
     "moz.com": "Moz",
-
     # Other SEO tools
     "screaming frog": "Screaming Frog",
     "seokicks": "SEOkicks",
@@ -159,17 +155,13 @@ SOCIAL_PREVIEW_BOTS = {
     "facebookexternalhit": "Facebook",
     "facebookcatalog": "Facebook Catalog",
     "meta-externalagent": "Meta",
-
     # Twitter/X
     "twitterbot": "Twitter",
-
     # LinkedIn
     "linkedinbot": "LinkedIn",
-
     # Pinterest
     "pinterestbot": "Pinterest",
     "pinterest.com": "Pinterest",
-
     # Messaging apps
     "slackbot": "Slack",
     "slack-imgproxy": "Slack",
@@ -179,7 +171,6 @@ SOCIAL_PREVIEW_BOTS = {
     "viber": "Viber",
     "line-poker": "LINE",
     "kakaotalk": "KakaoTalk",
-
     # Other social
     "redditbot": "Reddit",
     "embedly": "Embedly",
@@ -198,7 +189,6 @@ MONITORING_BOTS = {
     "freshping": "Freshping",
     "hetrixtools": "HetrixTools",
     "nodeping": "NodePing",
-
     # APM/Observability
     "newrelicpinger": "New Relic",
     "new relic": "New Relic",
@@ -206,7 +196,6 @@ MONITORING_BOTS = {
     "dynatrace": "Dynatrace",
     "appoptics": "AppOptics",
     "sentry": "Sentry",
-
     # Other monitoring
     "jetmon": "Jetpack",
     "monitis": "Monitis",
@@ -277,7 +266,6 @@ HTTP_LIBRARY_BOTS = {
     "curl": "cURL",
     "httpie": "HTTPie",
     "lynx": "Lynx",
-
     # Programming languages
     "python-requests": "Python Requests",
     "python-urllib": "Python urllib",
@@ -306,20 +294,20 @@ HTTP_LIBRARY_BOTS = {
 
 # Generic patterns that indicate bot behavior when no specific match is found
 GENERIC_BOT_PATTERNS = [
-    r"\bbot\b",           # Contains word "bot"
-    r"\bcrawl",           # crawler, crawling
-    r"\bspider\b",        # spider
-    r"\bscrape",          # scraper, scraping
-    r"\bfetch",           # fetcher, fetching
-    r"\bindex",           # indexer
-    r"\barchive",         # archiver
-    r"\bmonitor",         # monitoring
-    r"\bcheck",           # checker
-    r"\bscan",            # scanner
-    r"\bvalidat",         # validator
-    r"\bpreview",         # preview generator
-    r"\bslurp",           # Yahoo Slurp legacy
-    r"\brobots",          # robots.txt fetcher
+    r"\bbot\b",  # Contains word "bot"
+    r"\bcrawl",  # crawler, crawling
+    r"\bspider\b",  # spider
+    r"\bscrape",  # scraper, scraping
+    r"\bfetch",  # fetcher, fetching
+    r"\bindex",  # indexer
+    r"\barchive",  # archiver
+    r"\bmonitor",  # monitoring
+    r"\bcheck",  # checker
+    r"\bscan",  # scanner
+    r"\bvalidat",  # validator
+    r"\bpreview",  # preview generator
+    r"\bslurp",  # Yahoo Slurp legacy
+    r"\brobots",  # robots.txt fetcher
     r"http://|https://",  # UA containing URL (bots often do this)
 ]
 
@@ -356,7 +344,7 @@ def detect_bot(user_agent: str) -> BotInfo:
             is_bot=True,
             name="Empty User-Agent",
             category=BotCategory.UNKNOWN,
-            confidence=0.8  # Could be a misconfigured client
+            confidence=0.8,  # Could be a misconfigured client
         )
 
     ua_lower = user_agent.lower()
@@ -378,12 +366,7 @@ def detect_bot(user_agent: str) -> BotInfo:
     for patterns, category in pattern_groups:
         for pattern, name in patterns.items():
             if pattern in ua_lower:
-                return BotInfo(
-                    is_bot=True,
-                    name=name,
-                    category=category,
-                    confidence=1.0
-                )
+                return BotInfo(is_bot=True, name=name, category=category, confidence=1.0)
 
     # Fall back to generic pattern matching
     if _GENERIC_BOT_REGEX.search(ua_lower):
@@ -391,7 +374,7 @@ def detect_bot(user_agent: str) -> BotInfo:
             is_bot=True,
             name="Unknown Bot",
             category=BotCategory.UNKNOWN,
-            confidence=0.7  # Less confident with generic patterns
+            confidence=0.7,  # Less confident with generic patterns
         )
 
     # Not a bot

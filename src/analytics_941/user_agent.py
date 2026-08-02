@@ -24,6 +24,7 @@ from enum import Enum
 
 class DeviceType(str, Enum):
     """Device category."""
+
     DESKTOP = "desktop"
     MOBILE = "mobile"
     TABLET = "tablet"
@@ -45,6 +46,7 @@ class UserAgentInfo:
         device_type: Device category (desktop, mobile, tablet)
         is_mobile: Convenience flag for mobile/tablet
     """
+
     browser: str = "Unknown"
     browser_version: str | None = None
     os: str = "Unknown"
@@ -82,37 +84,28 @@ BROWSER_PATTERNS = [
     (r"Vivaldi/(\d+)", "Vivaldi"),
     (r"Brave/(\d+)", "Brave"),
     (r"Arc/(\d+)", "Arc"),
-
     # Samsung Internet
     (r"SamsungBrowser/(\d+)", "Samsung Internet"),
-
     # UC Browser (popular in Asia)
     (r"UCBrowser/(\d+)", "UC Browser"),
-
     # Yandex Browser
     (r"YaBrowser/(\d+)", "Yandex"),
-
     # DuckDuckGo Browser
     (r"DuckDuckGo/(\d+)", "DuckDuckGo"),
-
     # Firefox variants
     (r"Firefox Focus/(\d+)", "Firefox Focus"),
     (r"Firefox/(\d+)", "Firefox"),
     (r"FxiOS/(\d+)", "Firefox"),  # Firefox on iOS
-
     # Chrome variants (after other Chromium browsers)
     (r"CriOS/(\d+)", "Chrome"),  # Chrome on iOS
     (r"Chrome/(\d+)", "Chrome"),
     (r"Chromium/(\d+)", "Chromium"),
-
     # Safari (must come after Chrome which also contains Safari)
     (r"Version/(\d+).*Safari", "Safari"),
     (r"Safari/(\d+)", "Safari"),
-
     # IE and legacy
     (r"MSIE (\d+)", "Internet Explorer"),
     (r"Trident.*rv:(\d+)", "Internet Explorer"),
-
     # Mobile app WebViews
     (r"Instagram", "Instagram WebView"),
     (r"FBAN|FBAV", "Facebook WebView"),
@@ -131,10 +124,8 @@ OS_PATTERNS = [
     (r"iPhone|iPod", "iOS", r"OS (\d+[_\.]\d+)"),
     (r"iPad", "iPadOS", r"OS (\d+[_\.]\d+)"),
     (r"Macintosh|Mac OS X", "macOS", r"Mac OS X (\d+[_\.]\d+)"),
-
     # Android (before Linux since Android contains Linux)
     (r"Android", "Android", r"Android (\d+\.?\d*)"),
-
     # Windows
     (r"Windows NT 10\.0", "Windows", "10/11"),
     (r"Windows NT 6\.3", "Windows", "8.1"),
@@ -143,16 +134,13 @@ OS_PATTERNS = [
     (r"Windows NT 6\.0", "Windows", "Vista"),
     (r"Windows NT 5\.1", "Windows", "XP"),
     (r"Windows", "Windows", None),
-
     # Chrome OS
     (r"CrOS", "Chrome OS", None),
-
     # Linux variants
     (r"Ubuntu", "Ubuntu", None),
     (r"Fedora", "Fedora", None),
     (r"Debian", "Debian", None),
     (r"Linux", "Linux", None),
-
     # Other
     (r"PlayStation", "PlayStation", None),
     (r"Xbox", "Xbox", None),
@@ -306,7 +294,7 @@ def parse_user_agent(user_agent: str) -> UserAgentInfo:
         browser_version=browser_version,
         os=os_name,
         os_version=os_version,
-        device_type=device_type
+        device_type=device_type,
     )
 
 

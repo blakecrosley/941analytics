@@ -155,7 +155,9 @@ class AnalyticsClient:
             """,
             [self.site_name, start_str],
         )
-        referrer_types = {row["referrer_type"] or "direct": row["views"] for row in referrer_types_raw}
+        referrer_types = {
+            row["referrer_type"] or "direct": row["views"] for row in referrer_types_raw
+        }
 
         # UTM sources
         utm_sources = await self._query(
@@ -300,7 +302,9 @@ class AnalyticsClient:
             """,
             [self.site_name, start_str],
         )
-        bot_breakdown = {row["bot_category"] or "unknown": row["views"] for row in bot_breakdown_raw}
+        bot_breakdown = {
+            row["bot_category"] or "unknown": row["views"] for row in bot_breakdown_raw
+        }
 
         return DashboardData(
             site=self.site_name,
@@ -407,9 +411,7 @@ class AnalyticsClient:
     # AGGREGATED DATA QUERIES (Fast historical queries from daily_stats)
     # =========================================================================
 
-    async def get_daily_stats(
-        self, start_date: date, end_date: date
-    ) -> list[DailyStats]:
+    async def get_daily_stats(self, start_date: date, end_date: date) -> list[DailyStats]:
         """
         Get aggregated daily stats from the daily_stats table.
 
@@ -427,23 +429,29 @@ class AnalyticsClient:
 
         stats = []
         for row in results:
-            stats.append(DailyStats(
-                date=date.fromisoformat(row["date"]),
-                site=row["site"],
-                total_views=row["total_views"],
-                unique_visitors=row["unique_visitors"],
-                bot_views=row["bot_views"],
-                top_pages=json.loads(row["top_pages"]) if row["top_pages"] else [],
-                top_referrers=json.loads(row["top_referrers"]) if row["top_referrers"] else [],
-                countries=json.loads(row["countries"]) if row["countries"] else {},
-                devices=json.loads(row["devices"]) if row["devices"] else {},
-                browsers=json.loads(row["browsers"]) if row["browsers"] else {},
-                operating_systems=json.loads(row["operating_systems"]) if row["operating_systems"] else {},
-                referrer_types=json.loads(row["referrer_types"]) if row["referrer_types"] else {},
-                utm_sources=json.loads(row["utm_sources"]) if row["utm_sources"] else {},
-                utm_campaigns=json.loads(row["utm_campaigns"]) if row["utm_campaigns"] else {},
-                bot_breakdown=json.loads(row["bot_breakdown"]) if row["bot_breakdown"] else {},
-            ))
+            stats.append(
+                DailyStats(
+                    date=date.fromisoformat(row["date"]),
+                    site=row["site"],
+                    total_views=row["total_views"],
+                    unique_visitors=row["unique_visitors"],
+                    bot_views=row["bot_views"],
+                    top_pages=json.loads(row["top_pages"]) if row["top_pages"] else [],
+                    top_referrers=json.loads(row["top_referrers"]) if row["top_referrers"] else [],
+                    countries=json.loads(row["countries"]) if row["countries"] else {},
+                    devices=json.loads(row["devices"]) if row["devices"] else {},
+                    browsers=json.loads(row["browsers"]) if row["browsers"] else {},
+                    operating_systems=json.loads(row["operating_systems"])
+                    if row["operating_systems"]
+                    else {},
+                    referrer_types=json.loads(row["referrer_types"])
+                    if row["referrer_types"]
+                    else {},
+                    utm_sources=json.loads(row["utm_sources"]) if row["utm_sources"] else {},
+                    utm_campaigns=json.loads(row["utm_campaigns"]) if row["utm_campaigns"] else {},
+                    bot_breakdown=json.loads(row["bot_breakdown"]) if row["bot_breakdown"] else {},
+                )
+            )
 
         return stats
 
@@ -507,7 +515,9 @@ class AnalyticsClient:
         for page in today_data.top_pages:
             url = page.get("url", "")
             pages_count[url] = pages_count.get(url, 0) + page.get("views", 0)
-        top_pages = [{"url": k, "views": v} for k, v in sorted(pages_count.items(), key=lambda x: -x[1])[:10]]
+        top_pages = [
+            {"url": k, "views": v} for k, v in sorted(pages_count.items(), key=lambda x: -x[1])[:10]
+        ]
 
         # Merge top referrers
         referrer_count: dict[str, dict] = {}
@@ -515,7 +525,11 @@ class AnalyticsClient:
             for ref in s.top_referrers:
                 domain = ref.get("domain", "")
                 if domain not in referrer_count:
-                    referrer_count[domain] = {"domain": domain, "type": ref.get("type", ""), "views": 0}
+                    referrer_count[domain] = {
+                        "domain": domain,
+                        "type": ref.get("type", ""),
+                        "views": 0,
+                    }
                 referrer_count[domain]["views"] += ref.get("views", 0)
         for ref in today_data.top_referrers:
             domain = ref.get("domain", "")
@@ -532,11 +546,17 @@ class AnalyticsClient:
                     result[k] = result.get(k, 0) + v
             return result
 
-        referrer_types = merge_dicts([s.referrer_types for s in daily_stats] + [today_data.referrer_types])
+        referrer_types = merge_dicts(
+            [s.referrer_types for s in daily_stats] + [today_data.referrer_types]
+        )
         devices = merge_dicts([s.devices for s in daily_stats] + [today_data.devices])
         browsers = merge_dicts([s.browsers for s in daily_stats] + [today_data.browsers])
-        operating_systems = merge_dicts([s.operating_systems for s in daily_stats] + [today_data.operating_systems])
-        bot_breakdown = merge_dicts([s.bot_breakdown for s in daily_stats] + [today_data.bot_breakdown])
+        operating_systems = merge_dicts(
+            [s.operating_systems for s in daily_stats] + [today_data.operating_systems]
+        )
+        bot_breakdown = merge_dicts(
+            [s.bot_breakdown for s in daily_stats] + [today_data.bot_breakdown]
+        )
 
         # Merge UTM data
         utm_source_count: dict[str, int] = {}
@@ -546,7 +566,10 @@ class AnalyticsClient:
         for item in today_data.utm_sources:
             k = item.get("source", "")
             utm_source_count[k] = utm_source_count.get(k, 0) + item.get("views", 0)
-        utm_sources = [{"source": k, "medium": "", "views": v} for k, v in sorted(utm_source_count.items(), key=lambda x: -x[1])[:10]]
+        utm_sources = [
+            {"source": k, "medium": "", "views": v}
+            for k, v in sorted(utm_source_count.items(), key=lambda x: -x[1])[:10]
+        ]
 
         utm_campaign_count: dict[str, int] = {}
         for s in daily_stats:
@@ -555,7 +578,10 @@ class AnalyticsClient:
         for item in today_data.utm_campaigns:
             k = item.get("campaign", "")
             utm_campaign_count[k] = utm_campaign_count.get(k, 0) + item.get("views", 0)
-        utm_campaigns = [{"campaign": k, "source": "", "views": v} for k, v in sorted(utm_campaign_count.items(), key=lambda x: -x[1])[:10]]
+        utm_campaigns = [
+            {"campaign": k, "source": "", "views": v}
+            for k, v in sorted(utm_campaign_count.items(), key=lambda x: -x[1])[:10]
+        ]
 
         # Merge countries (convert from dict to list format)
         country_count: dict[str, int] = {}
@@ -565,7 +591,10 @@ class AnalyticsClient:
         for item in today_data.countries:
             k = item.get("country", "")
             country_count[k] = country_count.get(k, 0) + item.get("views", 0)
-        countries = [{"country": k, "views": v} for k, v in sorted(country_count.items(), key=lambda x: -x[1])[:10]]
+        countries = [
+            {"country": k, "views": v}
+            for k, v in sorted(country_count.items(), key=lambda x: -x[1])[:10]
+        ]
 
         return DashboardData(
             site=self.site_name,
@@ -656,9 +685,7 @@ class AnalyticsClient:
         )
         return result[0]["id"] if result else 0
 
-    async def update_passkey_sign_count(
-        self, passkey_id: int, sign_count: int
-    ) -> None:
+    async def update_passkey_sign_count(self, passkey_id: int, sign_count: int) -> None:
         """Update passkey sign count and last_used_at timestamp."""
         await self._query(
             """

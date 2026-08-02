@@ -42,6 +42,7 @@ class UTMParams:
         campaign_id: Campaign ID (utm_id)
         has_utm: Whether any UTM parameters were present
     """
+
     source: str | None = None
     medium: str | None = None
     campaign: str | None = None
@@ -52,14 +53,9 @@ class UTMParams:
     @property
     def has_utm(self) -> bool:
         """Check if any UTM parameters are present."""
-        return any([
-            self.source,
-            self.medium,
-            self.campaign,
-            self.term,
-            self.content,
-            self.campaign_id
-        ])
+        return any(
+            [self.source, self.medium, self.campaign, self.term, self.content, self.campaign_id]
+        )
 
     def to_dict(self) -> dict[str, str | None]:
         """Convert to dictionary, excluding None values."""
@@ -96,36 +92,30 @@ KNOWN_MEDIUMS = {
     "banner": "paid",
     "retargeting": "paid",
     "remarketing": "paid",
-
     # Organic/Search
     "organic": "organic",
     "search": "organic",
-
     # Social
     "social": "social",
     "social-media": "social",
     "social_media": "social",
     "socialmedia": "social",
     "sm": "social",
-
     # Email
     "email": "email",
     "e-mail": "email",
     "newsletter": "email",
     "mail": "email",
-
     # Referral
     "referral": "referral",
     "affiliate": "referral",
     "partner": "referral",
     "partnership": "referral",
-
     # Content
     "content": "content",
     "blog": "content",
     "post": "content",
     "article": "content",
-
     # Other
     "video": "video",
     "podcast": "audio",
@@ -208,41 +198,12 @@ def parse_utm(url: str) -> UTMParams:
                     query_params[key] = value
 
         # Extract UTM parameters (check multiple names for compatibility)
-        source = _get_first_param(
-            query_params,
-            "utm_source",
-            "ref",
-            "source",
-            "via"
-        )
-        medium = _get_first_param(
-            query_params,
-            "utm_medium",
-            "medium"
-        )
-        campaign = _get_first_param(
-            query_params,
-            "utm_campaign",
-            "campaign",
-            "utm_name"
-        )
-        term = _get_first_param(
-            query_params,
-            "utm_term",
-            "term",
-            "keyword",
-            "keywords"
-        )
-        content = _get_first_param(
-            query_params,
-            "utm_content",
-            "content"
-        )
-        campaign_id = _get_first_param(
-            query_params,
-            "utm_id",
-            "campaign_id"
-        )
+        source = _get_first_param(query_params, "utm_source", "ref", "source", "via")
+        medium = _get_first_param(query_params, "utm_medium", "medium")
+        campaign = _get_first_param(query_params, "utm_campaign", "campaign", "utm_name")
+        term = _get_first_param(query_params, "utm_term", "term", "keyword", "keywords")
+        content = _get_first_param(query_params, "utm_content", "content")
+        campaign_id = _get_first_param(query_params, "utm_id", "campaign_id")
 
         return UTMParams(
             source=source,
@@ -250,7 +211,7 @@ def parse_utm(url: str) -> UTMParams:
             campaign=campaign,
             term=term,
             content=content,
-            campaign_id=campaign_id
+            campaign_id=campaign_id,
         )
 
     except Exception:
@@ -321,7 +282,7 @@ def build_utm_url(
     medium: str,
     campaign: str,
     term: str | None = None,
-    content: str | None = None
+    content: str | None = None,
 ) -> str:
     """
     Build a URL with UTM parameters.
@@ -361,15 +322,10 @@ def build_utm_url(
     # Build query string
     query_string = urlencode(
         {k: v[0] if isinstance(v, list) and len(v) == 1 else v for k, v in all_params.items()},
-        doseq=True
+        doseq=True,
     )
 
     # Reconstruct URL
-    return urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        query_string,
-        parsed.fragment
-    ))
+    return urlunparse(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.params, query_string, parsed.fragment)
+    )

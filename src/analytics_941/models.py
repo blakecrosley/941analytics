@@ -87,7 +87,9 @@ class DashboardData(BaseModel):
 
     # Traffic sources
     top_referrers: list[dict] = Field(default_factory=list)
-    referrer_types: dict[str, int] = Field(default_factory=dict)  # direct/organic/social/email/referral
+    referrer_types: dict[str, int] = Field(
+        default_factory=dict
+    )  # direct/organic/social/email/referral
 
     # UTM attribution
     utm_sources: list[dict] = Field(default_factory=list)

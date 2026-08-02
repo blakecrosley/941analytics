@@ -26,7 +26,10 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
     "mypy>=1.8.0",
-    "ruff>=0.4.0",
+    # Linters are pinned exactly, not floored. An open range means every new ruff
+    # release can add rules and turn CI red with no code change -- which is what
+    # happened: 0.16.1 introduced UP042 and broke the build on untouched files.
+    "ruff==0.16.1",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -52,13 +55,28 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # do not perform function calls in argument defaults
     "C901",   # too complex
+    # UP042 wants `class X(str, Enum)` rewritten as `class X(StrEnum)`. Deferred, not
+    # declined: the two differ in __str__ (`"X.FOO"` vs `"foo"`), so the swap is a
+    # behaviour change on ReferrerType, DeviceType, and BotCategory -- all of which are
+    # serialized. Worth doing deliberately with the call sites checked, not because a
+    # linter upgrade forced it.
+    "UP042",  # str+Enum -> StrEnum (see note above)
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["analytics_941"]
 
 [tool.ruff.format]
-quote-style = "double"
+# "preserve", not "double". With quote-style = "double", ruff 0.16.1 rewrites
+#     f'<tr><td>{p["url"]}</td></tr>'
+# into
+#     f"<tr><td>{p["url"]}</td></tr>"
+# which reuses the outer quote inside the f-string. That is PEP 701 syntax and is
+# only valid on Python 3.12+, while this project targets 3.11 -- so the formatter
+# emits code the target interpreter cannot parse. It does this despite
+# target-version = "py311" above. Verified on routes.py: 0 syntax errors before
+# formatting, 9 after. Keep "preserve" until ruff honours target-version here.
+quote-style = "preserve"
 indent-style = "space"
 
 # Mypy configuration (cicd-2)

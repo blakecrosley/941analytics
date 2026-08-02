@@ -3,6 +3,7 @@ HTTP client for querying Cloudflare D1 analytics database.
 
 Enhanced version with session tracking, events, and filtering support.
 """
+
 import json
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -278,7 +279,8 @@ class AnalyticsClient:
                 WHERE site = ? AND date(timestamp) >= ? AND date(timestamp) <= ?
                     AND is_bot = 0 {filter_sql}
                 """,
-                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()]
+                + filter_params,
             )
             prev_sess = await self._query(
                 f"""
@@ -290,7 +292,8 @@ class AnalyticsClient:
                 WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
                     {session_filter_sql}
                 """,
-                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + session_filter_params,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()]
+                + session_filter_params,
             )
             if prev:
                 prev_views = prev[0].get("views") or 0
@@ -502,7 +505,8 @@ class AnalyticsClient:
                 WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
                     {filter_sql}
                 """,
-                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()]
+                + filter_params,
             )
             previous = round(prev_result[0].get("bounce_rate", 0) or 0, 1) if prev_result else 0
 
@@ -547,7 +551,8 @@ class AnalyticsClient:
                     AND duration_seconds IS NOT NULL
                     {filter_sql}
                 """,
-                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()]
+                + filter_params,
             )
             previous = round(prev_result[0].get("avg_duration", 0) or 0) if prev_result else 0
 
@@ -589,7 +594,8 @@ class AnalyticsClient:
                 WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
                     {filter_sql}
                 """,
-                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()]
+                + filter_params,
             )
             previous = int(prev_result[0].get("session_count", 0) or 0) if prev_result else 0
 
@@ -631,9 +637,12 @@ class AnalyticsClient:
                 WHERE site = ? AND date(started_at) >= ? AND date(started_at) <= ?
                     {filter_sql}
                 """,
-                [self.site_name, compare_start.isoformat(), compare_end.isoformat()] + filter_params,
+                [self.site_name, compare_start.isoformat(), compare_end.isoformat()]
+                + filter_params,
             )
-            previous = round(prev_result[0].get("pages_per_session", 0) or 0, 1) if prev_result else 0
+            previous = (
+                round(prev_result[0].get("pages_per_session", 0) or 0, 1) if prev_result else 0
+            )
 
         return self._metric_with_change(current, previous)
 
@@ -675,7 +684,9 @@ class AnalyticsClient:
 
         return [
             TimeSeriesPoint(
-                timestamp=datetime.fromisoformat(r["ts"]) if " " in r["ts"] else datetime.strptime(r["ts"], "%Y-%m-%d"),
+                timestamp=datetime.fromisoformat(r["ts"])
+                if " " in r["ts"]
+                else datetime.strptime(r["ts"], "%Y-%m-%d"),
                 views=r["views"],
                 visitors=r["visitors"],
                 sessions=r["sessions"],
@@ -713,7 +724,9 @@ class AnalyticsClient:
             ORDER BY views DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         # Get bounce rates per entry page
@@ -768,7 +781,9 @@ class AnalyticsClient:
             ORDER BY entries DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -811,7 +826,9 @@ class AnalyticsClient:
             ORDER BY exits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         if not exit_results:
@@ -830,7 +847,9 @@ class AnalyticsClient:
                 AND url IN ({placeholders}) AND is_bot = 0 {pv_filter_sql}
             GROUP BY url
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + urls + pv_filter_params,
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + urls
+            + pv_filter_params,
         )
 
         # Map pageviews by URL
@@ -842,7 +861,9 @@ class AnalyticsClient:
                 views=pv_map.get(r["url"], r["exits"]),  # Use pageviews if available
                 visitors=r["visitors"],
                 exits=r["exits"],
-                exit_rate=round((r["exits"] / pv_map.get(r["url"], r["exits"])) * 100, 1) if pv_map.get(r["url"], r["exits"]) > 0 else 0,
+                exit_rate=round((r["exits"] / pv_map.get(r["url"], r["exits"])) * 100, 1)
+                if pv_map.get(r["url"], r["exits"]) > 0
+                else 0,
             )
             for r in exit_results
         ]
@@ -875,7 +896,9 @@ class AnalyticsClient:
             ORDER BY sessions DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -916,7 +939,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -985,7 +1010,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         # Country name lookup
@@ -1028,7 +1055,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, country, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, country, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return results
@@ -1062,7 +1091,9 @@ class AnalyticsClient:
                 ORDER BY visits DESC
                 LIMIT ?
                 """,
-                [self.site_name, country, region, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+                [self.site_name, country, region, start_date.isoformat(), end_date.isoformat()]
+                + filter_params
+                + [limit],
             )
         else:
             results = await self._query(
@@ -1081,7 +1112,9 @@ class AnalyticsClient:
                 ORDER BY visits DESC
                 LIMIT ?
                 """,
-                [self.site_name, country, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+                [self.site_name, country, start_date.isoformat(), end_date.isoformat()]
+                + filter_params
+                + [limit],
             )
 
         return results
@@ -1130,20 +1163,60 @@ class AnalyticsClient:
     def _get_country_names(self) -> dict[str, str]:
         """Country code to name mapping."""
         return {
-            'US': 'United States', 'CN': 'China', 'CA': 'Canada', 'SG': 'Singapore',
-            'PT': 'Portugal', 'DE': 'Germany', 'VN': 'Vietnam', 'PK': 'Pakistan',
-            'GB': 'United Kingdom', 'FR': 'France', 'JP': 'Japan', 'IN': 'India',
-            'BR': 'Brazil', 'AU': 'Australia', 'KR': 'South Korea', 'NL': 'Netherlands',
-            'IT': 'Italy', 'ES': 'Spain', 'CH': 'Switzerland', 'SE': 'Sweden',
-            'NO': 'Norway', 'DK': 'Denmark', 'FI': 'Finland', 'IE': 'Ireland',
-            'RU': 'Russia', 'MX': 'Mexico', 'AR': 'Argentina', 'CL': 'Chile',
-            'CO': 'Colombia', 'PE': 'Peru', 'EG': 'Egypt', 'NG': 'Nigeria',
-            'ZA': 'South Africa', 'SA': 'Saudi Arabia', 'AE': 'UAE', 'IL': 'Israel',
-            'TR': 'Turkey', 'PL': 'Poland', 'UA': 'Ukraine', 'CZ': 'Czech Republic',
-            'HK': 'Hong Kong', 'TW': 'Taiwan', 'MY': 'Malaysia', 'TH': 'Thailand',
-            'ID': 'Indonesia', 'PH': 'Philippines', 'NZ': 'New Zealand', 'AT': 'Austria',
-            'BE': 'Belgium', 'GR': 'Greece', 'HU': 'Hungary', 'RO': 'Romania',
-            'BD': 'Bangladesh', 'KE': 'Kenya',
+            'US': 'United States',
+            'CN': 'China',
+            'CA': 'Canada',
+            'SG': 'Singapore',
+            'PT': 'Portugal',
+            'DE': 'Germany',
+            'VN': 'Vietnam',
+            'PK': 'Pakistan',
+            'GB': 'United Kingdom',
+            'FR': 'France',
+            'JP': 'Japan',
+            'IN': 'India',
+            'BR': 'Brazil',
+            'AU': 'Australia',
+            'KR': 'South Korea',
+            'NL': 'Netherlands',
+            'IT': 'Italy',
+            'ES': 'Spain',
+            'CH': 'Switzerland',
+            'SE': 'Sweden',
+            'NO': 'Norway',
+            'DK': 'Denmark',
+            'FI': 'Finland',
+            'IE': 'Ireland',
+            'RU': 'Russia',
+            'MX': 'Mexico',
+            'AR': 'Argentina',
+            'CL': 'Chile',
+            'CO': 'Colombia',
+            'PE': 'Peru',
+            'EG': 'Egypt',
+            'NG': 'Nigeria',
+            'ZA': 'South Africa',
+            'SA': 'Saudi Arabia',
+            'AE': 'UAE',
+            'IL': 'Israel',
+            'TR': 'Turkey',
+            'PL': 'Poland',
+            'UA': 'Ukraine',
+            'CZ': 'Czech Republic',
+            'HK': 'Hong Kong',
+            'TW': 'Taiwan',
+            'MY': 'Malaysia',
+            'TH': 'Thailand',
+            'ID': 'Indonesia',
+            'PH': 'Philippines',
+            'NZ': 'New Zealand',
+            'AT': 'Austria',
+            'BE': 'Belgium',
+            'GR': 'Greece',
+            'HU': 'Hungary',
+            'RO': 'Romania',
+            'BD': 'Bangladesh',
+            'KE': 'Kenya',
         }
 
     # =========================================================================
@@ -1208,7 +1281,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         total = sum(r["visits"] for r in results)
@@ -1245,7 +1320,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         total = sum(r["visits"] for r in results)
@@ -1283,7 +1360,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         total = sum(r["visits"] for r in results) if results else 0
@@ -1326,7 +1405,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         total = sum(r["visits"] for r in results) if results else 0
@@ -1372,13 +1453,15 @@ class AnalyticsClient:
         for bp in ["mobile", "tablet", "desktop", "large"]:
             if bp in groups:
                 group_visits = sum(ss.visits for ss in groups[bp])
-                result.append(BreakpointStats(
-                    breakpoint=bp,
-                    label=BREAKPOINT_LABELS[bp],
-                    visits=group_visits,
-                    percentage=round((group_visits / total) * 100, 1) if total > 0 else 0,
-                    resolutions=sorted(groups[bp], key=lambda x: x.visits, reverse=True)[:5],
-                ))
+                result.append(
+                    BreakpointStats(
+                        breakpoint=bp,
+                        label=BREAKPOINT_LABELS[bp],
+                        visits=group_visits,
+                        percentage=round((group_visits / total) * 100, 1) if total > 0 else 0,
+                        resolutions=sorted(groups[bp], key=lambda x: x.visits, reverse=True)[:5],
+                    )
+                )
 
         return result
 
@@ -1500,7 +1583,9 @@ class AnalyticsClient:
             ORDER BY sessions DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -1665,15 +1750,17 @@ class AnalyticsClient:
 
             trend_direction = "up" if trend_percent > 0 else "down" if trend_percent < 0 else "same"
 
-            events_with_trend.append({
-                "event_name": r["event_name"],
-                "event_type": r["event_type"],
-                "count": current_count,
-                "unique_sessions": r["unique_sessions"],
-                "previous_count": prev_count,
-                "trend_percent": abs(trend_percent),
-                "trend_direction": trend_direction,
-            })
+            events_with_trend.append(
+                {
+                    "event_name": r["event_name"],
+                    "event_type": r["event_type"],
+                    "count": current_count,
+                    "unique_sessions": r["unique_sessions"],
+                    "previous_count": prev_count,
+                    "trend_percent": abs(trend_percent),
+                    "trend_direction": trend_direction,
+                }
+            )
 
         return events_with_trend
 
@@ -1733,11 +1820,13 @@ class AnalyticsClient:
         properties = []
         for prop_name, values in property_counts.items():
             top_values = sorted(values.items(), key=lambda x: x[1], reverse=True)[:10]
-            properties.append({
-                "property": prop_name,
-                "values": [{"value": v, "count": c} for v, c in top_values],
-                "total": sum(values.values()),
-            })
+            properties.append(
+                {
+                    "property": prop_name,
+                    "values": [{"value": v, "count": c} for v, c in top_values],
+                    "total": sum(values.values()),
+                }
+            )
 
         return sorted(properties, key=lambda x: x["total"], reverse=True)
 
@@ -1768,7 +1857,9 @@ class AnalyticsClient:
             ORDER BY clicks DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -1808,7 +1899,9 @@ class AnalyticsClient:
             ORDER BY downloads DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -1851,7 +1944,9 @@ class AnalyticsClient:
             ORDER BY submissions DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -1896,7 +1991,9 @@ class AnalyticsClient:
             ORDER BY error_count DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return [
@@ -2130,7 +2227,9 @@ class AnalyticsClient:
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return results
@@ -2157,7 +2256,9 @@ class AnalyticsClient:
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return results
@@ -2192,7 +2293,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return results
@@ -2223,7 +2326,9 @@ class AnalyticsClient:
             ORDER BY visits DESC
             LIMIT ?
             """,
-            [self.site_name, start_date.isoformat(), end_date.isoformat()] + filter_params + [limit],
+            [self.site_name, start_date.isoformat(), end_date.isoformat()]
+            + filter_params
+            + [limit],
         )
 
         return results
@@ -2403,16 +2508,22 @@ class AnalyticsClient:
         funnels = []
         for row in result:
             steps = json.loads(row["steps"]) if row["steps"] else []
-            funnels.append(FunnelDefinition(
-                id=row["id"],
-                site=row["site"],
-                name=row["name"],
-                description=row.get("description"),
-                steps=[FunnelStep(**s) for s in steps],
-                is_preset=bool(row.get("is_preset", 0)),
-                created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
-                updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
-            ))
+            funnels.append(
+                FunnelDefinition(
+                    id=row["id"],
+                    site=row["site"],
+                    name=row["name"],
+                    description=row.get("description"),
+                    steps=[FunnelStep(**s) for s in steps],
+                    is_preset=bool(row.get("is_preset", 0)),
+                    created_at=datetime.fromisoformat(row["created_at"])
+                    if row.get("created_at")
+                    else None,
+                    updated_at=datetime.fromisoformat(row["updated_at"])
+                    if row.get("updated_at")
+                    else None,
+                )
+            )
 
         return funnels
 
@@ -2533,17 +2644,19 @@ class AnalyticsClient:
                 drop_off_rate = 100 - conversion_rate
                 drop_off_count = prev_count - visitors_count
 
-            step_results.append(FunnelStepResult(
-                step_number=step_num,
-                label=label,
-                type=step.type,
-                value=step.value,
-                visitors=visitors_count,
-                sessions=visitors_count,  # Simplified: treat visitors as sessions for now
-                conversion_rate=round(conversion_rate, 1),
-                drop_off_rate=round(drop_off_rate, 1),
-                drop_off_count=drop_off_count,
-            ))
+            step_results.append(
+                FunnelStepResult(
+                    step_number=step_num,
+                    label=label,
+                    type=step.type,
+                    value=step.value,
+                    visitors=visitors_count,
+                    sessions=visitors_count,  # Simplified: treat visitors as sessions for now
+                    conversion_rate=round(conversion_rate, 1),
+                    drop_off_rate=round(drop_off_rate, 1),
+                    drop_off_count=drop_off_count,
+                )
+            )
 
             previous_visitors = current_visitors
 
@@ -2639,8 +2752,12 @@ class AnalyticsClient:
                 goal_value=row["goal_value"],
                 target_count=row.get("target_count"),
                 is_active=bool(row.get("is_active", 1)),
-                created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
-                updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
+                created_at=datetime.fromisoformat(row["created_at"])
+                if row.get("created_at")
+                else None,
+                updated_at=datetime.fromisoformat(row["updated_at"])
+                if row.get("updated_at")
+                else None,
             )
             for row in result
         ]
@@ -2830,19 +2947,22 @@ class AnalyticsClient:
         views = []
         for row in result:
             import json
+
             filters = json.loads(row["filters"]) if row["filters"] else {}
-            views.append(SavedView(
-                id=row["id"],
-                site=row["site"],
-                name=row["name"],
-                description=row["description"],
-                filters=filters,
-                date_preset=row["date_preset"],
-                is_default=bool(row["is_default"]),
-                is_shared=bool(row["is_shared"]),
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            ))
+            views.append(
+                SavedView(
+                    id=row["id"],
+                    site=row["site"],
+                    name=row["name"],
+                    description=row["description"],
+                    filters=filters,
+                    date_preset=row["date_preset"],
+                    is_default=bool(row["is_default"]),
+                    is_shared=bool(row["is_shared"]),
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+            )
         return views
 
     async def get_saved_view(self, view_id: int) -> "SavedView | None":
@@ -2864,6 +2984,7 @@ class AnalyticsClient:
 
         row = result[0]
         import json
+
         filters = json.loads(row["filters"]) if row["filters"] else {}
         return SavedView(
             id=row["id"],
@@ -2898,6 +3019,7 @@ class AnalyticsClient:
 
         row = result[0]
         import json
+
         filters = json.loads(row["filters"]) if row["filters"] else {}
         return SavedView(
             id=row["id"],

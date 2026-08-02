@@ -1,6 +1,7 @@
 """
 Pydantic models for analytics data.
 """
+
 from datetime import date, datetime
 from typing import Any
 
@@ -10,8 +11,10 @@ from pydantic import BaseModel
 # Raw Data Models
 # =============================================================================
 
+
 class PageView(BaseModel):
     """A single pageview event."""
+
     id: int
     site: str
     timestamp: datetime
@@ -59,6 +62,7 @@ class PageView(BaseModel):
 
 class Session(BaseModel):
     """A visitor session (group of pageviews)."""
+
     id: int
     site: str
     session_id: str
@@ -92,6 +96,7 @@ class Session(BaseModel):
 
 class Event(BaseModel):
     """An auto-tracked or custom event."""
+
     id: int
     site: str
     timestamp: datetime
@@ -111,8 +116,10 @@ class Event(BaseModel):
 # Aggregated Stats Models
 # =============================================================================
 
+
 class MetricChange(BaseModel):
     """A metric with its change from comparison period."""
+
     value: float  # Can be int or float (e.g., bounce_rate, avg_duration)
     previous: float | None = None
     change_percent: float | None = None
@@ -121,6 +128,7 @@ class MetricChange(BaseModel):
 
 class CoreMetrics(BaseModel):
     """Core dashboard metrics."""
+
     views: MetricChange
     visitors: MetricChange
     sessions: MetricChange
@@ -132,6 +140,7 @@ class CoreMetrics(BaseModel):
 
 class PageStats(BaseModel):
     """Stats for a single page."""
+
     url: str
     views: int
     visitors: int
@@ -144,6 +153,7 @@ class PageStats(BaseModel):
 
 class SourceStats(BaseModel):
     """Stats for a traffic source."""
+
     source: str
     source_type: str  # direct, organic, social, email, referral
     visits: int
@@ -153,6 +163,7 @@ class SourceStats(BaseModel):
 
 class CountryStats(BaseModel):
     """Stats for a country."""
+
     country_code: str
     country_name: str
     visits: int
@@ -162,6 +173,7 @@ class CountryStats(BaseModel):
 
 class DeviceStats(BaseModel):
     """Stats for device breakdown."""
+
     device_type: str  # mobile, tablet, desktop
     visits: int
     percentage: float
@@ -169,6 +181,7 @@ class DeviceStats(BaseModel):
 
 class BrowserStats(BaseModel):
     """Stats for browser breakdown."""
+
     browser: str
     visits: int
     percentage: float
@@ -176,6 +189,7 @@ class BrowserStats(BaseModel):
 
 class ScreenSizeStats(BaseModel):
     """Stats for a single screen resolution."""
+
     resolution: str  # "1920x1080"
     width: int
     height: int
@@ -186,6 +200,7 @@ class ScreenSizeStats(BaseModel):
 
 class BreakpointStats(BaseModel):
     """Stats for a responsive breakpoint group."""
+
     breakpoint: str  # "mobile", "tablet", "desktop", "large"
     label: str  # "Mobile (<768px)"
     visits: int
@@ -195,6 +210,7 @@ class BreakpointStats(BaseModel):
 
 class LanguageStats(BaseModel):
     """Stats for browser language."""
+
     code: str  # "en-US"
     name: str  # "English (United States)"
     base_language: str  # "en"
@@ -204,6 +220,7 @@ class LanguageStats(BaseModel):
 
 class EventStats(BaseModel):
     """Stats for an event type."""
+
     event_name: str
     event_type: str
     count: int
@@ -212,6 +229,7 @@ class EventStats(BaseModel):
 
 class TimeSeriesPoint(BaseModel):
     """A single point in a time series."""
+
     timestamp: datetime
     views: int = 0
     visitors: int = 0
@@ -222,8 +240,10 @@ class TimeSeriesPoint(BaseModel):
 # Dashboard Response Models
 # =============================================================================
 
+
 class DateRange(BaseModel):
     """Date range for queries."""
+
     start: date
     end: date
     compare_start: date | None = None
@@ -236,6 +256,7 @@ class DashboardFilters(BaseModel):
     All filters use parameterized queries to prevent SQL injection.
     Multiple filters are AND'd together.
     """
+
     country: str | None = None
     region: str | None = None
     city: str | None = None
@@ -251,21 +272,16 @@ class DashboardFilters(BaseModel):
 
     def is_empty(self) -> bool:
         """Check if all filters are None/empty."""
-        return all(
-            getattr(self, field) is None
-            for field in self.__class__.model_fields.keys()
-        )
+        return all(getattr(self, field) is None for field in self.__class__.model_fields.keys())
 
     def active_filters(self) -> dict[str, str]:
         """Return dict of active (non-None) filters."""
-        return {
-            k: v for k, v in self.model_dump().items()
-            if v is not None
-        }
+        return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
 class DashboardData(BaseModel):
     """Complete dashboard response."""
+
     site: str
     date_range: DateRange
     filters: DashboardFilters
@@ -299,6 +315,7 @@ class DashboardData(BaseModel):
 
 class ActivityEvent(BaseModel):
     """A single real-time activity event."""
+
     id: str  # Unique event ID for deduplication
     event_type: str  # 'pageview' or custom event name
     page: str
@@ -310,6 +327,7 @@ class ActivityEvent(BaseModel):
 
 class RealtimeData(BaseModel):
     """Real-time visitor data."""
+
     active_visitors: int
     active_sessions: list[dict[str, Any]]  # [{page, country, device, started}]
     pages: list[dict[str, Any]]  # [{url, count}]
@@ -320,6 +338,7 @@ class RealtimeData(BaseModel):
 
 class GlobeData(BaseModel):
     """Data for the 3D globe visualization."""
+
     countries: list[dict[str, Any]]  # [{code, name, lat, lon, visits}]
     regions: list[dict[str, Any]] | None = None  # For drill-down
     cities: list[dict[str, Any]] | None = None  # For drill-down
@@ -329,8 +348,10 @@ class GlobeData(BaseModel):
 # Funnel Models
 # =============================================================================
 
+
 class FunnelStep(BaseModel):
     """A single step in a conversion funnel."""
+
     type: str  # 'page' or 'event'
     value: str  # URL path for page, event_name for event
     label: str | None = None  # Optional display label
@@ -338,6 +359,7 @@ class FunnelStep(BaseModel):
 
 class FunnelDefinition(BaseModel):
     """A funnel definition."""
+
     id: int | None = None
     site: str
     name: str
@@ -350,6 +372,7 @@ class FunnelDefinition(BaseModel):
 
 class FunnelStepResult(BaseModel):
     """Result for a single funnel step."""
+
     step_number: int
     label: str
     type: str
@@ -363,6 +386,7 @@ class FunnelStepResult(BaseModel):
 
 class FunnelResult(BaseModel):
     """Complete funnel analysis result."""
+
     funnel: FunnelDefinition
     date_range: DateRange
     steps: list[FunnelStepResult]
@@ -376,8 +400,10 @@ class FunnelResult(BaseModel):
 # Goal Models
 # =============================================================================
 
+
 class GoalDefinition(BaseModel):
     """A goal definition."""
+
     id: int | None = None
     site: str
     name: str
@@ -392,6 +418,7 @@ class GoalDefinition(BaseModel):
 
 class GoalResult(BaseModel):
     """Goal completion result."""
+
     goal: GoalDefinition
     date_range: DateRange
     completions: int
@@ -404,8 +431,10 @@ class GoalResult(BaseModel):
 # Saved View Models
 # =============================================================================
 
+
 class SavedView(BaseModel):
     """A saved filter/view configuration."""
+
     id: int | None = None
     site: str
     name: str
