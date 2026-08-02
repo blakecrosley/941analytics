@@ -25,10 +25,16 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
-    "mypy>=1.8.0",
-    # Linters are pinned exactly, not floored. An open range means every new ruff
-    # release can add rules and turn CI red with no code change -- which is what
-    # happened: 0.16.1 introduced UP042 and broke the build on untouched files.
+    # Linters and type checkers are pinned exactly, not floored. An open range means
+    # every new release can add rules and turn CI red with no code change -- which is
+    # what happened: ruff 0.16.1 introduced UP042 and broke the build on untouched
+    # files, and mypy resolved to 2.x whose stricter defaults added 47 errors on top
+    # of an existing backlog (157 vs 110).
+    #
+    # mypy is pinned to the 1.x line this code was written against. That does NOT make
+    # it pass -- see the KNOWN-FAILING note on the mypy step in
+    # .github/workflows/test.yml -- it only makes the failure reproducible.
+    "mypy==1.18.2",
     "ruff==0.16.1",
 ]
 
