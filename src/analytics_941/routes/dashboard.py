@@ -10,19 +10,19 @@ import logging
 import secrets
 import time
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from threading import Lock
 
 from fastapi import APIRouter, Cookie, Form, HTTPException, Query, Request, Response
-
-logger = logging.getLogger(__name__)
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from ..config import MIN_PASSKEY_LENGTH, AnalyticsConfig, verify_passkey
 from ..core.client import AnalyticsClient
 from ..core.models import DashboardFilters
+
+logger = logging.getLogger(__name__)
 
 # Auth constants
 AUTH_COOKIE_NAME = "analytics_auth"
@@ -374,7 +374,9 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         results = await asyncio.gather(*coros, return_exceptions=True)
 
         output = {}
-        for name, result in zip(names, results):
+        # strict=True asserts the 1:1 invariant: names and coros come from the same
+        # dict, and gather() returns exactly one result per coroutine.
+        for name, result in zip(names, results, strict=True):
             if isinstance(result, Exception):
                 logger.error(f"Query '{name}' failed: {result}")
                 output[name] = None
@@ -1164,7 +1166,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
         try:
             steps_data = json.loads(steps)
         except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid steps JSON")
+            raise HTTPException(status_code=400, detail="Invalid steps JSON") from None
 
         from ..core.models import FunnelStep
         funnel_steps = [FunnelStep(**step) for step in steps_data]
@@ -1451,6 +1453,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         import csv
         from io import StringIO
+
         from fastapi.responses import StreamingResponse
 
         date_range = _parse_date_range(period, start, end)
@@ -1492,6 +1495,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         import csv
         from io import StringIO
+
         from fastapi.responses import StreamingResponse
 
         date_range = _parse_date_range(period, start, end)
@@ -1531,6 +1535,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         import csv
         from io import StringIO
+
         from fastapi.responses import StreamingResponse
 
         date_range = _parse_date_range(period, start, end)
@@ -1569,6 +1574,7 @@ def create_dashboard_router(config: AnalyticsConfig) -> APIRouter:
 
         import csv
         from io import StringIO
+
         from fastapi.responses import StreamingResponse
 
         date_range = _parse_date_range(period, start, end)

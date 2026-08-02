@@ -30,11 +30,11 @@ from .models import (
     MetricChange,
     PageStats,
     RealtimeData,
+    SavedView,
     ScreenSizeStats,
     SourceStats,
     TimeSeriesPoint,
 )
-
 
 # =============================================================================
 # Language Name Lookup
