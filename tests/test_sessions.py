@@ -21,7 +21,7 @@ class TestGetBounceRate:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_returns_float_percentage(self):
@@ -29,10 +29,9 @@ class TestGetBounceRate:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"bounce_rate": 45.5}])
 
-        result = run_async(client.get_bounce_rate(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_bounce_rate(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert isinstance(result, MetricChange)
         assert result.value == 45.5
@@ -44,10 +43,9 @@ class TestGetBounceRate:
         # D1 returns None for AVG on empty set
         client._query = AsyncMock(return_value=[{"bounce_rate": None}])
 
-        result = run_async(client.get_bounce_rate(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_bounce_rate(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert result.value == 0
         assert result.previous is None
@@ -57,10 +55,9 @@ class TestGetBounceRate:
         client = self._get_client()
         client._query = AsyncMock(return_value=[])
 
-        result = run_async(client.get_bounce_rate(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_bounce_rate(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert result.value == 0
 
@@ -68,17 +65,21 @@ class TestGetBounceRate:
         """Comparison period calculates trend correctly."""
         client = self._get_client()
         # First call: current period, second call: comparison period
-        client._query = AsyncMock(side_effect=[
-            [{"bounce_rate": 40.0}],  # Current: 40%
-            [{"bounce_rate": 50.0}],  # Previous: 50%
-        ])
+        client._query = AsyncMock(
+            side_effect=[
+                [{"bounce_rate": 40.0}],  # Current: 40%
+                [{"bounce_rate": 50.0}],  # Previous: 50%
+            ]
+        )
 
-        result = run_async(client.get_bounce_rate(
-            start_date=date(2026, 1, 8),
-            end_date=date(2026, 1, 14),
-            compare_start=date(2026, 1, 1),
-            compare_end=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_bounce_rate(
+                start_date=date(2026, 1, 8),
+                end_date=date(2026, 1, 14),
+                compare_start=date(2026, 1, 1),
+                compare_end=date(2026, 1, 7),
+            )
+        )
 
         assert result.value == 40.0
         assert result.previous == 50.0
@@ -91,11 +92,11 @@ class TestGetBounceRate:
         client._query = AsyncMock(return_value=[{"bounce_rate": 35.0}])
         filters = DashboardFilters(country="US", device="mobile")
 
-        run_async(client.get_bounce_rate(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7),
-            filters=filters
-        ))
+        run_async(
+            client.get_bounce_rate(
+                start_date=date(2026, 1, 1), end_date=date(2026, 1, 7), filters=filters
+            )
+        )
 
         # Verify query was called with filter params
         call_args = client._query.call_args
@@ -112,7 +113,7 @@ class TestGetAvgSessionDuration:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_returns_seconds(self):
@@ -120,10 +121,9 @@ class TestGetAvgSessionDuration:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"avg_duration": 185.7}])
 
-        result = run_async(client.get_avg_session_duration(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_avg_session_duration(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert isinstance(result, MetricChange)
         assert result.value == 186  # Rounded to int
@@ -133,27 +133,30 @@ class TestGetAvgSessionDuration:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"avg_duration": None}])
 
-        result = run_async(client.get_avg_session_duration(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_avg_session_duration(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert result.value == 0
 
     def test_comparison_period_trend(self):
         """Comparison period shows duration trend."""
         client = self._get_client()
-        client._query = AsyncMock(side_effect=[
-            [{"avg_duration": 200}],  # Current: 200s
-            [{"avg_duration": 150}],  # Previous: 150s
-        ])
+        client._query = AsyncMock(
+            side_effect=[
+                [{"avg_duration": 200}],  # Current: 200s
+                [{"avg_duration": 150}],  # Previous: 150s
+            ]
+        )
 
-        result = run_async(client.get_avg_session_duration(
-            start_date=date(2026, 1, 8),
-            end_date=date(2026, 1, 14),
-            compare_start=date(2026, 1, 1),
-            compare_end=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_avg_session_duration(
+                start_date=date(2026, 1, 8),
+                end_date=date(2026, 1, 14),
+                compare_start=date(2026, 1, 1),
+                compare_end=date(2026, 1, 7),
+            )
+        )
 
         assert result.value == 200
         assert result.previous == 150
@@ -168,7 +171,7 @@ class TestGetSessionsCount:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_returns_integer(self):
@@ -176,10 +179,9 @@ class TestGetSessionsCount:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"session_count": 1250}])
 
-        result = run_async(client.get_sessions_count(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_sessions_count(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert isinstance(result, MetricChange)
         assert result.value == 1250
@@ -190,10 +192,9 @@ class TestGetSessionsCount:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"session_count": 0}])
 
-        result = run_async(client.get_sessions_count(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_sessions_count(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert result.value == 0
 
@@ -202,27 +203,30 @@ class TestGetSessionsCount:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"session_count": None}])
 
-        result = run_async(client.get_sessions_count(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_sessions_count(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert result.value == 0
 
     def test_comparison_calculates_change_percent(self):
         """Comparison period shows percentage change."""
         client = self._get_client()
-        client._query = AsyncMock(side_effect=[
-            [{"session_count": 1000}],  # Current
-            [{"session_count": 800}],   # Previous
-        ])
+        client._query = AsyncMock(
+            side_effect=[
+                [{"session_count": 1000}],  # Current
+                [{"session_count": 800}],  # Previous
+            ]
+        )
 
-        result = run_async(client.get_sessions_count(
-            start_date=date(2026, 1, 8),
-            end_date=date(2026, 1, 14),
-            compare_start=date(2026, 1, 1),
-            compare_end=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_sessions_count(
+                start_date=date(2026, 1, 8),
+                end_date=date(2026, 1, 14),
+                compare_start=date(2026, 1, 1),
+                compare_end=date(2026, 1, 7),
+            )
+        )
 
         assert result.value == 1000
         assert result.previous == 800
@@ -238,7 +242,7 @@ class TestGetPagesPerSession:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_returns_float(self):
@@ -246,10 +250,9 @@ class TestGetPagesPerSession:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"pages_per_session": 3.5}])
 
-        result = run_async(client.get_pages_per_session(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_pages_per_session(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert isinstance(result, MetricChange)
         assert result.value == 3.5
@@ -259,10 +262,9 @@ class TestGetPagesPerSession:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"pages_per_session": None}])
 
-        result = run_async(client.get_pages_per_session(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_pages_per_session(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert result.value == 0
 
@@ -271,27 +273,30 @@ class TestGetPagesPerSession:
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"pages_per_session": 2.666666}])
 
-        result = run_async(client.get_pages_per_session(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_pages_per_session(start_date=date(2026, 1, 1), end_date=date(2026, 1, 7))
+        )
 
         assert result.value == 2.7
 
     def test_comparison_period(self):
         """Comparison period calculates trend."""
         client = self._get_client()
-        client._query = AsyncMock(side_effect=[
-            [{"pages_per_session": 4.0}],
-            [{"pages_per_session": 3.0}],
-        ])
+        client._query = AsyncMock(
+            side_effect=[
+                [{"pages_per_session": 4.0}],
+                [{"pages_per_session": 3.0}],
+            ]
+        )
 
-        result = run_async(client.get_pages_per_session(
-            start_date=date(2026, 1, 8),
-            end_date=date(2026, 1, 14),
-            compare_start=date(2026, 1, 1),
-            compare_end=date(2026, 1, 7)
-        ))
+        result = run_async(
+            client.get_pages_per_session(
+                start_date=date(2026, 1, 8),
+                end_date=date(2026, 1, 14),
+                compare_start=date(2026, 1, 1),
+                compare_end=date(2026, 1, 7),
+            )
+        )
 
         assert result.value == 4.0
         assert result.previous == 3.0
@@ -306,7 +311,7 @@ class TestMetricChangeCalculation:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_no_previous_data(self):
@@ -365,7 +370,7 @@ class TestSessionFiltersApplied:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_country_filter_in_bounce_rate(self):
@@ -374,11 +379,11 @@ class TestSessionFiltersApplied:
         client._query = AsyncMock(return_value=[{"bounce_rate": 50.0}])
         filters = DashboardFilters(country="DE")
 
-        run_async(client.get_bounce_rate(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7),
-            filters=filters
-        ))
+        run_async(
+            client.get_bounce_rate(
+                start_date=date(2026, 1, 1), end_date=date(2026, 1, 7), filters=filters
+            )
+        )
 
         call_sql = client._query.call_args[0][0]
         call_params = client._query.call_args[0][1]
@@ -391,11 +396,11 @@ class TestSessionFiltersApplied:
         client._query = AsyncMock(return_value=[{"avg_duration": 120}])
         filters = DashboardFilters(device="mobile")
 
-        run_async(client.get_avg_session_duration(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7),
-            filters=filters
-        ))
+        run_async(
+            client.get_avg_session_duration(
+                start_date=date(2026, 1, 1), end_date=date(2026, 1, 7), filters=filters
+            )
+        )
 
         call_sql = client._query.call_args[0][0]
         call_params = client._query.call_args[0][1]
@@ -406,17 +411,13 @@ class TestSessionFiltersApplied:
         """Multiple filters AND'd in query."""
         client = self._get_client()
         client._query = AsyncMock(return_value=[{"session_count": 100}])
-        filters = DashboardFilters(
-            country="US",
-            device="desktop",
-            browser="Chrome"
-        )
+        filters = DashboardFilters(country="US", device="desktop", browser="Chrome")
 
-        run_async(client.get_sessions_count(
-            start_date=date(2026, 1, 1),
-            end_date=date(2026, 1, 7),
-            filters=filters
-        ))
+        run_async(
+            client.get_sessions_count(
+                start_date=date(2026, 1, 1), end_date=date(2026, 1, 7), filters=filters
+            )
+        )
 
         call_params = client._query.call_args[0][1]
         assert "US" in call_params
@@ -426,4 +427,5 @@ class TestSessionFiltersApplied:
 
 if __name__ == "__main__":
     import pytest
+
     pytest.main([__file__, "-v"])

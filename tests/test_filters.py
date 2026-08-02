@@ -23,11 +23,7 @@ class TestDashboardFilters:
 
     def test_multiple_filters(self):
         """Multiple filters are active."""
-        filters = DashboardFilters(
-            country="US",
-            device="mobile",
-            browser="Chrome"
-        )
+        filters = DashboardFilters(country="US", device="mobile", browser="Chrome")
         assert filters.is_empty() is False
         active = filters.active_filters()
         assert active["country"] == "US"
@@ -49,7 +45,7 @@ class TestDashboardFilters:
             page="/about",
             utm_source="newsletter",
             utm_medium="email",
-            utm_campaign="spring_sale"
+            utm_campaign="spring_sale",
         )
         assert filters.is_empty() is False
         active = filters.active_filters()
@@ -70,7 +66,7 @@ class TestFilterQueryBuilder:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_empty_filters_returns_empty(self, client):
@@ -100,11 +96,7 @@ class TestFilterQueryBuilder:
 
     def test_technology_filters(self, client):
         """Browser, OS, device filters use correct column names."""
-        filters = DashboardFilters(
-            browser="Chrome",
-            os="macOS",
-            device="desktop"
-        )
+        filters = DashboardFilters(browser="Chrome", os="macOS", device="desktop")
         sql, params = client._build_filter_sql(filters)
         assert "AND device_type = ?" in sql
         assert "AND browser = ?" in sql
@@ -115,10 +107,7 @@ class TestFilterQueryBuilder:
 
     def test_source_filters(self, client):
         """Source and source_type use correct column names."""
-        filters = DashboardFilters(
-            source="google.com",
-            source_type="organic"
-        )
+        filters = DashboardFilters(source="google.com", source_type="organic")
         sql, params = client._build_filter_sql(filters)
         assert "AND referrer_type = ?" in sql
         assert "AND referrer_domain = ?" in sql
@@ -128,9 +117,7 @@ class TestFilterQueryBuilder:
     def test_utm_filters(self, client):
         """UTM filters work correctly."""
         filters = DashboardFilters(
-            utm_source="newsletter",
-            utm_medium="email",
-            utm_campaign="spring"
+            utm_source="newsletter", utm_medium="email", utm_campaign="spring"
         )
         sql, params = client._build_filter_sql(filters)
         assert "AND utm_source = ?" in sql
@@ -147,11 +134,7 @@ class TestFilterQueryBuilder:
 
     def test_geographic_filters(self, client):
         """Country, region, city filters work."""
-        filters = DashboardFilters(
-            country="US",
-            region="California",
-            city="San Francisco"
-        )
+        filters = DashboardFilters(country="US", region="California", city="San Francisco")
         sql, params = client._build_filter_sql(filters)
         assert "AND country = ?" in sql
         assert "AND region = ?" in sql
@@ -168,7 +151,7 @@ class TestSessionFilterQueryBuilder:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_empty_session_filters(self, client):
@@ -216,7 +199,7 @@ class TestEventFilterQueryBuilder:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_empty_event_filters(self, client):
@@ -262,7 +245,7 @@ class TestSQLInjectionPrevention:
             d1_database_id="test-db",
             cf_account_id="test-account",
             cf_api_token="test-token",
-            site_name="test.com"
+            site_name="test.com",
         )
 
     def test_malicious_country_is_parameterized(self, client):

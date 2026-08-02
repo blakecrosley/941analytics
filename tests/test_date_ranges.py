@@ -91,9 +91,7 @@ class TestCustomDateRanges:
 
     def test_custom_dates_override_period(self):
         """Custom dates take precedence even with period set."""
-        start, end, _, _ = _parse_date_range(
-            "30d", "2024-06-01", "2024-06-15"
-        )
+        start, end, _, _ = _parse_date_range("30d", "2024-06-01", "2024-06-15")
 
         assert start == date(2024, 6, 1)
         assert end == date(2024, 6, 15)
@@ -181,32 +179,24 @@ class TestDateRangeEdgeCases:
 
     def test_same_start_and_end_date(self):
         """Same start and end date is valid (single day)."""
-        start, end, _, _ = _parse_date_range(
-            "custom", "2024-06-15", "2024-06-15"
-        )
+        start, end, _, _ = _parse_date_range("custom", "2024-06-15", "2024-06-15")
         assert start == end
 
     def test_today_as_end_date(self):
         """Today as end date is valid."""
         today = date.today().isoformat()
-        start, end, _, _ = _parse_date_range(
-            "custom", "2024-01-01", today
-        )
+        start, end, _, _ = _parse_date_range("custom", "2024-01-01", today)
         assert end == date.today()
 
     def test_very_old_start_date(self):
         """Very old start date is valid (retention warning would be shown by UI)."""
-        start, end, _, _ = _parse_date_range(
-            "custom", "2020-01-01", "2020-12-31"
-        )
+        start, end, _, _ = _parse_date_range("custom", "2020-01-01", "2020-12-31")
         assert start == date(2020, 1, 1)
         assert end == date(2020, 12, 31)
 
     def test_leap_year_date(self):
         """Leap year date is handled correctly."""
-        start, end, _, _ = _parse_date_range(
-            "custom", "2024-02-29", "2024-03-01"
-        )
+        start, end, _, _ = _parse_date_range("custom", "2024-02-29", "2024-03-01")
         assert start == date(2024, 2, 29)
         assert end == date(2024, 3, 1)
 
