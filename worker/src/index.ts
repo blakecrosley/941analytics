@@ -453,14 +453,26 @@ function getDeviceType(width: number): string {
 // VISITOR HASH GENERATION
 // =============================================================================
 
+/**
+ * Daily-rotating pseudonymous visitor id (Plausible/Fathom pattern).
+ *
+ * The IP and user agent are what make one person distinguishable from another;
+ * without them every visitor in a country+region collapses to one hash and
+ * "unique visitors" silently becomes "distinct regions with traffic" (the bug
+ * fixed 2026-08-18 — see the daily_stats break annotation). The date component
+ * rotates the salt every 24h, so nobody is trackable across days, and no raw
+ * IP is ever stored: it is one-way hashed here and discarded.
+ */
 async function generateVisitorHash(
   site: string,
   country: string,
   region: string,
-  secret: string
+  secret: string,
+  ip = "",
+  userAgent = ""
 ): Promise<string> {
   const today = new Date().toISOString().split("T")[0];
-  const data = `${secret}:${site}:${country}:${region}:${today}`;
+  const data = `${secret}:${site}:${country}:${region}:${ip}:${userAgent}:${today}`;
 
   const encoder = new TextEncoder();
   const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(data));
@@ -1808,7 +1820,7 @@ async function handleEventCollect(
 
     // Generate visitor hash (for deduplication/grouping)
     const region = (cf.region as string) || "";
-    const visitorHash = await generateVisitorHash(eventData.site, country, region, env.ANALYTICS_SECRET);
+    const visitorHash = await generateVisitorHash(eventData.site, country, region, env.ANALYTICS_SECRET, clientIP, userAgent);
 
     // Insert event into D1
     await env.DB.prepare(`
@@ -1984,7 +1996,7 @@ export default {
       const longitude = (cf.longitude as number) || null;
 
       // Generate visitor hash
-      const visitorHash = await generateVisitorHash(data.site, country, region, env.ANALYTICS_SECRET);
+      const visitorHash = await generateVisitorHash(data.site, country, region, env.ANALYTICS_SECRET, clientIP, userAgent);
 
       // Prepare session data for upsert
       const sessionData: SessionData = {
