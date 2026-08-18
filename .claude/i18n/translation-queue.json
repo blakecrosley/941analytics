@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-01-22T14:15:22Z",
+  "pending": [
+    {
+      "file": "src/analytics_941/templates/partials/technology_content.html",
+      "type": "template",
+      "detected_at": "2026-01-22T14:15:22Z",
+      "status": "pending",
+      "source_locale": "en",
+      "languages_done": [
+        "en"
+      ],
+      "languages_pending": [
+        "ja",
+        "ko",
+        "zh-Hans",
+        "zh-Hant",
+        "de",
+        "fr",
+        "es"
+      ],
+      "languages_failed": []
+    }
+  ],
+  "in_progress": [],
+  "completed": [],
+  "failed": []
+}
