@@ -106,6 +106,23 @@ const DEV_PATTERNS = [
   /^https?:\/\/.*\.local(:\d+)?/i,
 ];
 
+/**
+ * A beacon's page URL must belong to the site it claims. Spoofed or
+ * extension-mangled beacons (e.g. url=https://www.google.com/goto) used to
+ * collapse harmlessly into regional visitor buckets; under per-person hashing
+ * (2026-08-18) each one counts as a distinct visitor (~2.5% of a day measured
+ * 2026-08-19). Same host or subdomain of the claimed site only.
+ */
+function urlBelongsToSite(url: string, site: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    const s = site.toLowerCase();
+    return host === s || host.endsWith("." + s) || host === "www." + s;
+  } catch {
+    return false;
+  }
+}
+
 function isDevTraffic(url: string): boolean {
   if (!url) return false;
 
@@ -1803,6 +1820,12 @@ async function handleEventCollect(
       return new Response("Invalid site", { status: 400 });
     }
 
+    // Reject off-site page URLs (see urlBelongsToSite)
+    if (!urlBelongsToSite(eventData.url, eventData.site)) {
+      console.log(`[SECURITY] Rejected off-site url for event ${eventData.site}: ${String(eventData.url).slice(0, 120)}`);
+      return new Response("Invalid url", { status: 400 });
+    }
+
     // Filter dev traffic
     if (isDevTraffic(eventData.url)) {
       return new Response(TRANSPARENT_GIF, {
@@ -1947,6 +1970,12 @@ export default {
       if (!siteValid) {
         console.log(`[SECURITY] Rejected invalid site: ${data.site}`);
         return new Response("Invalid site", { status: 400 });
+      }
+
+      // Reject off-site page URLs (see urlBelongsToSite)
+      if (!urlBelongsToSite(data.url, data.site)) {
+        console.log(`[SECURITY] Rejected off-site url for ${data.site}: ${String(data.url).slice(0, 120)}`);
+        return new Response("Invalid url", { status: 400 });
       }
 
       // Filter development/local traffic (don't pollute analytics with dev pageviews)
