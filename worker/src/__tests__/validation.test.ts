@@ -169,3 +169,22 @@ describe("getDeviceType", () => {
     });
   });
 });
+
+
+import { urlBelongsToSite } from "../index";
+
+describe("urlBelongsToSite", () => {
+  it("accepts full URLs on the claimed site and its subdomains", () => {
+    expect(urlBelongsToSite("https://941return.com/about", "941return.com")).toBe(true);
+    expect(urlBelongsToSite("https://www.941return.com/", "941return.com")).toBe(true);
+    expect(urlBelongsToSite("https://blog.941return.com/x", "941return.com")).toBe(true);
+  });
+  it("accepts bare paths — v1 inline beacons send url as pathname (the 2026-08-24 outage)", () => {
+    expect(urlBelongsToSite("/about", "941return.com")).toBe(true);
+    expect(urlBelongsToSite("/", "941return.com")).toBe(true);
+  });
+  it("still rejects off-site absolute URLs (the spoof case the check exists for)", () => {
+    expect(urlBelongsToSite("https://www.google.com/goto", "941return.com")).toBe(false);
+    expect(urlBelongsToSite("https://evil.example/941return.com", "941return.com")).toBe(false);
+  });
+});

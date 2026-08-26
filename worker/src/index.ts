@@ -113,9 +113,13 @@ const DEV_PATTERNS = [
  * (2026-08-18) each one counts as a distinct visitor (~2.5% of a day measured
  * 2026-08-19). Same host or subdomain of the claimed site only.
  */
-function urlBelongsToSite(url: string, site: string): boolean {
+export function urlBelongsToSite(url: string, site: string): boolean {
   try {
-    const host = new URL(url).hostname.toLowerCase();
+    // v1 inline beacons (941return) send a bare path ("/about"), which a
+    // one-argument new URL() throws on — that silently killed the site's
+    // ingest 2026-08-24..26. A relative path cannot be off-site, so resolve
+    // it against the claimed site; absolute off-site URLs still reject.
+    const host = new URL(url, `https://${site}`).hostname.toLowerCase();
     const s = site.toLowerCase();
     return host === s || host.endsWith("." + s) || host === "www." + s;
   } catch {
