@@ -1250,21 +1250,28 @@ const TRACKING_SCRIPT = `
     });
   }
 
-  // Handle SPA navigation (History API)
+  // Handle SPA navigation (History API).
+  // Only a change of document path (pathname + search) is a pageview. Hash-only
+  // navigation (footnote refs, table-of-contents anchors) fires popstate and
+  // pushState too; before 2026-09-05 each of those counted as a pageview, which
+  // inflated blog pageviews ~2.3x (one session logged one URL 8 times in 27 s).
+  var lastTrackedPath = window.location.pathname + window.location.search;
+  function trackIfNavigated() {
+    var path = window.location.pathname + window.location.search;
+    if (path === lastTrackedPath) return;
+    lastTrackedPath = path;
+    track();
+    resetScrollTracking();
+  }
+
   var pushState = history.pushState;
   history.pushState = function() {
     pushState.apply(history, arguments);
-    setTimeout(function() {
-      track();
-      resetScrollTracking();
-    }, 100);
+    setTimeout(trackIfNavigated, 100);
   };
 
   window.addEventListener('popstate', function() {
-    setTimeout(function() {
-      track();
-      resetScrollTracking();
-    }, 100);
+    setTimeout(trackIfNavigated, 100);
   });
 
   // Outbound link tracking
