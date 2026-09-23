@@ -20,8 +20,8 @@ crons = ["0 2 * * *"]  # Run at 2 AM UTC daily
 
 [vars]
 # Allowed origins (comma-separated domains)
-ALLOWED_ORIGINS = "941return.com,941getbananas.com,resumegeni.com,acecitizenship.app,blakecrosley.com,h3arted.com,941apps.com,wayofyawara.com,randoriapp.com,941tiles.com"
+ALLOWED_ORIGINS = "941return.com,941getbananas.com,resumegeni.com,acecitizenship.app,blakecrosley.com,h3arted.com,941apps.com,wayofyawara.com,randoriapp.com,941tiles.com,foundercamera.com"
 # Allowed sites (valid site identifiers for /collect endpoint)
-ALLOWED_SITES = "blakecrosley.com,resumegeni.com,941return.com,941apps.com,acecitizenship.app,h3arted.com,wayofyawara.com,941getbananas.com,randoriapp.com,941tiles.com"
+ALLOWED_SITES = "blakecrosley.com,resumegeni.com,941return.com,941apps.com,acecitizenship.app,h3arted.com,wayofyawara.com,941getbananas.com,randoriapp.com,941tiles.com,foundercamera.com"
 # Set via wrangler secret put ANALYTICS_SECRET
 # ANALYTICS_SECRET = ""
