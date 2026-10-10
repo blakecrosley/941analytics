@@ -310,3 +310,46 @@ export function validateCollectPayload(data: unknown): ValidationResult {
 
   return { valid: true };
 }
+
+// =============================================================================
+// DATACENTER ASN LABELING
+// =============================================================================
+// Headless fleets that fake a real Chrome UA pass detectBot (the OneCable
+// AS401560 fleet of 2026-10 beaconed as 939 "humans" in one day). Their one
+// unfakeable trait is the source network: consumer eyeballs do not browse from
+// cloud-server ASNs, and request.cf.asn is set by Cloudflare at the edge.
+// Curated: pure cloud/hosting networks only. CDN and privacy-relay egress
+// (Cloudflare 13335, Apple Private Relay, Datacamp 212238 — which carries
+// DuckDuckGo VPN and NordVPN users) are deliberately EXCLUDED so humans on
+// VPNs are never mislabeled. Mirrors resumegeni's
+// app/services/funnel_service.py DATACENTER_ASNS — keep the two lists aligned.
+// Label, never filter: rows stay, is_bot=1 keeps them out of human counts.
+
+export const DATACENTER_ASNS: ReadonlySet<number> = new Set([
+  16509, 14618, // AWS
+  8075, // Microsoft Azure
+  15169, 396982, // Google / GCP
+  45102, 37963, // Alibaba Cloud
+  45090, 132203, // Tencent Cloud
+  136907, // Huawei Cloud
+  14061, // DigitalOcean
+  16276, // OVH
+  24940, // Hetzner
+  63949, // Linode
+  20473, // Vultr / Choopa
+  31898, // Oracle Cloud
+  60781, // Leaseweb
+  135377, // UCloud
+  38365, // Baidu Cloud
+  55960, // Beijing Guanghuan Xinwang — Baidu's IDC arm
+  398781, // Oculus Networks — hosting/proxy
+  401560, // OneCable Network LLC — the 2026-10 headless Chrome fleet
+]);
+
+export function detectDatacenterAsn(asn: unknown): BotInfo {
+  const n = typeof asn === "number" ? asn : parseInt(String(asn ?? ""), 10);
+  if (Number.isInteger(n) && DATACENTER_ASNS.has(n)) {
+    return { isBot: true, name: `Datacenter (AS${n})`, category: "datacenter" };
+  }
+  return { isBot: false, name: "", category: "" };
+}

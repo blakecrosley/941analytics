@@ -18,6 +18,8 @@
  * - Rate limit keys are hashed and expire quickly
  */
 
+import { detectDatacenterAsn } from "./utils";
+
 interface Env {
   DB: D1Database;
   ANALYTICS_SECRET: string;
@@ -2020,15 +2022,18 @@ export default {
       // Get user agent
       const userAgent = request.headers.get("User-Agent") || "";
 
-      // Run all detection
-      const botInfo = detectBot(userAgent);
+      // Run all detection. A real-browser UA from a cloud-server ASN is a
+      // headless fleet — request.cf.asn is edge-set and unspoofable — so the
+      // ASN check runs when the UA looks human (2026-10-10).
+      const cf = (request.cf as Record<string, unknown>) || {};
+      const uaBot = detectBot(userAgent);
+      const botInfo = uaBot.isBot ? uaBot : detectDatacenterAsn(cf.asn);
       const referrerInfo = classifyReferrer(data.ref);
       const utmParams = parseUTM(data.url);
       const deviceInfo = parseUserAgent(userAgent);
       const deviceType = deviceInfo.deviceType !== "desktop" ? deviceInfo.deviceType : getDeviceType(data.w);
 
       // Get geo data
-      const cf = (request.cf as Record<string, unknown>) || {};
       const country = (cf.country as string) || "";
       const region = (cf.region as string) || "";
       const city = (cf.city as string) || "";

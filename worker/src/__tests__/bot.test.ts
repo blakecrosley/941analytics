@@ -2,7 +2,7 @@
  * Bot Detection Tests
  */
 import { describe, it, expect } from "vitest";
-import { detectBot, BotInfo } from "../utils";
+import { detectBot, detectDatacenterAsn, BotInfo } from "../utils";
 
 describe("detectBot", () => {
   describe("search engine bots", () => {
@@ -218,5 +218,34 @@ describe("detectBot", () => {
       expect(result.isBot).toBe(true);
       expect(result.name).toBe("Google");
     });
+  });
+});
+
+describe("detectDatacenterAsn", () => {
+  it("labels cloud-server ASNs as datacenter bots", () => {
+    for (const asn of [16509, 45102, 132203, 401560]) {
+      const result = detectDatacenterAsn(asn);
+      expect(result.isBot).toBe(true);
+      expect(result.name).toBe(`Datacenter (AS${asn})`);
+      expect(result.category).toBe("datacenter");
+    }
+  });
+
+  it("accepts the numeric string form", () => {
+    expect(detectDatacenterAsn("401560").isBot).toBe(true);
+  });
+
+  it("keeps residential, CDN and VPN-egress networks human", () => {
+    // Comcast, Deutsche Telekom, Cloudflare (Private Relay / WARP),
+    // Datacamp (DuckDuckGo VPN / NordVPN egress — real people).
+    for (const asn of [7922, 3320, 13335, 212238]) {
+      expect(detectDatacenterAsn(asn)).toEqual({ isBot: false, name: "", category: "" });
+    }
+  });
+
+  it("fails open on garbage", () => {
+    for (const asn of [undefined, null, "", "AS401560", 12.5]) {
+      expect(detectDatacenterAsn(asn).isBot).toBe(false);
+    }
   });
 });
