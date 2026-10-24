@@ -1854,6 +1854,12 @@ async function handleEventCollect(
     const deviceInfo = parseUserAgent(userAgent);
     const deviceType = deviceInfo.deviceType;
 
+    // Same bot label as /collect (UA, then datacenter ASN for a human-looking UA), written
+    // on the event so human-only event rates need no session join (migration 004,
+    // 2026-10-24). Label, never filter: the report decides what to exclude.
+    const uaBot = detectBot(userAgent);
+    const botInfo = uaBot.isBot ? uaBot : detectDatacenterAsn(cf.asn);
+
     // Generate visitor hash (for deduplication/grouping)
     const region = (cf.region as string) || "";
     const visitorHash = await generateVisitorHash(eventData.site, country, region, env.ANALYTICS_SECRET, clientIP, userAgent);
@@ -1863,8 +1869,9 @@ async function handleEventCollect(
       INSERT INTO events (
         site, timestamp, session_id, visitor_hash,
         event_type, event_name, event_data,
-        page_url, country, device_type
-      ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)
+        page_url, country, device_type,
+        is_bot, bot_name
+      ) VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       eventData.site,
       eventData.sid || null,
@@ -1874,7 +1881,9 @@ async function handleEventCollect(
       eventData.event_data || null,
       eventData.url,
       country,
-      deviceType
+      deviceType,
+      botInfo.isBot ? 1 : 0,
+      botInfo.isBot ? botInfo.name || null : null
     ).run();
 
     // Return tracking pixel
