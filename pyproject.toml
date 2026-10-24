@@ -4,7 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "analytics-941"
-version = "0.3.8"
+# Single source of truth is analytics_941.__version__ (see [tool.hatch.version]).
+# The two had drifted (0.3.8 here vs 0.4.0 in code), so consumers bumping a
+# git pin saw the "same" version and pip reported it already satisfied.
+dynamic = ["version"]
 description = "Privacy-first analytics for 941 Apps projects"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +20,12 @@ dependencies = [
     "httpx>=0.24.0",
     "pydantic>=2.0.0",
     "jinja2>=3.0.0",
+    # The dashboard login route takes Form(...) params; FastAPI refuses to build
+    # the router without python-multipart, so a fresh install from these deps
+    # alone raised RuntimeError in setup_analytics(). That same parser handles the
+    # unauthenticated POST /login body, so the floor tracks its advisories: 0.0.31
+    # is the first release clear of PYSEC-2026-3036/3037/3039/3040 (pip-audit).
+    "python-multipart>=0.0.31",
     "webauthn>=2.5.0",
 ]
 
@@ -37,6 +46,9 @@ dev = [
     "mypy==1.18.2",
     "ruff==0.16.1",
 ]
+
+[tool.hatch.version]
+path = "src/analytics_941/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/analytics_941"]
