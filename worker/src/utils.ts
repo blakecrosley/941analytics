@@ -381,3 +381,22 @@ export function detectReferrerSpam(referrerDomain: unknown): BotInfo {
   }
   return { isBot: false, name: "", category: "" };
 }
+
+// =============================================================================
+// DAY BOUNDS
+// =============================================================================
+
+/**
+ * The half-open SQLite datetime range [start, end) of one UTC day, in the
+ * 'YYYY-MM-DD HH:MM:SS' form page_views.timestamp stores (datetime('now')).
+ * A `timestamp >= ? AND timestamp < ?` predicate seeks idx_site_timestamp;
+ * `date(timestamp) = ?` cannot use it and scans the site's whole history.
+ */
+export function utcDayBounds(dateStr: string): { start: string; end: string } {
+  const next = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(`${dateStr}T00:00:00Z`) : new Date(NaN);
+  if (Number.isNaN(next.getTime()) || next.toISOString().slice(0, 10) !== dateStr) {
+    throw new Error(`utcDayBounds: not a calendar date: ${dateStr}`);
+  }
+  next.setUTCDate(next.getUTCDate() + 1);
+  return { start: `${dateStr} 00:00:00`, end: `${next.toISOString().slice(0, 10)} 00:00:00` };
+}

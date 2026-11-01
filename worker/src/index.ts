@@ -18,7 +18,7 @@
  * - Rate limit keys are hashed and expire quickly
  */
 
-import { detectDatacenterAsn, detectReferrerSpam } from "./utils";
+import { detectDatacenterAsn, detectReferrerSpam, utcDayBounds } from "./utils";
 
 interface Env {
   DB: D1Database;
@@ -813,133 +813,93 @@ interface AggregatedStats {
 }
 
 async function aggregateDay(db: D1Database, site: string, dateStr: string): Promise<AggregatedStats> {
-  // Total views and unique visitors (humans only)
-  const totalsResult = await db.prepare(`
-    SELECT
-      COUNT(*) as total_views,
-      COUNT(DISTINCT visitor_hash) as unique_visitors
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0
-  `).bind(site, dateStr).first<{ total_views: number; unique_visitors: number }>();
+  // One UTC day as a timestamp range, never date(timestamp) = ?: the function
+  // form defeats idx_site_timestamp and scans the site's whole 90-day history
+  // (900K rows) for each of the thirteen queries, which is how the rollup hit
+  // "D1 DB exceeded its CPU time limit and was reset" on the bigger sites and
+  // left daily_stats holes (2026-10-27, -29 and -31 on blakecrosley.com). The
+  // range form is an index seek. One batch() per site: one round trip, one
+  // subrequest, same results (2026-10-31).
+  const { start, end } = utcDayBounds(dateStr);
+  const human = "site = ? AND timestamp >= ? AND timestamp < ? AND is_bot = 0";
+  const bot = "site = ? AND timestamp >= ? AND timestamp < ? AND is_bot = 1";
+  const q = (sql: string, ...extra: number[]) => db.prepare(sql).bind(site, start, end, ...extra);
 
-  // Bot views
-  const botResult = await db.prepare(`
-    SELECT COUNT(*) as bot_views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 1
-  `).bind(site, dateStr).first<{ bot_views: number }>();
+  const [
+    totalsResult,
+    botResult,
+    pagesResult,
+    referrersResult,
+    countriesResult,
+    devicesResult,
+    browsersResult,
+    osResult,
+    refTypesResult,
+    utmSourcesResult,
+    utmCampaignsResult,
+    botBreakdownResult,
+  ] = await db.batch([
+    // Total views and unique visitors (humans only)
+    q(`SELECT COUNT(*) as total_views, COUNT(DISTINCT visitor_hash) as unique_visitors FROM page_views WHERE ${human}`),
+    // Bot views
+    q(`SELECT COUNT(*) as bot_views FROM page_views WHERE ${bot}`),
+    // Top pages
+    q(`SELECT url, COUNT(*) as views FROM page_views WHERE ${human} GROUP BY url ORDER BY views DESC LIMIT ?`, CONFIG.TOP_PAGES_LIMIT),
+    // Top referrers
+    q(`SELECT referrer_domain as domain, referrer_type as type, COUNT(*) as views FROM page_views WHERE ${human} AND referrer_domain != '' GROUP BY referrer_domain ORDER BY views DESC LIMIT ?`, CONFIG.TOP_REFERRERS_LIMIT),
+    // Countries
+    q(`SELECT country, COUNT(*) as views FROM page_views WHERE ${human} AND country != '' GROUP BY country`),
+    // Devices
+    q(`SELECT device_type, COUNT(*) as views FROM page_views WHERE ${human} GROUP BY device_type`),
+    // Browsers
+    q(`SELECT browser, COUNT(*) as views FROM page_views WHERE ${human} AND browser != '' GROUP BY browser`),
+    // Operating systems
+    q(`SELECT os, COUNT(*) as views FROM page_views WHERE ${human} AND os != '' GROUP BY os`),
+    // Referrer types
+    q(`SELECT referrer_type, COUNT(*) as views FROM page_views WHERE ${human} GROUP BY referrer_type`),
+    // UTM sources
+    q(`SELECT utm_source, COUNT(*) as views FROM page_views WHERE ${human} AND utm_source != '' GROUP BY utm_source`),
+    // UTM campaigns
+    q(`SELECT utm_campaign, COUNT(*) as views FROM page_views WHERE ${human} AND utm_campaign != '' GROUP BY utm_campaign`),
+    // Bot breakdown
+    q(`SELECT bot_category, COUNT(*) as views FROM page_views WHERE ${bot} GROUP BY bot_category`),
+  ]);
 
-  // Top pages
-  const pagesResult = await db.prepare(`
-    SELECT url, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0
-    GROUP BY url ORDER BY views DESC LIMIT ?
-  `).bind(site, dateStr, CONFIG.TOP_PAGES_LIMIT).all<{ url: string; views: number }>();
-
-  // Top referrers
-  const referrersResult = await db.prepare(`
-    SELECT referrer_domain as domain, referrer_type as type, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0 AND referrer_domain != ''
-    GROUP BY referrer_domain ORDER BY views DESC LIMIT ?
-  `).bind(site, dateStr, CONFIG.TOP_REFERRERS_LIMIT).all<{ domain: string; type: string; views: number }>();
-
-  // Countries
-  const countriesResult = await db.prepare(`
-    SELECT country, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0 AND country != ''
-    GROUP BY country
-  `).bind(site, dateStr).all<{ country: string; views: number }>();
-
-  // Devices
-  const devicesResult = await db.prepare(`
-    SELECT device_type, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0
-    GROUP BY device_type
-  `).bind(site, dateStr).all<{ device_type: string; views: number }>();
-
-  // Browsers
-  const browsersResult = await db.prepare(`
-    SELECT browser, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0 AND browser != ''
-    GROUP BY browser
-  `).bind(site, dateStr).all<{ browser: string; views: number }>();
-
-  // Operating systems
-  const osResult = await db.prepare(`
-    SELECT os, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0 AND os != ''
-    GROUP BY os
-  `).bind(site, dateStr).all<{ os: string; views: number }>();
-
-  // Referrer types
-  const refTypesResult = await db.prepare(`
-    SELECT referrer_type, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0
-    GROUP BY referrer_type
-  `).bind(site, dateStr).all<{ referrer_type: string; views: number }>();
-
-  // UTM sources
-  const utmSourcesResult = await db.prepare(`
-    SELECT utm_source, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0 AND utm_source != ''
-    GROUP BY utm_source
-  `).bind(site, dateStr).all<{ utm_source: string; views: number }>();
-
-  // UTM campaigns
-  const utmCampaignsResult = await db.prepare(`
-    SELECT utm_campaign, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 0 AND utm_campaign != ''
-    GROUP BY utm_campaign
-  `).bind(site, dateStr).all<{ utm_campaign: string; views: number }>();
-
-  // Bot breakdown
-  const botBreakdownResult = await db.prepare(`
-    SELECT bot_category, COUNT(*) as views
-    FROM page_views
-    WHERE site = ? AND date(timestamp) = ? AND is_bot = 1
-    GROUP BY bot_category
-  `).bind(site, dateStr).all<{ bot_category: string; views: number }>();
+  const totals = totalsResult.results[0] as { total_views: number; unique_visitors: number } | undefined;
+  const bots = botResult.results[0] as { bot_views: number } | undefined;
+  const rows = <T>(r: D1Result<unknown>): T[] => (r.results || []) as T[];
 
   // Build result
   const countries: Record<string, number> = {};
-  countriesResult.results?.forEach((r) => { countries[r.country] = r.views; });
+  rows<{ country: string; views: number }>(countriesResult).forEach((r) => { countries[r.country] = r.views; });
 
   const devices: Record<string, number> = {};
-  devicesResult.results?.forEach((r) => { devices[r.device_type || "unknown"] = r.views; });
+  rows<{ device_type: string; views: number }>(devicesResult).forEach((r) => { devices[r.device_type || "unknown"] = r.views; });
 
   const browsers: Record<string, number> = {};
-  browsersResult.results?.forEach((r) => { browsers[r.browser] = r.views; });
+  rows<{ browser: string; views: number }>(browsersResult).forEach((r) => { browsers[r.browser] = r.views; });
 
   const operating_systems: Record<string, number> = {};
-  osResult.results?.forEach((r) => { operating_systems[r.os] = r.views; });
+  rows<{ os: string; views: number }>(osResult).forEach((r) => { operating_systems[r.os] = r.views; });
 
   const referrer_types: Record<string, number> = {};
-  refTypesResult.results?.forEach((r) => { referrer_types[r.referrer_type || "direct"] = r.views; });
+  rows<{ referrer_type: string; views: number }>(refTypesResult).forEach((r) => { referrer_types[r.referrer_type || "direct"] = r.views; });
 
   const utm_sources: Record<string, number> = {};
-  utmSourcesResult.results?.forEach((r) => { utm_sources[r.utm_source] = r.views; });
+  rows<{ utm_source: string; views: number }>(utmSourcesResult).forEach((r) => { utm_sources[r.utm_source] = r.views; });
 
   const utm_campaigns: Record<string, number> = {};
-  utmCampaignsResult.results?.forEach((r) => { utm_campaigns[r.utm_campaign] = r.views; });
+  rows<{ utm_campaign: string; views: number }>(utmCampaignsResult).forEach((r) => { utm_campaigns[r.utm_campaign] = r.views; });
 
   const bot_breakdown: Record<string, number> = {};
-  botBreakdownResult.results?.forEach((r) => { bot_breakdown[r.bot_category || "unknown"] = r.views; });
+  rows<{ bot_category: string; views: number }>(botBreakdownResult).forEach((r) => { bot_breakdown[r.bot_category || "unknown"] = r.views; });
 
   return {
-    total_views: totalsResult?.total_views || 0,
-    unique_visitors: totalsResult?.unique_visitors || 0,
-    bot_views: botResult?.bot_views || 0,
-    top_pages: pagesResult.results || [],
-    top_referrers: referrersResult.results || [],
+    total_views: totals?.total_views || 0,
+    unique_visitors: totals?.unique_visitors || 0,
+    bot_views: bots?.bot_views || 0,
+    top_pages: rows<{ url: string; views: number }>(pagesResult),
+    top_referrers: rows<{ domain: string; type: string; views: number }>(referrersResult),
     countries,
     devices,
     browsers,
@@ -993,8 +953,8 @@ async function cleanupOldData(db: D1Database): Promise<number> {
   const cutoffStr = cutoffDate.toISOString().split("T")[0];
 
   const result = await db.prepare(`
-    DELETE FROM page_views WHERE date(timestamp) < ?
-  `).bind(cutoffStr).run();
+    DELETE FROM page_views WHERE timestamp < ?
+  `).bind(`${cutoffStr} 00:00:00`).run();
 
   return result.meta.changes || 0;
 }
@@ -1025,9 +985,10 @@ interface AggregateDateResult {
  * relabelled day gets its row back.
  */
 async function aggregateDate(env: Env, dateStr: string): Promise<AggregateDateResult> {
+  const { start, end } = utcDayBounds(dateStr);
   const sitesResult = await env.DB.prepare(`
-    SELECT DISTINCT site FROM page_views WHERE date(timestamp) = ?
-  `).bind(dateStr).all<{ site: string }>();
+    SELECT DISTINCT site FROM page_views WHERE timestamp >= ? AND timestamp < ?
+  `).bind(start, end).all<{ site: string }>();
 
   const sites = sitesResult.results || [];
   console.log(`Found ${sites.length} sites with traffic on ${dateStr}`);
