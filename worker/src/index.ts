@@ -18,11 +18,12 @@
  * - Rate limit keys are hashed and expire quickly
  */
 
-import { detectDatacenterAsn } from "./utils";
+import { detectDatacenterAsn, detectReferrerSpam } from "./utils";
 
 interface Env {
   DB: D1Database;
   ANALYTICS_SECRET: string;
+  ADMIN_SECRET?: string; // wrangler secret; bearer for POST /aggregate (2026-10-31). Never reuse ANALYTICS_SECRET: it salts visitor hashes.
   ALLOWED_ORIGINS?: string; // Comma-separated list of allowed origins
   ALLOWED_SITES?: string; // Deprecated: comma-separated list (use sites table instead)
   RATE_LIMIT_KV?: KVNamespace; // Optional KV for rate limiting
@@ -1002,6 +1003,57 @@ async function cleanupOldData(db: D1Database): Promise<number> {
 // SCHEDULED HANDLER
 // =============================================================================
 
+interface AggregateSiteResult {
+  site: string;
+  ok: boolean;
+  total_views?: number;
+  unique_visitors?: number;
+  bot_views?: number;
+  error?: string;
+}
+
+interface AggregateDateResult {
+  date: string;
+  sites: AggregateSiteResult[];
+}
+
+/**
+ * Roll one UTC day into daily_stats for every site that had traffic on it.
+ * Shared by the 02:00 UTC cron (yesterday) and POST /aggregate (any completed
+ * day inside the retention window). saveAggregatedStats() uses INSERT OR
+ * REPLACE, so a re-run is idempotent and is how a missed cron run or a
+ * relabelled day gets its row back.
+ */
+async function aggregateDate(env: Env, dateStr: string): Promise<AggregateDateResult> {
+  const sitesResult = await env.DB.prepare(`
+    SELECT DISTINCT site FROM page_views WHERE date(timestamp) = ?
+  `).bind(dateStr).all<{ site: string }>();
+
+  const sites = sitesResult.results || [];
+  console.log(`Found ${sites.length} sites with traffic on ${dateStr}`);
+
+  const results: AggregateSiteResult[] = [];
+  for (const { site } of sites) {
+    try {
+      console.log(`Aggregating ${site}...`);
+      const stats = await aggregateDay(env.DB, site, dateStr);
+      await saveAggregatedStats(env.DB, site, dateStr, stats);
+      console.log(`  ✓ ${site}: ${stats.total_views} views, ${stats.unique_visitors} visitors, ${stats.bot_views} bots`);
+      results.push({
+        site,
+        ok: true,
+        total_views: stats.total_views,
+        unique_visitors: stats.unique_visitors,
+        bot_views: stats.bot_views,
+      });
+    } catch (error) {
+      console.error(`  ✗ Error aggregating ${site}:`, error);
+      results.push({ site, ok: false, error: String(error) });
+    }
+  }
+  return { date: dateStr, sites: results };
+}
+
 async function handleScheduled(env: Env): Promise<void> {
   console.log("Starting scheduled aggregation job...");
 
@@ -1010,25 +1062,7 @@ async function handleScheduled(env: Env): Promise<void> {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split("T")[0];
 
-  // Get all unique sites that had traffic yesterday
-  const sitesResult = await env.DB.prepare(`
-    SELECT DISTINCT site FROM page_views WHERE date(timestamp) = ?
-  `).bind(yesterdayStr).all<{ site: string }>();
-
-  const sites = sitesResult.results || [];
-  console.log(`Found ${sites.length} sites with traffic on ${yesterdayStr}`);
-
-  // Aggregate each site
-  for (const { site } of sites) {
-    try {
-      console.log(`Aggregating ${site}...`);
-      const stats = await aggregateDay(env.DB, site, yesterdayStr);
-      await saveAggregatedStats(env.DB, site, yesterdayStr, stats);
-      console.log(`  ✓ ${site}: ${stats.total_views} views, ${stats.unique_visitors} visitors, ${stats.bot_views} bots`);
-    } catch (error) {
-      console.error(`  ✗ Error aggregating ${site}:`, error);
-    }
-  }
+  await aggregateDate(env, yesterdayStr);
 
   // Close expired sessions
   console.log("Closing expired sessions...");
@@ -1902,6 +1936,76 @@ async function handleEventCollect(
 }
 
 // =============================================================================
+// ADMIN: RE-RUN A DAY'S ROLLUP
+// =============================================================================
+
+/** Length-independent comparison of the presented bearer with the configured one, via SHA-256 digests. */
+async function bearerMatches(presented: string, expected: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(presented)),
+    crypto.subtle.digest("SHA-256", enc.encode(expected)),
+  ]);
+  const ua = new Uint8Array(a);
+  const ub = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < ua.length; i++) diff |= ua[i] ^ ub[i];
+  return diff === 0;
+}
+
+/**
+ * POST /aggregate?date=YYYY-MM-DD  (Authorization: Bearer <ADMIN_SECRET>)
+ *
+ * The cron writes daily_stats once, at 02:00 UTC, with no retry: a failed run
+ * leaves a hole for ever (blakecrosley.com had none for 2026-10-27 and
+ * 2026-10-29), and a day whose rows were relabelled after the fact keeps its
+ * stale totals. This re-runs the same rollup for one completed UTC day inside
+ * the raw-data retention window. Idempotent (INSERT OR REPLACE). Added
+ * 2026-10-31.
+ */
+async function handleAggregate(request: Request, url: URL, env: Env): Promise<Response> {
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+
+  if (request.method !== "POST") {
+    return json({ error: "POST only" }, 405);
+  }
+  if (!env.ADMIN_SECRET) {
+    return json({ error: "ADMIN_SECRET is not configured" }, 503);
+  }
+  const auth = request.headers.get("Authorization") || "";
+  const presented = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!presented || !(await bearerMatches(presented, env.ADMIN_SECRET))) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+
+  const date = url.searchParams.get("date") || "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+    return json({ error: "date must be YYYY-MM-DD" }, 400);
+  }
+  const today = new Date().toISOString().split("T")[0];
+  if (date >= today) {
+    return json({ error: "date must be a completed UTC day" }, 400);
+  }
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - CONFIG.RETENTION_DAYS);
+  const cutoffStr = cutoff.toISOString().split("T")[0];
+  if (date < cutoffStr) {
+    return json({ error: `raw page_views before ${cutoffStr} are deleted; nothing to aggregate` }, 400);
+  }
+
+  try {
+    return json(await aggregateDate(env, date));
+  } catch (error) {
+    console.error("Aggregate error:", error);
+    return json({ error: "Aggregation failed" }, 500);
+  }
+}
+
+// =============================================================================
 // MAIN WORKER EXPORT
 // =============================================================================
 
@@ -1940,6 +2044,11 @@ export default {
     // Handle /event endpoint for custom event tracking
     if (url.pathname === "/event" && request.method === "GET") {
       return handleEventCollect(request, url, env, corsHeaders);
+    }
+
+    // Admin: re-run one day's rollup (bearer ADMIN_SECRET; no CORS on purpose)
+    if (url.pathname === "/aggregate") {
+      return handleAggregate(request, url, env);
     }
 
     // Only handle GET /collect
@@ -2033,11 +2142,15 @@ export default {
 
       // Run all detection. A real-browser UA from a cloud-server ASN is a
       // headless fleet — request.cf.asn is edge-set and unspoofable — so the
-      // ASN check runs when the UA looks human (2026-10-10).
+      // ASN check runs when the UA looks human (2026-10-10). A human UA on a
+      // residential ASN that carries a known spam Referer is referrer spam
+      // (2026-10-31: aocr.org, 3,145 one-hit "visitors" in three days), so the
+      // referrer check runs when both of those look human. Label, never filter.
       const cf = (request.cf as Record<string, unknown>) || {};
-      const uaBot = detectBot(userAgent);
-      const botInfo = uaBot.isBot ? uaBot : detectDatacenterAsn(cf.asn);
       const referrerInfo = classifyReferrer(data.ref);
+      const uaBot = detectBot(userAgent);
+      const asnBot = uaBot.isBot ? uaBot : detectDatacenterAsn(cf.asn);
+      const botInfo = asnBot.isBot ? asnBot : detectReferrerSpam(referrerInfo.domain);
       const utmParams = parseUTM(data.url);
       const deviceInfo = parseUserAgent(userAgent);
       const deviceType = deviceInfo.deviceType !== "desktop" ? deviceInfo.deviceType : getDeviceType(data.w);

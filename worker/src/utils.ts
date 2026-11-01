@@ -353,3 +353,31 @@ export function detectDatacenterAsn(asn: unknown): BotInfo {
   }
   return { isBot: false, name: "", category: "" };
 }
+
+// =============================================================================
+// REFERRER SPAM
+// =============================================================================
+// A headless fleet with a real-browser UA on residential exits (so neither the
+// UA nor the ASN list catches it), one pageview per visitor, every hit carrying
+// the same Referer so the domain shows up in referrer reports. 2026-10-28..30:
+// 3,145 "humans" from aocr.org on blakecrosley.com in three days (Chrome/146 on
+// Windows, 800x600, en-US, BR/VN/AR/IN/PK exits) spread over 569 URLs, plus
+// resumegeni.com and 941apps.com. Entries are registrable domains as
+// classifyReferrer() emits them (lower-case, "www." stripped); subdomains
+// match. Label, never filter: rows stay, is_bot=1 keeps them out of human counts.
+
+export const REFERRER_SPAM_DOMAINS: ReadonlySet<string> = new Set([
+  "aocr.org", // first seen 2026-10-08, bulk 2026-10-28..30
+]);
+
+export function detectReferrerSpam(referrerDomain: unknown): BotInfo {
+  const d = typeof referrerDomain === "string" ? referrerDomain.trim().toLowerCase() : "";
+  if (d) {
+    for (const spam of REFERRER_SPAM_DOMAINS) {
+      if (d === spam || d.endsWith("." + spam)) {
+        return { isBot: true, name: `Referrer spam (${spam})`, category: "spam" };
+      }
+    }
+  }
+  return { isBot: false, name: "", category: "" };
+}

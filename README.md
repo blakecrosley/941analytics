@@ -193,6 +193,12 @@ The dashboard router exposes:
 - `GET /admin/analytics/api/stats?period=7d` - JSON stats
 - `GET /admin/analytics/api/realtime` - Visitors in last 5 minutes
 
+The collector worker (`worker/`) also serves `POST /aggregate?date=YYYY-MM-DD` with
+`Authorization: Bearer <ADMIN_SECRET>` (a wrangler secret, Keychain item
+`941/analytics_admin_secret`): it re-runs one completed UTC day's `daily_stats` rollup for
+every site, the same code path as the 02:00 UTC cron, idempotently. Use it when a cron run
+failed (a day with no row) or after rows were relabelled, while the raw pageviews still exist.
+
 ## Privacy Compliance
 
 This implementation is designed to be:

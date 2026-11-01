@@ -2,7 +2,7 @@
  * Bot Detection Tests
  */
 import { describe, it, expect } from "vitest";
-import { detectBot, detectDatacenterAsn, BotInfo } from "../utils";
+import { detectBot, detectDatacenterAsn, detectReferrerSpam, BotInfo } from "../utils";
 
 describe("detectBot", () => {
   describe("search engine bots", () => {
@@ -246,6 +246,34 @@ describe("detectDatacenterAsn", () => {
   it("fails open on garbage", () => {
     for (const asn of [undefined, null, "", "AS401560", 12.5]) {
       expect(detectDatacenterAsn(asn).isBot).toBe(false);
+    }
+  });
+});
+
+describe("detectReferrerSpam", () => {
+  it("labels a listed referrer domain as spam", () => {
+    expect(detectReferrerSpam("aocr.org")).toEqual({
+      isBot: true,
+      name: "Referrer spam (aocr.org)",
+      category: "spam",
+    });
+  });
+
+  it("matches subdomains, case and stray whitespace", () => {
+    for (const d of ["WWW.AOCR.ORG", "cdn.aocr.org", " aocr.org "]) {
+      expect(detectReferrerSpam(d).isBot).toBe(true);
+    }
+  });
+
+  it("keeps real referrers, direct traffic and look-alikes human", () => {
+    for (const d of ["", "google.com", "blakecrosley.com", "notaocr.org", "aocr.org.evil.example"]) {
+      expect(detectReferrerSpam(d)).toEqual({ isBot: false, name: "", category: "" });
+    }
+  });
+
+  it("fails open on garbage", () => {
+    for (const d of [undefined, null, 42, {}]) {
+      expect(detectReferrerSpam(d).isBot).toBe(false);
     }
   });
 });
